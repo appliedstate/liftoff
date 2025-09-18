@@ -94,9 +94,7 @@ export const WithValue: Story = {
 export const WithLeadingIcon: Story = {
   render: () => (
     <InputGroup>
-      <svg data-slot="icon" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-        <path fillRule="evenodd" d="M5.404 14.596A6.5 6.5 0 1116.5 10h-1.063A5.5 5.5 0 105.404 13.596L7 11.414V8.5h1v3.086l2.596 2.597z" clipRule="evenodd" />
-      </svg>
+      <span data-slot="icon" className="text-gray-500">🔍</span>
       <Input type="search" placeholder="Search with icon..." />
     </InputGroup>
   ),
@@ -106,9 +104,7 @@ export const WithTrailingIcon: Story = {
   render: () => (
     <InputGroup>
       <Input type="email" placeholder="Email address" />
-      <svg data-slot="icon" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-        <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2.586l-1.293-1.293a1 1 0 00-1.414 1.414L16.414 9a1.5 1.5 0 010 2.121L13.707 13.293a1 1 0 001.414 1.414L17 12.414V15a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm2 2v8h10V6H5z" />
-      </svg>
+      <span data-slot="icon" className="text-gray-500">📧</span>
     </InputGroup>
   ),
 };
@@ -158,17 +154,13 @@ export const Showcase: Story = {
         <h3 className="text-lg font-semibold mb-3">With Icons</h3>
         <div className="space-y-3">
           <InputGroup>
-            <svg data-slot="icon" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M5.404 14.596A6.5 6.5 0 1116.5 10h-1.063A5.5 5.5 0 105.404 13.596L7 11.414V8.5h1v3.086l2.596 2.597z" clipRule="evenodd" />
-            </svg>
+            <span data-slot="icon" className="text-gray-500">🔍</span>
             <Input type="search" placeholder="Search..." />
           </InputGroup>
 
           <InputGroup>
             <Input type="email" placeholder="Email..." />
-            <svg data-slot="icon" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2.586l-1.293-1.293a1 1 0 00-1.414 1.414L16.414 9a1.5 1.5 0 010 2.121L13.707 13.293a1 1 0 001.414 1.414L17 12.414V15a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm2 2v8h10V6H5z" />
-            </svg>
+            <span data-slot="icon" className="text-gray-500">📧</span>
           </InputGroup>
         </div>
       </div>
