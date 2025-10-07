@@ -15,57 +15,124 @@ licensing: internal
 
 # Terminal — Current vs. Required
 
+## Source audit context
+- Repository: `strategis-api`
+- Commit SHA: `e416b614` (HEAD on master)
+- Status: clean working tree
+- Core files referenced: `global-terminal.js`, `run-campaign-terminal.js`, `eval-code.js`, `server.js`, `config.js`, `clickhouse-fields-schema-def.js`, `clickhouse-init.js`
+
 ## Current (as reported)
-- Data sources: S1, Taboola, Facebook, Zemanta, MediaGo (no Strateg.is connectors).
-- Storage: ClickHouse tables (e.g., s1ReconciledReport, s1IntradayReport).
-- Modeling: Variables derived from reports; no delay profiles, 168-bin baselines, or nowcast.
-- Decision engine: CoffeeScript rule execution (no vm2 JS sandbox). Rules in Redis (filters by buyer/adSource/trafficSource).
-- Execution: Actions stored in LevelDB; retry via tasks-loop. Supports directUpdate only.
-- APIs: /api/global-terminal, /run, /actions. No freeze/kill-switch, nowcast, or backtest endpoints.
-- Idempotency/cooldowns: Not explicitly visible; no intent queue, cooldown registry, or daily cap enforcement.
+
+### Data sources & contracts
+- Existing sources (in code): S1 (hourly/reconciled), Taboola (hourly/daily), Facebook (hourly/daily), Zemanta (reconciled), Mediago (hourly/daily)
+- Missing sources: Strateg.is hourly and Strateg.is reconciled connectors (not found)
+- Idempotency: ClickHouse `ReplacingMergeTree` using `insertTimestamp` for deduplication
+
+### Storage schemas
+- Database: ClickHouse (prod: `strategisReports`, dev/test: `strategisReportsDev/Test`)
+- Existing tables:
+  - `s1ReconciledReport` (PK: date, subId)
+  - `s1IntradayReport` (PK: date, sub_id, hourly via hrHour)
+  - `zemantaReconciledReport` (PK includes organization, timestamp, networkAdGroupId)
+  - `strategisEventsReport` (generic events, not a dedicated Strateg.is data source)
+- Sample report shape (example):
+```
+{ "level": "date-hour-campaignId", "date": "2020-10-01", "hour": "00", "campaignId": "epa001", "impressions": 8 }
+```
+- Missing canonical tables required by our playbooks:
+  - `hourly_campaign_report`
+  - `strategis_reconciled_report`
+
+### Modeling (nowcast readiness)
+- Missing: delay profiles (Δ=0..12h), 168‑bin hour‑of‑week baselines, nowcast computation, bias tracking
+- Current variables: simple aggregations (s1Revenue/clicks/searches, trafficImpressions/clicks/conversions/spend, ctr/cpm/cpc/cpa/rpm/roas/margin), exposed with Last1Hour..Last1Day windows
+
+### Decision engine (policy execution)
+- Partial sandbox: CoffeeScript + `static-eval` for deterministic evaluation; no explicit time/memory limits
+- Missing: vm2 sandbox; helpers `confirm2h()`, `cooldown()`, `dailyCap()`, `baselines()`, `gates()`
+- Policy storage: Redis hash `global-terminal` with filter targeting (organization, adSource, trafficSource, buyer, strategisCampaignId)
+- Missing: policy versioning, feature flags, audit trail beyond createdAt/updatedAt
+
+### Execution (intents → actions)
+- Action storage: LevelDB under `global-terminal-actions` (ns/date/hour/id), executor loop with retries
+- Supported networks: Taboola, Facebook, Mediago, Zemanta, Outbrain
+- Operation support: ONLY `directUpdate` (isActive toggle)
+- Missing: intent queue, cooldown registry, daily cap enforcement, `bump_budget`, `trim_budget`, `rotate_creatives`
+
+### APIs & scheduling
+- Available endpoints:
+```
+GET/POST  /api/global-terminal
+GET       /api/global-terminal/:id
+PUT       /api/global-terminal/:id
+DELETE    /api/global-terminal/:id
+GET       /api/global-terminal/actions
+GET/POST  /api/global-terminal/run
+```
+- Auth: `authify` middleware with RBAC
+- Scheduling: manual schedule endpoints exist; no automated H+5 hourly job; no nightly refresh jobs; no cron config found
+- Missing endpoints: `/nowcasts`, `/intents`, `/execute`, `/freeze`, `/unfreeze`
+
+### Controls & safety
+- Missing: freeze/kill‑switch, centralized guardrails (EMQ, latency, daily +30% cap), comprehensive audit/change_log, reversal/bias metrics
+- Exists: dry‑run via `isDry` flag
+
+### Observability
+- Missing dashboards/alerts for freshness, bias, reversal rate, guard violations
+- Exists: debug logging
+
+### Backtest/simulator
+- Not implemented
+
+### Strateg.is integration status
+- Terminal does NOT currently ingest Strateg.is data (no Strateg.is connectors or canonical tables found)
+
+### Git hygiene
+- `strategis-api`: clean; HEAD `e416b614`
+- `lincx-core`: merge conflicts reported; blocked from pulling latest
 
 ## Required (to execute our playbooks)
 - Data ingestion
-  - Strateg.is hourly and reconciled connectors (API/CSV) with validation, timezone normalization, idempotent upserts.
-  - Canonical tables: hourly_campaign_report, strategis_reconciled_report.
+  - Strateg.is hourly and reconciled connectors (API/CSV) with validation, timezone normalization, idempotent upserts
+  - Canonical tables: `hourly_campaign_report`, `strategis_reconciled_report`
 - Modeling
-  - Per-campaign delay profiles (Δ=0..12h); 168-point hour‑of‑week baselines (clicks/RPC/CPM).
-  - Intraday ROAS nowcast + bias tracking (target |bias| ≤ 5%).
+  - Per‑campaign delay profiles (Δ=0..12h); 168‑point hour‑of‑week baselines (clicks/RPC/CPM)
+  - Intraday ROAS nowcast + bias tracking (target |bias| ≤ 5%)
 - Policy execution
-  - JS policy sandbox (vm2 or equivalent) with helpers: confirm2h(), cooldown(), dailyCap(), baselines(), gates().
-  - Versioned policies, per-vertical overrides, feature flags.
+  - JS policy sandbox (vm2 or equivalent) with helpers: `confirm2h()`, `cooldown()`, `dailyCap()`, `baselines()`, `gates()`
+  - Versioned policies, per‑vertical overrides, feature flags
 - Execution controls
-  - Intent queue (bump_budget, trim_budget, rotate_creatives) with statuses and idempotency keys.
-  - Cooldown registry and daily cap enforcement.
-  - Freeze/kill-switch endpoints; audit/change_log.
+  - Intent queue (bump_budget, trim_budget, rotate_creatives) with statuses and idempotency keys
+  - Cooldown registry and daily cap enforcement
+  - Freeze/kill‑switch endpoints; audit/change_log
 - Ops
-  - Hourly H+5 scheduler; nightly refresh; backtest/simulator harness.
-  - Metrics and alerts: freshness, bias, reversal rate, guard violations.
+  - Hourly H+5 scheduler; nightly refresh; backtest/simulator harness
+  - Metrics and alerts: freshness, bias, reversal rate, guard violations
 
 ## Validation questions for Devin (answer with file paths + commit SHAs)
 - Data sources
-  - Where are Strateg.is hourly and reconciled connectors (if any)? Endpoints, schemas, SLAs, timezones, sample rows.
-  - How is idempotency and de-duplication handled today?
+  - Where are Strateg.is hourly and reconciled connectors (if any)? Endpoints, schemas, SLAs, timezones, sample rows
+  - How is idempotency and de‑duplication handled today?
 - Storage
-  - Source-of-truth DB(s) and table names for hourly and reconciled; partitioning/indexes/retention; join keys and tz handling.
+  - Source‑of‑truth DB(s) and table names for hourly and reconciled; partitioning/indexes/retention; join keys and tz handling
 - Modeling
-  - Do delay profiles and 168-bin baselines exist? Where computed/stored? Nowcast function location and bias monitoring.
+  - Do delay profiles and 168‑bin baselines exist? Where computed/stored? Nowcast function location and bias monitoring
 - Decision engine
-  - Is there a JS sandbox? Limits and allowed helpers. How are policies versioned and rolled out (per-vertical overrides)?
+  - Is there a JS sandbox? Limits and allowed helpers. How are policies versioned and rolled out (per‑vertical overrides)?
 - Execution
-  - Intent queue schema, executor service, retries/idempotency; where cooldown registry and daily caps are enforced.
-  - Supported actions and payload shapes (bump/trim/rotate).
+  - Intent queue schema, executor service, retries/idempotency; where cooldown registry and daily caps are enforced
+  - Supported actions and payload shapes (bump/trim/rotate)
 - Controls & ops
-  - Freeze/kill-switch endpoints and scope. Audit/change_log schema and where to view. Backtest/simulator existence and IO.
+  - Freeze/kill‑switch endpoints and scope. Audit/change_log schema and where to view. Backtest/simulator existence and IO
 - Scheduling & env
-  - Hourly H+5 and nightly jobs (orchestrator/cron, tz). Secrets/RBAC. Environment matrix (prod/stage).
+  - Hourly H+5 and nightly jobs (orchestrator/cron, tz). Secrets/RBAC. Environment matrix (prod/stage)
 - Strateg.is mapping
-  - Field mapping from Strateg.is to internal schema (spend, revenue, clicks, sessions, ROAS).
+  - Field mapping from Strateg.is to internal schema (spend, revenue, clicks, sessions, ROAS)
 - Hygiene
-  - Clean branch name and SHA containing these components (note any merge conflicts blocking pulls).
+  - Clean branch name and SHA containing these components (note any merge conflicts blocking pulls)
 
 ## Decision log / next steps
-- If Strateg.is connectors absent: add ingestion + canonical tables.
-- If no nowcast/baselines: add nightly/ hourly jobs and storage.
-- If no JS sandbox/intent queue: add minimal implementations with audit and caps.
-- Add freeze/kill-switch + bias/reversal dashboards if missing.
+- If Strateg.is connectors absent: add ingestion + canonical tables
+- If no nowcast/baselines: add nightly/hourly jobs and storage
+- If no JS sandbox/intent queue: add minimal implementations with audit and caps
+- Add freeze/kill‑switch + bias/reversal dashboards if missing
