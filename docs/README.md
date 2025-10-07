@@ -171,7 +171,25 @@ If a higher tier is red, **no scaling action** from lower tiers.
 
 ---
 
-## 11) Minimal Pseudocode (Terminal’s brain)
+## 11) Campaign Lifecycle (mission stages)
+
+Like a Falcon 9 launch, each campaign follows strict phases with gates and transitions:
+
+- **T−7d: Design** → Weekly Orchestrator sets quotas, lanes, vertical mix
+- **T−3d: Integration** → Creative/Article Factory produce hooks, LPIDs, assets  
+- **T−1d: Pre-flight** → CAPI health, AEM #1, taxonomy, naming grammar
+- **T−0: Launch** → Entity creation, ad caps ≤15, format mix, sized for ≥50 events/week
+- **T+48–72h: Freeze** → No edits during learning; watch early signals
+- **D3: Max-Q** → Highest stress; Intraday cautious; CPM/CTR/freq monitoring
+- **D3–7: Stage Sep** → Mon/Thu promote top 10–20%, prune bottom 50–60%
+- **D7+: Orbit** → ASC/LAL1 scaled; intraday +10%/−15% bumps; creative rotation
+- **D30+: Decay** → Refresh hooks/LPIDs; update baselines; retire fatigued units
+
+**Reference:** `/operations/60-launch-protocol.md` (detailed gates & transitions)
+
+---
+
+## 12) Minimal Pseudocode (Terminal's brain)
 
 ```python
 if emq_p50 < 5 or latency_p50 > 300: freeze_all_scaling()
