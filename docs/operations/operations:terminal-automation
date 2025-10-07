@@ -1,0 +1,95 @@
+---
+id: operations/terminal-automation
+version: 1.0.0
+owner: growth
+runtime_role: agent
+dependencies:
+  - goals/north-star-and-kpis
+  - infra/capi-setup
+  - infra/aem-priority
+  - content/article-factory
+  - operations/budget-bump-protocol
+inputs:
+  - reporting_frequency: "hourly"          # Terminal wakes every hour
+  - portfolio_labels:                       # Campaign/ad set labels used to scope rules
+      - "ASC-BROAD"
+      - "ABO-LAL-1P"
+      - "ABO-LAL-2-5P"
+      - "CONTEXTUAL"
+      - "SANDBOX"
+      - "RETARGETING"
+  - feature_flags:
+      supportsAdLevelPause: false           # flip to true when confirmed
+      supportsBidCaps: true
+      dryRun: true                          # run in simulation until set false
+outputs:
+  - change_log                              # structured record of decisions/actions
+  - rule_evaluations                        # per-entity pass/fail for each rule
+  - safety_violations                       # any guard prevented an action
+kpis:
+  session_roas_target: ">= 1.30x"
+  learning_events_per_adset_per_week: ">= 50"
+  emq_target: ">= 5"
+guards:
+  - "Max one budget change per entity per 24h (cooldown_24h)."
+  - "ASC budget steps must be +20–30% only; ≤ 2 bumps/week."
+  - "No scaling if Session ROAS < 1.30x (3–5 day window) or EMQ < 5."
+  - "Auto-roll back last change if CPA worsens > +10% over 6h and sessions are stable."
+  - "Never pause all prospecting lanes simultaneously (keep ≥1 active)."
+---
+
+# Terminal — Hourly Automation Engine (Rules-as-JS)
+
+**Purpose:** Automate scaling and risk control **hourly** across campaigns/ad sets using a small, deterministic set of rules that align with our MVSS playbook and KPI gates. Humans author rules in **JavaScript**; Terminal evaluates telemetry → decides → applies changes → logs.
+
+---
+
+## 1) What Terminal Can Do (capabilities & constraints)
+
+**Capabilities**
+- Pause/unpause **campaigns** and **ad sets**.
+- Set **campaign budgets** and **ad set budgets**.
+- Set **ad set bid caps** (where supported by objective/bid strategy).
+- (Optional) Pause/unpause **ads** *if* `supportsAdLevelPause = true`.
+
+**Constraints & Safety**
+- **Cool-downs:** one mutable change per entity per **24h** unless an **Emergency Brake** triggers.
+- **Step sizes:** ASC budget bumps **+20–30%** only; reductions can be larger (risk-off).
+- **Global guard:** do not scale if **Session ROAS < 1.30×** (account 3–5d).
+- **Stability:** if entity is **Learning Limited**, Terminal favors **consolidation/hold**, not further fragmentation.
+- **Dry-run:** run with `dryRun=true` for the first week; Terminal outputs decisions without applying.
+
+---
+
+## 2) Data Model (what Terminal reads each hour)
+
+Each hour Terminal receives **rollups** at three levels: **campaign**, **ad_set**, **ad** (ad optional).
+
+```ts
+type Window = '1h' | '6h' | '24h' | '7d';
+
+interface Metrics {
+  spend: number;                 // USD
+  purchases: number;             // value-optimized conversions (modeled)
+  capi_value: number;            // server-side revenue attributed to this entity
+  sessions: number;
+  vRPS: number;                  // capi_value / sessions
+  CPS: number;                   // spend / sessions
+  sessionROAS: number;           // vRPS / CPS
+  CPA: number;                   // spend / purchases
+  EMQ_p50: number;               // Event Match Quality (0–10)
+  freq: number;                  // frequency (prospecting)
+  CTR: number; CPM: number; CPC: number;
+  eventsPerAdsetWeek: number;    // 7d conversion count for learning density
+  learningLimited: boolean;
+  diagnostics: string[];         // notable warnings
+}
+
+interface EntitySnapshot {
+  id: string;
+  name: string;
+  level: 'campaign'|'ad_set'|'ad';
+  labels: string[];              // e.g., ['ASC-BROAD']
+  metrics: Record<Window, Metrics>;
+  lastChangeAt?: string;         // ISO timestamp
+}

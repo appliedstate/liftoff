@@ -1,0 +1,117 @@
+ ---
+id: operations/61-promotion-prune-scale
+version: 1.0.0
+owner: growth-ops
+runtime_role: agent
+purpose: Turn creative wins into compounding account growth with zero wobble. Compact, unambiguous rules that Terminal can execute safely in batches.
+dependencies:
+  - strategy/11-machine-strategy
+  - goals/10-north-star-and-kpis
+  - operations/63-dashboards-and-alerts
+  - operations/terminal-automation
+  - operations/60-launch-protocol
+  - creative/creative-factory
+  - content/article-factory
+  - api/facebook-campaign-setup
+inputs:
+  - creative_candidates_view         # per-ad metrics (7d): sessions, spend, purchases, vRPS, CPS, per-session vRPS uplift vs account median
+  - lane_inventory                   # ads live by lane/ad set; ad_count per ad set
+  - learning_density                 # events/ad set/week
+  - signal_health                    # EMQ p50, CAPI latency p50, dedup rate
+  - fatigue_signals                  # frequency (24h), CTR WoW delta
+  - cooldown_registry                # last edit timestamps per entity
+  - vertical_taxonomy                # /taxonomy/vertical-map.csv
+outputs:
+  - promotion_plan                   # ads to move from SANDBOX → ASC/LAL1 (and optionally LAL2–5/Contextual)
+  - prune_plan                       # ads to pause or swap 1:1 to respect caps
+  - rotation_plan                    # fatigue-driven replacements per lane
+  - terminal_intents_batch           # JSON intents for Terminal to execute
+  - change_log                       # entity, before→after, reason, gates snapshot
+kpis:
+  promotion_hit_rate_week: "≥ 15%"         # share of sandbox ads promoted this week
+  adset_ads_cap_respected: "≤ 15 (≤12 rec.)"
+  learning_density_gate: "≥ 50 events/ad set/week sustained"
+  exploration_budget: "13–20% of total spend remains Sandbox"
+  post_promo_roas: "Session ROAS (7d) ≥ 1.30× within 72h"
+guards:
+  - "Do not execute if EMQ p50 < 5 or CAPI latency p50 > 300s (freeze scale)."
+  - "No batch if any targeted ad set would exceed 15 ads after promotion."
+  - "Stability lanes (LAL 1%) only receive proven winners (see eligibility)."
+  - "Respect 24h cooldown per entity; at most one batch/day."
+  - "No Dynamic Creative in promotion batch (fixed units only)."
+---
+
+# 61 — Promotion • Prune • Scale (Mon/Thu Cadence)
+
+A single, deterministic SOP that **promotes** winners, **prunes** losers, and **preps scale** without fragmenting learning.
+
+---
+
+## 1) Eligibility & Scoring (per ad, 7d window unless noted)
+
+**Eligibility (must pass all):**
+- `sessions ≥ 2,000`  
+- `events/ad set/week ≥ 50` on destination lane (or on pace)  
+- `spent ≥ $50` and `≥ 3 purchases` **or** vRPS uplift ≥ +30% vs acct median  
+- Destination lane won’t breach **15 ads** (hard cap); target **≤12**
+
+**Primary score (promote rank):**
+\[
+\textbf{Score} = 0.7 \cdot \text{vRPS\_uplift\_vs\_median} + 0.2 \cdot \text{purchases\_z} + 0.1 \cdot \text{vRPS\_slope\_3d}
+\]
+- `vRPS_uplift_vs_median = per_session_vRPS / account_median_vRPS - 1`
+- `purchases_z` = standardized within lane
+- `vRPS_slope_3d` = 3-day linear trend (winsorized)
+
+**Kill/Prune criteria (any true):**
+- `spent ≥ $150` and `purchases = 0` (prospecting)  
+- `CPA > ad-set median CPA + 25%` for **48h**  
+- Fatigue: `freq > 3.0` **and** `CTR WoW ≤ −20%`  
+- Bottom **60%** of Sandbox by score
+
+---
+
+## 2) Promotion Targets (how many to move)
+
+Respect ad-set caps by doing **1:1 swaps** when near the limit.
+
+| Lane (destination) | New ads per batch (typical) | Notes |
+|---|---:|---|
+| **ASC — Broad** | 8–12 | Mix ≥ 6 distinct hooks; maintain format diversity (9:16 ≥ 40%, 4:5 ≥ 30%, 1:1 ≥ 20%) |
+| **LAL 1% (stability)** | 6–8 | Only **proven** winners; max **3 LPIDs** active in this lane |
+| **LAL 2–5%** | 4–6 | Graduates that performed in LAL 1% |
+| **Contextual** | 4–6 | Only if stack’s vRPS ≥ +10% vs acct median |
+| **Warm** | 2–4 | Gentle reminders; frequency discipline |
+
+---
+
+## 3) Batch Flow (Mon/Thu, account timezone)
+
+**T-60 min — Gates & Freeze Check**
+1. **Signal:** `EMQ p50 ≥ 5`, `latency p50 ≤ 300s`, dedup ok  
+2. **Learning:** `events/ad set/week ≥ 50` or on pace  
+3. **Economics:** `Session ROAS (7d) ≥ 1.30×`  
+4. **Cooldown:** last change ≥ 24h ago on targeted entities
+
+If any **red**, abort; create **FIX tickets** (signal repair / consolidation / page refresh).
+
+**T-45 min — Compose Plans**
+- Pull `creative_candidates_view`
+- Build **promotion_plan** using score & caps
+- Build **prune_plan** (kill list + 1:1 swaps)
+- Build **rotation_plan** for fatigue (replace 3–5 creatives where triggered)
+- Validate **Sandbox share** remains **13–20%** post-batch
+
+**T-30 min — Simulate**
+- Simulate delivered ads per ad set after changes (stay ≤ 15, target ≤12)
+- Simulate **events/week** run-rate post-prune (stay ≥ 50)
+- Simulate **Session ROAS** sensitivity with conservative lift (+10% on promoted units only)
+
+**T-15 min — Dry Run (Terminal)**
+- Publish `dry_run=true` **terminal_intents_batch**; verify guards
+
+**T-0 — Execute**
+- Publish `dry_run=false` intents
+- Write **change_log** (entity, before→after, reasons, gates snapshot)
+
+**T+24h — Cooldown

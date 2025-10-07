@@ -1,0 +1,231 @@
+---
+id: operations/launch-protocol
+version: 1.0.0
+owner: growth
+runtime_role: agent
+dependencies:
+  - goals/north-star-and-kpis
+  - infra/capi-setup
+  - infra/aem-priority
+  - infra/lpid-utm-tracking
+  - infra/ga4-bigquery-models
+  - content/article-factory
+  - creative/creative-factory
+  - campaigns/asc-broad
+  - campaigns/abo-lal-1p
+  - campaigns/abo-lal-2-5p
+  - campaigns/contextual-stack
+  - campaigns/creative-sandbox
+  - campaigns/warm-retargeting
+inputs:
+  - account_timezone              # e.g., America/Los_Angeles
+  - initial_daily_spend_total     # e.g., 6000
+  - lpid_inventory                # list of money pages ready (≥12–20 to start)
+  - creative_inventory            # ads ready per LPID (18–24/article); total 40–70 min
+  - attribution_window            # default 7d click / 1d view
+  - placements                    # Advantage+ Placements
+  - terminal_dry_run              # true | false (Terminal automation)
+outputs:
+  - campaign_ids
+  - ad_set_ids
+  - ads_published_count
+  - launch_status                 # planned | live | frozen | stabilized
+  - diagnostics_snapshot          # EMQ p50, event latency p50, learning states
+kpis:
+  freeze_window_hours: ">= 48 & <= 72"
+  emq_target: ">= 5"
+  capi_latency_p50_seconds: "<= 300"
+  events_per_adset_week: ">= 50"         # pace to exit Learning Limited
+  session_roas_gate: ">= 1.30x"          # evaluated post-freeze
+guards:
+  - "Do not launch if Purchase (value) is not rank #1 in AEM."
+  - "Do not launch if CAPI Purchase(value) test event not received with EMQ ≥ 5."
+  - "No structural edits during the 48–72h freeze window (freeze_window)."
+  - "Terminal must run in dryRun=true during freeze_window."
+  - "Do not exceed 15 ads per ad set at launch (fragmentation guard)."
+  - "Do not point stability lanes to more than 3 LPIDs at launch."
+---
+
+# 60 — Launch Protocol (Batch Start, Freeze, Stabilize)
+
+A deterministic, agent-executable SOP to take the Minimal Viable Scale Stack (MVSS) live without thrashing learning. Use **batch launch**, a **48–72h freeze window**, and **post-freeze validation** before any scaling.
+
+---
+
+## 1) Budget Plan (computed from `initial_daily_spend_total`)
+
+At launch, allocate by lane. For **$6,000/day** example:
+
+| Lane / Campaign                         | % of Total | Budget (USD) |
+|---|---:|---:|
+| **ASC — Broad**                         | 33%        | $2,000 |
+| **ABO — LAL 1% (stability)**            | 17%        | $1,000 |
+| **ABO — LAL 2–5% (reach)**              | 17%        | $1,000 |
+| **ABO — Contextual (intent mirror)**    | 17%        | $1,000 |
+| **Creative Sandbox (CBO/ABO)**          | 13–15%     | $750–900 |
+| **Warm / Retargeting**                  | 3–7%       | $200–400 |
+
+> **Formula:**  
+> ```
+> ASC = 0.33 * total
+> LAL1 = 0.17 * total
+> LAL2_5 = 0.17 * total
+> CONTEXT = 0.17 * total
+> SANDBOX = 0.13–0.15 * total
+> WARM = remainder (0.03–0.07 * total)
+> ```
+Clamp to whole dollars; never exceed platform minimums.
+
+---
+
+## 2) Creative & Article Loading Rules (launch set)
+
+- **Ads per ad set at launch:** **10–15** (12 recommended).  
+- **ASC ads live:** **20–40** across ≥ **6 distinct hooks**.  
+- **LPIDs per stability lane (LAL 1%):** **2–3** best pages only.  
+- **Sandbox:** all *new* variants begin here.  
+- **Naming:** `VERTICAL__LPID__HOOK__FORMAT__YYYYMMDD`.
+
+---
+
+## 3) T-Timeline (account timezone)
+
+### T-72 to T-24 hours — **Preflight**
+1. **Infra checks**
+   - AEM: **Purchase (value)** at **rank #1**; domain **Verified**.
+   - CAPI: send **test Purchase(value)**; confirm **EMQ ≥ 5**, p50 latency ≤ **300s**.
+   - LPID & UTM instrumentation verified in GA4 (sessions resolve to LPID).
+2. **Inventory**
+   - LPIDs: **≥12–20** live pages (or ready to publish).  
+   - Creative: **≥40–70** ads ready across articles.
+3. **Terminal**
+   - Set `dryRun=true`. Load rules but **no writes** during freeze window.
+4. **Build staging**
+   - Create campaigns & ad sets **in draft** with correct budgets, placements, attribution window.
+
+### T-3 hours — **Final checklist**
+- Diagnostics clear (no pixel/CAPI conflicts; dedup OK).  
+- Learning-Limited flags from prior tests are closed (fresh entities for launch).  
+- Frequency reset: no lingering high-freq retargeting creatives active by mistake.
+
+### T-0 — **Batch launch**
+- Publish **all MVSS campaigns** within a 15–30 minute window:
+  - **ASC — Broad** (Sales → Optimize to **Purchase (Value)**, Advantage+ Placements, Broad).  
+  - **ABO — LAL 1%** (seed: Purchasers 90d, exclude Purchasers 30d).  
+  - **ABO — LAL 2–5%** (same seed, 2–5% LAL).  
+  - **ABO — Contextual** (1–2 interest stacks mapped to RSOC queries).  
+  - **Creative Sandbox** (CBO or ABO).  
+  - **Warm/Retargeting** (tight 7–30d windows).
+- Set **launch_status = live | frozen**.
+- Start **freeze_window** timer (**48–72h**).
+
+### T+1h to T+24h — **Observe only**
+- **No edits** to budgets, bids, targeting, or ad counts.  
+- Monitor (read-only): delivery start, EMQ distribution, event latency, fatal diagnostics, basic spend pacing.
+
+### T+48–72h — **Stabilization review (end of freeze)**
+- Compute **early economics** (directional): sessions, advertiser-click rate, avg click value, vRPS by LPID.  
+- Delivery health: events/ad set/week pace (run-rate), Learning Limited flags, freq, EMQ p50.
+
+---
+
+## 4) Acceptance Checks (to exit freeze)
+
+Mark **pass** only if all hold for the window:
+
+- **Signal:** CAPI **Purchase(value)** flowing; **EMQ p50 ≥ 5**; p50 latency ≤ **300s**.  
+- **Learning density:** run-rate **≥ 50** Purchase(value) events/ad set/week (or trending to it by Day 3).  
+- **Fragmentation:** ≤ **15 ads/ad set** (no dumps post-launch).  
+- **Economics sanity:** no LPID below **vRPS floor** by >10% for 3,000 sessions without a refresh ticket.  
+- **Stability:** no critical diagnostics; frequency < **3** on prospecting.
+
+If **any fail** → remain frozen; create **FIX tickets** (page refresh, creative rotation, signal repair). Re-evaluate after remediation.
+
+---
+
+## 5) First Edits (post-freeze, batch only)
+
+Perform edits in **one batch** after passing acceptance:
+
+- **Creative:**  
+  - Promote **Sandbox top 10–20%** (by vRPS) → **ASC + LAL 1%**.  
+  - Prune **bottom 50%** in Sandbox.
+- **Article:**  
+  - Open refresh tickets for bottom **20%** LPIDs (by vRPS).  
+  - Publish **2–3 new** LPIDs if inventory permits.
+- **Terminal:**  
+  - Keep `dryRun=true` until the first **post-freeze readout** is green; then set `dryRun=false` (writes on) with **risk-down** actions enabled, **scaling disabled** for the first 24h.
+
+> **Do not** change targeting, placement, or attribution here. Keep structure stable.
+
+---
+
+## 6) Handover to Scaling (not part of launch edit)
+
+Once post-freeze + first-edit readout is green:
+
+- Evaluate **Session ROAS (7d) ≥ 1.30×**, **events/ad set/week ≥ 50**, **CPA drift ≤ +5%** (3–5 days).  
+- If gates hold → follow `/60-operations/62-budget-bump-protocol.md` (**+20–30%** bumps on **ASC**, ≤2/week).
+
+---
+
+## 7) Checklists (agent-executable)
+
+### 7.1 Go/No-Go (pre-launch)
+- [ ] AEM Purchase(value) rank **#1**; domain **Verified**  
+- [ ] CAPI test Purchase(value) received; **EMQ ≥ 5**, latency p50 ≤ **300s**  
+- [ ] LPIDs **≥12–20**; UTMs + LPID confirmed in GA4  
+- [ ] Creative **≥40–70**; ads organized per lane rules  
+- [ ] Terminal rules loaded; **dryRun=true**  
+- [ ] Campaigns/ad sets drafted with correct budgets & settings
+
+### 7.2 Freeze Window (48–72h)
+- [ ] No structural edits (guard active)  
+- [ ] Observe diagnostics, EMQ, latency, spend pacing  
+- [ ] Record run-rate **events/ad set/week** and learning states
+
+### 7.3 Exit Freeze (acceptance)
+- [ ] EMQ p50 **≥ 5**, latency p50 **≤ 300s**  
+- [ ] Events/ad set/week **≥ 50** (or on pace)  
+- [ ] ≤ 15 ads/ad set  
+- [ ] LPIDs meeting economics; refresh tickets opened as needed  
+- [ ] Frequency < **3** on prospecting
+
+---
+
+## 8) Rollback & Failure Modes
+
+- **Signal failure** (no CAPI/low EMQ): keep frozen; fix identifiers (hashed em/ph, IP/UA, fbc/fbp, external_id), verify event_id dedup; re-test.  
+- **Learning stall** (events/ad set/week < 35): consolidate ads, reduce ad count to **10–12**, ensure budgets aren’t split across too many sets.  
+- **Economics miss** (vRPS sag): refresh page (hero/intro/module order/speed) before further traffic.  
+- **Delivery anomalies** (freq spikes, CPM shocks): hold budgets; rotate **3–5** new creatives once freeze ends.
+
+---
+
+## 9) Telemetry to Snapshot (store at T+4h, T+24h, T+72h)
+
+- **Signal:** events_received, EMQ p50, p50 latency, dedup_rate  
+- **Delivery:** Learning Limited flags, events/ad set/week run-rate, freq, CPM/CTR/CPC  
+- **Economics:** sessions, advertiser-CTR, avg click value, **vRPS** by LPID  
+- **Status:** launch_status, guard violations (if any)
+
+---
+
+## 10) Outputs & Handover
+
+On success, write:
+- `campaign_ids`, `ad_set_ids`, `ads_published_count`  
+- `diagnostics_snapshot` and `launch_status = stabilized`  
+- Handoff pointer to `/60-operations/61-promotion-prune-scale.md` (promotion cycle) and `/60-operations/62-budget-bump-protocol.md` (scaling)
+
+---
+
+## 11) Cross-References
+
+- **Goals & gates:** `/10-goals/10-north-star-and-kpis.md`  
+- **CAPI wiring:** `/20-infra/20-capi-setup.md`  
+- **AEM priority:** `/21-aem-priority.md`  
+- **Article production:** `/30-content/30-article-factory.md`  
+- **Creative factory:** `/40-creative/40-creative-factory.md`  
+- **MVSS lanes:** `/50-campaigns/*`  
+- **Promotion & scaling:** `/60-operations/61-promotion-prune-scale.md`, `/60-operations/62-budget-bump-protocol.md`
