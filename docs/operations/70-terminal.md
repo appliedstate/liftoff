@@ -73,11 +73,45 @@ GET/POST  /api/global-terminal/run
 - H+5 hourly or nightly jobs: NO (manual endpoints only `/api/schedule/campaign-terminals`, no Cloud Scheduler config)
 - Nowcasts/intents/execute/freeze endpoints: NO (not in any service)
 
+### Per-network operations (confirmed)
+- Facebook
+  - Campaign: pause/unpause (status), budget change
+  - Ad set: pause/unpause (status), budget change, bid amount change
+  - Ad: NOT implemented
+  - Code refs: `facebook.js` — updateCampaignBudget, updateCampaignStatus, updateAdsetBudget, updateAdsetStatus, updateAdsetBid
+- Taboola
+  - Campaign: pause/unpause (is_active), budget change (daily_cap), CPC/bid strategy change
+  - Ad set/Ad: NOT supported
+  - Code refs: `taboola-proxy.js` — putCampaign; CPC adjust helpers
+- Zemanta
+  - Ad group (ad-set equivalent): budget change, state ACTIVE/INACTIVE
+  - Campaign/Ad: NOT supported
+  - Code refs: `zemanta.js` — updateAdGroupBudget/updateAdGroupState
+- Mediago & Outbrain
+  - Campaign: pause/unpause via Terminal executor
+  - Ad set/Ad: NOT supported
+
+### Executor vs direct APIs
+- Terminal global executor
+  - Supports ONLY `directUpdate` (isActive toggle) and routes per network
+  - No budget/bid operations; no entity-type detection (campaign vs ad set vs ad)
+  - Resolution via lookup tables; missing pre-flight validation; lookup failures are skipped
+- Direct APIs available (bypassing executor)
+  - Facebook ad set endpoints exist: `/api/facebook/adsets/:adSetId/{budget|status|bid}` (RBAC-protected)
+  - Taboola campaign updates available via `taboola-proxy`
+  - Zemanta ad group budget/state updates available
+- Constraints & validation (examples)
+  - Facebook: `dailyBudget` expects cents (x100); `status` must be `ACTIVE` or `PAUSED`
+  - Taboola: `daily_cap` must be numeric
+  - No min increment, pacing, or +30% cap checks in code
+
 ### Controls & safety
 - Freeze/kill-switch: NO (does not exist)
 - Audit/change_log storage: Partial (only createdAt/updatedAt on rules, no comprehensive action audit)
 - Reversal rate/bias dashboards: NO (not tracked)
 - Exists: dry‑run via `isDry` flag
+
+Note: Facebook ad set updates are logged to ClickHouse (`facebookAdsetReport`) after update; executor actions are logged to LevelDB.
 
 ### Observability
 - Missing: dashboards/alerts for freshness, bias, reversal rate, guard violations
@@ -95,6 +129,8 @@ GET/POST  /api/global-terminal/run
 
 ## Summary of confirmed gaps
 All Strateg.is integration, modeling (nowcast/baselines), advanced execution (intent queue/cooldowns/caps), scheduling automation, and observability features are missing and need to be built as delta scope per the phased plan.
+
+Critical gap: While Facebook ad set control APIs (budget/status/bid) exist and work, the Terminal global executor cannot use them today—it only supports pause/unpause via `directUpdate`.
 
 ## Required (to execute our playbooks)
 - Data ingestion
