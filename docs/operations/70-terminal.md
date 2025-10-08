@@ -86,7 +86,7 @@ GET/POST  /api/global-terminal/run
 - Zemanta
   - Ad group (ad-set equivalent): budget change, state ACTIVE/INACTIVE
   - Campaign/Ad: NOT supported
-  - Code refs: `zemanta.js` — updateAdGroupBudget/updateAdGroupState
+  - Code refs: `zemanta.js` — updateAdGroupBudget (used for budget and state updates)
 - Mediago & Outbrain
   - Campaign: pause/unpause via Terminal executor
   - Ad set/Ad: NOT supported
