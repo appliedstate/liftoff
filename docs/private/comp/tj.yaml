@@ -1,0 +1,27 @@
+role: ENC[AES256_GCM,data:HxD+BkU=,iv:cpbRgmJzp3WcqU8cncI9WOsviiEORS17KLR0hMYrnnA=,tag:63pPRpBfumeiYCMnbuP8bA==,type:str]
+base: ENC[AES256_GCM,data:Og==,iv:GjKva7Pj8N7n/8VVw4EfOpo1KY7kFUiKiUCTg70lBdA=,tag:mqjupc3bdpWXVKyYyKl44w==,type:int]
+rev_share_pct: ENC[AES256_GCM,data:5LbmIQ==,iv:qUO/sTN+z0Wc7Kmg53Q3NhchrY2kv1ymoZnXfvZXKPk=,tag:yNpSOOShPtsfn3xGiORu5A==,type:float]
+kickers:
+    - trigger: ENC[AES256_GCM,data:tu1IqFlYE4oagvxx+OGDiPMkZScy,iv:1p9G57OMipV9WvJi3YwHM2q1iIYgVRLBVi/Q7ujqVWs=,tag:1LrQ1tfVpbtqMHSOAoEntQ==,type:str]
+      bonus: ENC[AES256_GCM,data:WHmo,iv:wLpAlO1fuqep6rvpXYymFVkxpzFjEqTvwoLeA+4IjgQ=,tag:EbsCbkCmZCc32mCB0pWM/w==,type:int]
+    - trigger: ENC[AES256_GCM,data:Q7Q4GrXpjI73ZJjNA6cFQG/ivDuURA==,iv:RdWxV1zcwpfXOQGzEGrg/ziraB8F1Z8BMQpFbCf245c=,tag:Tw60/YM7UZa4/56BeJYw6Q==,type:str]
+      bonus: ENC[AES256_GCM,data:UTN3WQ==,iv:Layr1smY5LM6HCXVDnJvusvbZ1HUqoVwBVYt4FvgLO0=,tag:GQnx0Hv1arDK58WqtaC/5w==,type:int]
+caps:
+    daily_min: ENC[AES256_GCM,data:vw==,iv:pslDS/MxW5fCsDa7LZjDZbKBw2vhR0Cl/Mqt8uq+F+k=,tag:zXdUCAu5ioucKnVJpNtxRw==,type:int]
+    daily_max: ENC[AES256_GCM,data:DydXgcM=,iv:V640QyGF+BYTY4dxljgewn70LlV6+S0A9WGt5T+RbIY=,tag:iSlQNxBQ3Q2nrSycnrWASA==,type:int]
+notes: ENC[AES256_GCM,data:p8BIXNLp2dh7MLTXv2MPnjGsxQM3y1eQ1VkgmUIYfmyOEbd4gw8Zxrvx6+gSUqeQnlg6mb/2Oxyz543ekTcLTdXRJ78V4qY+xv3lI6w/sHwabf4oql01,iv:cwJlXpNCS+6sjzar6STnxhMEsX6nFyrTUeHP5cr6S8c=,tag:3Jd/JF5EUxeG9MnGEqIYzQ==,type:str]
+sops:
+    age:
+        - recipient: age1yt58hyslqsv69zk47vpvdmsany3a0cdhkmvhdcnwzh287g27nanqgktvlg
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBDZlpDQVdpRkw3dlhpK3dn
+            d1VmVFFLcnVDY2xoNFVzN1p6YkF6OFFMYURzClU1eVBGMGpLc1VNZ1BFalhBRHdU
+            K1VqVG53K0hxSzg2UWRmaXBDR3YxZzgKLS0tIGxFVjA2enMxUXlsUE9rSnRCNng0
+            REY0T3F0N2kwMFd4a1ZMaVB4ZXMwaVUKxE61VJN0jQFfP9afxTd6obAG6hFc5Os0
+            /K73Cyn7YgFa28LAmjJnArwSMwSNxY67PSI1RT0XAGnBkHodYvjXsg==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2025-10-08T22:17:19Z"
+    mac: ENC[AES256_GCM,data:NiRFda2gaWO69bx+SkhEflS1Kb+vMkj+5MfOu9ASojJL9eDj8O+Clr1KSbaY91ak4iiNtLtoaXKivTXXuByh4FGfeH/ZsNEjABtPvR9RvTLOYENRMCGykPduz0anqVfsVjKNzterMH269LwIKovujoKC9NEgrsmI/PMkFWDPfIU=,iv:b4o0awBR/QRZt4Afm6WH37V+H2IurtI5IKTy8bkJhfQ=,tag:+xsXGY6bicnSzRTxXV4H9w==,type:str]
+    encrypted_regex: ^(.*)$
+    version: 3.11.0

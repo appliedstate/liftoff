@@ -1,0 +1,31 @@
+{
+  "roles": {
+    "buyer": {
+      "scale_policy_multiplier": 1.0,
+      "max_daily_spend_hint": 15000
+    },
+    "senior_buyer": {
+      "scale_policy_multiplier": 1.2,
+      "max_daily_spend_hint": 20000
+    }
+  },
+  "people": {
+    "tj": {
+      "role": "buyer",
+      "scale_policy_multiplier": 1.1,
+      "max_daily_spend_hint": 15000,
+      "incentive_structure": "rev_share_12pct_with_kickers"
+    },
+    "ben": {
+      "role": "senior_buyer",
+      "scale_policy_multiplier": 1.2,
+      "max_daily_spend_hint": 20000,
+      "incentive_structure": "rev_share_15pct_with_kickers"
+    }
+  },
+  "metadata": {
+    "last_updated": "2025-10-08",
+    "updated_by": "eric",
+    "note": "Derived signals for system use. Raw compensation data is encrypted."
+  }
+}

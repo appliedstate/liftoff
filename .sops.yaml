@@ -1,0 +1,4 @@
+creation_rules:
+  - path_regex: ^docs/private/comp/.*\.ya?ml$
+    encrypted_regex: '^(.*)$'
+    age: ['age1yt58hyslqsv69zk47vpvdmsany3a0cdhkmvhdcnwzh287g27nanqgktvlg']

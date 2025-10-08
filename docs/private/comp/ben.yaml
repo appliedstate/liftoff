@@ -1,0 +1,25 @@
+role: ENC[AES256_GCM,data:weCLi6E=,iv:t9XBORA1wWtK2euD3MGPOsK/XrrDaVv7KRkpySi/dis=,tag:SqiVedyZ4mO8QYUUlfJaQg==,type:str]
+base: ENC[AES256_GCM,data:bw==,iv:x9pDKFvX6phaF49vJHW7QAodX2vtYaHwlcBy3Z/3G/c=,tag:JKnBroJoq/IYjwQOQGVeNw==,type:int]
+rev_share_pct: ENC[AES256_GCM,data:1q96Mw==,iv:X3qOwSHIj1j1GPwId81tCHlWnDPhHCloNj4+iJzZpfw=,tag:CSYNqdgQBHUMQIs+4XonkQ==,type:float]
+kickers:
+    - trigger: ENC[AES256_GCM,data:n1d1BZy7l8Diul2LTplj7nG+Rhnx,iv:g44qwxFZDYpQrix4DBp3lEvNXByzSQ+wn6OWVmyCaqE=,tag:D1xse9Ml20GF0QjpV06b9g==,type:str]
+      bonus: ENC[AES256_GCM,data:38m6,iv:QHneux29BvcHwy8aQ3QFJmMlXJQAkXOLEto+HPMg3xk=,tag:xXzOpUHIKmqWXkmbSRvDsw==,type:int]
+caps:
+    daily_min: ENC[AES256_GCM,data:cA==,iv:F/uSETXqyz7Xxiz+LUihUGvP5gHmyBAfF3a6OIDLv4E=,tag:Gz9D9igvCLvNtGx/L3ocnQ==,type:int]
+    daily_max: ENC[AES256_GCM,data:ss8ER1A=,iv:JAhDyAIdSQSrRRrrz4APrS5h1G8I5BXfp88bajpEPN4=,tag:bx/POM458sH9MxJpN/iMWQ==,type:int]
+notes: ENC[AES256_GCM,data:ECsCvJQsYPwVStyOW+FDntfoEn6csMnIP5C51kf152bxEqAFFgGnK99xrxrdo/NFaMrc/Ny38bfRBw18qSEnYnKa0Thx2zr50oK6ZPjHv+ikWi6GRpl+deXs17mJfGPU9cqNh4Q=,iv:ZslkR1z/LDnvxJmbIC3FcHNYzDjO/CecXvggPu/qMWI=,tag:XtqB2ZtIMvp4qO65+1T7iw==,type:str]
+sops:
+    age:
+        - recipient: age1yt58hyslqsv69zk47vpvdmsany3a0cdhkmvhdcnwzh287g27nanqgktvlg
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBWMUNkZk84RzhvTi83Z3Rm
+            L0xuWlh2d3lLb3piWGJsU2RJak9Ocitlc0hVCisvUUFwaXY4Vzh1SlN1Tmk4enM1
+            Ym03SW45dGtJeDRlVy9xQ1Qwby9ocGMKLS0tIFRZbmtNbTRxKzhlYzE0cXhueG1D
+            OXUxV1dlNVA3ZFMwWnQ2V2NKRlNrSFUKJ6MlcKWlI7Yp9NS5Ot7dTEkQTeus3Uuv
+            QzUiIfRPTB81gxOJPktFJswaN0coSuaHqevUV+qxF6ybYAic936mVQ==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2025-10-08T22:17:24Z"
+    mac: ENC[AES256_GCM,data:e6V9KZRbGmc/T8AhEkd1w/PsmAqlzTwxH04b5Mrl1/U2y+6Zpr5AKVE5bqJ86S7xknr/1tY3qOJ/FQwAzmNzhf8lj7CchLFg+M1BGCBEvbIQsW2Z+H0+g7ChXXjtdWcHZ9gnnCihBmnpjcQr4KQNXrlkWpH/ua2HO0QxPeNQgds=,iv:gw48CUneKA4qQtau5oIID1x1AbqwfNDzpfbyiD7m3gY=,tag:L5f+VfcnkoeWyNGUxrCiQQ==,type:str]
+    encrypted_regex: ^(.*)$
+    version: 3.11.0

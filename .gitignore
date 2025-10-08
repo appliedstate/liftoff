@@ -111,6 +111,9 @@ temp/
 # Cursor MCP files
 .cursor/
 
+# Private compensation plaintext scratch
+docs/private/comp/plaintext/**
+
 # Supabase local development
 .supabase/
 
