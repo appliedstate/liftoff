@@ -21,20 +21,17 @@ licensing: internal
 - Status: clean working tree
 - Core files referenced: `global-terminal.js`, `run-campaign-terminal.js`, `eval-code.js`, `server.js`, `config.js`, `clickhouse-fields-schema-def.js`, `clickhouse-init.js`
 
-## Current (as reported)
+## Current (confirmed with Devin)
 
 ### Data sources & contracts
-- Existing sources (in code): S1 (hourly/reconciled), Taboola (hourly/daily), Facebook (hourly/daily), Zemanta (reconciled), Mediago (hourly/daily)
-- Missing sources: Strateg.is hourly and Strateg.is reconciled connectors (not found)
-- Idempotency: ClickHouse `ReplacingMergeTree` using `insertTimestamp` for deduplication
+- Existing sources (confirmed): S1 (hourly/reconciled), Taboola (hourly/daily), Facebook (hourly/daily), Zemanta (reconciled), Mediago (hourly/daily)
+- Strateg.is hourly/reconciled connectors: NO (not found anywhere)
+- Strateg.is tables under different names: NO (strategisEventsReport is generic event tracking)
+- Idempotency: YES - ClickHouse `ReplacingMergeTree(insertTimestamp)` only, no additional dedup keys
 
 ### Storage schemas
-- Database: ClickHouse (prod: `strategisReports`, dev/test: `strategisReportsDev/Test`)
-- Existing tables:
-  - `s1ReconciledReport` (PK: date, subId)
-  - `s1IntradayReport` (PK: date, sub_id, hourly via hrHour)
-  - `zemantaReconciledReport` (PK includes organization, timestamp, networkAdGroupId)
-  - `strategisEventsReport` (generic events, not a dedicated Strateg.is data source)
+- Source-of-truth DB: ClickHouse (`strategisReports` in prod, `strategisReportsDev/Test` in dev)
+- Tables used in prod: s1ReconciledReport, s1IntradayReport, zemantaReconciledReport, taboolaDailyReport, facebookDailyReport, etc.
 - Sample report shape (example):
 ```
 { "level": "date-hour-campaignId", "date": "2020-10-01", "hour": "00", "campaignId": "epa001", "impressions": 8 }
@@ -44,20 +41,23 @@ licensing: internal
   - `strategis_reconciled_report`
 
 ### Modeling (nowcast readiness)
-- Missing: delay profiles (Δ=0..12h), 168‑bin hour‑of‑week baselines, nowcast computation, bias tracking
+- Delay profiles (Δ≤12h): NO (not computed or stored)
+- 168-bin baselines: NO (not computed or stored)
+- Nowcast or bias KPI: NO (does not exist)
 - Current variables: simple aggregations (s1Revenue/clicks/searches, trafficImpressions/clicks/conversions/spend, ctr/cpm/cpc/cpa/rpm/roas/margin), exposed with Last1Hour..Last1Day windows
 
 ### Decision engine (policy execution)
-- Partial sandbox: CoffeeScript + `static-eval` for deterministic evaluation; no explicit time/memory limits
-- Missing: vm2 sandbox; helpers `confirm2h()`, `cooldown()`, `dailyCap()`, `baselines()`, `gates()`
+- CoffeeScript+static-eval only: YES (eval-code.js) - no vm2 anywhere
+- Helper primitives exist: NO (none of confirm2h/cooldown/dailyCap/baselines/gates exist)
 - Policy storage: Redis hash `global-terminal` with filter targeting (organization, adSource, trafficSource, buyer, strategisCampaignId)
 - Missing: policy versioning, feature flags, audit trail beyond createdAt/updatedAt
 
 ### Execution (intents → actions)
+- Intent queue separate from LevelDB: NO (only action storage, no queue mechanism)
+- Cooldown/daily caps enforced: NO (not enforced)
+- Support bump/trim/rotate operations: NO (only directUpdate/isActive toggle supported)
 - Action storage: LevelDB under `global-terminal-actions` (ns/date/hour/id), executor loop with retries
 - Supported networks: Taboola, Facebook, Mediago, Zemanta, Outbrain
-- Operation support: ONLY `directUpdate` (isActive toggle)
-- Missing: intent queue, cooldown registry, daily cap enforcement, `bump_budget`, `trim_budget`, `rotate_creatives`
 
 ### APIs & scheduling
 - Available endpoints:
@@ -70,26 +70,31 @@ GET       /api/global-terminal/actions
 GET/POST  /api/global-terminal/run
 ```
 - Auth: `authify` middleware with RBAC
-- Scheduling: manual schedule endpoints exist; no automated H+5 hourly job; no nightly refresh jobs; no cron config found
-- Missing endpoints: `/nowcasts`, `/intents`, `/execute`, `/freeze`, `/unfreeze`
+- H+5 hourly or nightly jobs: NO (manual endpoints only `/api/schedule/campaign-terminals`, no Cloud Scheduler config)
+- Nowcasts/intents/execute/freeze endpoints: NO (not in any service)
 
 ### Controls & safety
-- Missing: freeze/kill‑switch, centralized guardrails (EMQ, latency, daily +30% cap), comprehensive audit/change_log, reversal/bias metrics
+- Freeze/kill-switch: NO (does not exist)
+- Audit/change_log storage: Partial (only createdAt/updatedAt on rules, no comprehensive action audit)
+- Reversal rate/bias dashboards: NO (not tracked)
 - Exists: dry‑run via `isDry` flag
 
 ### Observability
-- Missing dashboards/alerts for freshness, bias, reversal rate, guard violations
+- Missing: dashboards/alerts for freshness, bias, reversal rate, guard violations
 - Exists: debug logging
 
 ### Backtest/simulator
-- Not implemented
+- Replay/simulator tool: NO (does not exist)
 
 ### Strateg.is integration status
 - Terminal does NOT currently ingest Strateg.is data (no Strateg.is connectors or canonical tables found)
 
 ### Git hygiene
-- `strategis-api`: clean; HEAD `e416b614`
-- `lincx-core`: merge conflicts reported; blocked from pulling latest
+- Prod branch/SHA: master/e416b614 - clean working tree in strategis-api
+- Blockers: YES - lincx-core has merge conflicts (but Terminal is in strategis-api, not affected)
+
+## Summary of confirmed gaps
+All Strateg.is integration, modeling (nowcast/baselines), advanced execution (intent queue/cooldowns/caps), scheduling automation, and observability features are missing and need to be built as delta scope per the phased plan.
 
 ## Required (to execute our playbooks)
 - Data ingestion
@@ -132,7 +137,9 @@ GET/POST  /api/global-terminal/run
   - Clean branch name and SHA containing these components (note any merge conflicts blocking pulls)
 
 ## Decision log / next steps
-- If Strateg.is connectors absent: add ingestion + canonical tables
-- If no nowcast/baselines: add nightly/hourly jobs and storage
-- If no JS sandbox/intent queue: add minimal implementations with audit and caps
-- Add freeze/kill‑switch + bias/reversal dashboards if missing
+- **Strateg.is connectors absent**: CONFIRMED - add ingestion + canonical tables `hourly_campaign_report`, `strategis_reconciled_report`
+- **No nowcast/baselines**: CONFIRMED - add nightly/hourly jobs for delay profiles (Δ≤12h), 168-bin baselines, nowcast computation, bias tracking
+- **No JS sandbox/intent queue**: CONFIRMED - implement vm2 sandbox with helpers (confirm2h, cooldown, dailyCap, baselines, gates), intent queue, cooldown registry, daily cap enforcement, new operations (bump_budget, trim_budget, rotate_creatives)
+- **Missing scheduling/observability**: CONFIRMED - add H+5 hourly job, nightly refresh job, endpoints (/nowcasts, /intents, /execute, /freeze), freeze/kill-switch, comprehensive audit/change_log, bias/reversal dashboards, backtest/simulator
+
+**Immediate priority**: Strateg.is ingestion and canonical table creation to enable data flow for playbooks.
