@@ -1,0 +1,15 @@
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# Email whitelist (comma-separated)
+ALLOWED_EMAILS=user1@example.com,user2@example.com
+
+# Or allow entire domain
+ALLOWED_DOMAIN=yourdomain.com
+
+# Optional: Basic Auth fallback
+# BASIC_AUTH_USER=admin
+# BASIC_AUTH_PASS=secure-password
+
