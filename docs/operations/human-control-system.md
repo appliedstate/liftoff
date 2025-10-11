@@ -251,10 +251,11 @@ On-demand guidance from expert personas (docs/ai-agents/):
 - **jeff**: Operations, customer obsession, efficiency
 - **sara**: Leadership, culture, team dynamics
 - **jim**: Quantitative modeling, statistical rigor, signal discovery
+- **zuck**: Systems architecture, Facebook Ads feedback loops, learning-phase stability
 
 Advisors can author systems (architectures), processes (SOPs), and tasks (atomic actions). Link outputs to Impact Filters and queue via Terminal.
 
-**Invocation**: Use terminal commands like `aion "solve this scaling problem"`, `warren "capital allocation"`, or `jim "model ROAS nowcast"`. Queue via `ai-queue add {name} "review strategy"`. Responses include references to system docs and apply persona principles.
+**Invocation**: Use terminal commands like `aion "solve this scaling problem"`, `warren "capital allocation"`, `jim "model ROAS nowcast"`, or `zuck "stabilize learning phase without killing winners"`. Queue via `ai-queue add {name} "review strategy"`. Responses include references to system docs and apply persona principles.
 
 ### Escalation Policy
 - **Level 1**: Human solves within 4 hours

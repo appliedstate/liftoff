@@ -53,3 +53,4 @@ Skip Supabase temporarily and use Basic Auth:
 - Set up proper Supabase Auth for production
 - Invite team members
 
+

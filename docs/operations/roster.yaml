@@ -1,0 +1,226 @@
+# Human Control System Roster
+# Last updated: October 8, 2025
+# AI Manager: Weekly check-ins, performance tracking, resource allocation
+
+people:
+  - name: Ben
+    role: Senior Buyer - Dental/Health vertical lead
+    status: active
+    objectives:
+      - "$1,000/day margin contribution"
+      - "3-5 new campaigns/week"
+      - "33%+ break-even rate"
+    kpis:
+      - margin_per_spend: 0.25
+      - launch_success_rate: 0.35
+      - scaling_velocity: "25%_daily_budget_growth"
+    cadence: daily
+    interfaces:
+      ai_agents: [creative_generator, audience_optimizer]
+      terminal: [campaign_launcher, performance_monitor]
+      strateg_is: [margin_reports, scaling_alerts]
+    last_check_in: "2025-10-07"
+    performance_rating: high
+
+  - name: TJ
+    role: Volume Buyer - Broad portfolio optimization
+    status: active
+    objectives:
+      - "$500/day margin contribution"
+      - "7-8 new campaigns/week"
+      - "50%+ break-even rate"
+    kpis:
+      - margin_per_spend: 0.22
+      - launch_success_rate: 0.45
+      - time_to_scale: "<72_hours"
+    cadence: daily
+    interfaces:
+      ai_agents: [roas_predictor, budget_optimizer]
+      terminal: [bulk_launcher, alert_system]
+      strateg_is: [portfolio_analytics, optimization_engine]
+    last_check_in: "2025-10-07"
+    performance_rating: high
+
+  - name: Dan
+    role: Efficient Buyer - High-ROAS specialist
+    status: active
+    objectives:
+      - "$200/day margin contribution"
+      - "2-3 new campaigns/week"
+      - "40%+ break-even rate"
+    kpis:
+      - margin_per_spend: 0.28
+      - efficiency_ratio: "0.15_spend_per_conversion"
+      - scale_ceiling: "$500_max_campaign_budget"
+    cadence: daily
+    interfaces:
+      ai_agents: [conversion_optimizer]
+      terminal: [performance_tracker]
+      strateg_is: [efficiency_reports]
+    last_check_in: "2025-10-07"
+    performance_rating: medium
+
+  - name: Mike
+    role: Buyer - Campaign maintenance & testing
+    status: active
+    objectives:
+      - "Break-even or positive margin"
+      - "1-2 new campaigns/week"
+      - "Eliminate negative campaigns"
+    kpis:
+      - margin_per_spend: 0.20
+      - loss_elimination: "100%_negative_campaigns_killed"
+      - learning_velocity: weekly_improvement
+    cadence: daily
+    interfaces:
+      ai_agents: [creative_tester]
+      terminal: [campaign_monitor]
+      strateg_is: [loss_alerts]
+    last_check_in: "2025-10-07"
+    performance_rating: low
+
+  - name: Anastasia
+    role: Buyer - Niche campaigns
+    status: active
+    objectives:
+      - "Positive margin contribution"
+      - "Optimize existing campaigns"
+      - "Reduce low-performer spend by 50%"
+    kpis:
+      - margin_per_spend: 0.15
+      - optimization_rate: "50%_budget_reduction_low_performers"
+      - efficiency_improvement: weekly
+    cadence: daily
+    interfaces:
+      ai_agents: [niche_optimizer]
+      terminal: [campaign_monitor]
+      strateg_is: [performance_alerts]
+    last_check_in: "2025-10-07"
+    performance_rating: low
+
+  - name: Eric
+    role: CEO - Strategic direction & resource allocation
+    status: active
+    objectives:
+      - "$5K/day margin target achievement"
+      - "Team productivity optimization"
+      - "Infrastructure investment decisions"
+    kpis:
+      - team_margin_total: "5000_daily"
+      - productivity_per_human: weekly_roi
+      - infrastructure_roi: "3x_return_on_tools"
+    cadence: weekly
+    interfaces:
+      ai_agents: [strategy_planner, resource_allocator]
+      terminal: [system_monitor, automation_builder]
+      strateg_is: [business_intelligence]
+    last_check_in: "2025-10-08"
+    performance_rating: high
+
+  - name: Lian
+    role: AI Agent Developer - Agent creation & optimization
+    status: active
+    objectives:
+      - "3 new agents deployed/month"
+      - "20% buyer productivity improvement"
+      - "Agent accuracy >90%"
+    kpis:
+      - agent_deployment_rate: monthly
+      - productivity_lift: percentage
+      - accuracy_score: percentage
+    cadence: weekly
+    interfaces:
+      ai_agents: [meta_agent_builder]
+      terminal: [agent_deployer, performance_tester]
+    last_check_in: null
+    performance_rating: medium
+
+  - name: Jose
+    role: Terminal Automation Engineer - Workflow optimization
+    status: active
+    objectives:
+      - "5 new automations/week"
+      - "50% reduction in manual tasks"
+      - "99.9% automation uptime"
+    kpis:
+      - automation_deployment: weekly
+      - time_saved: "hours_per_week"
+      - reliability: "uptime_percentage"
+    cadence: weekly
+    interfaces:
+      terminal: [automation_builder, system_monitor]
+      strateg_is: [efficiency_metrics]
+    last_check_in: null
+    performance_rating: medium
+
+  - name: Zohaib
+    role: Data Engineer - Analytics & reporting infrastructure
+    status: active
+    objectives:
+      - "strateg.is endpoint completion"
+      - "Real-time dashboard deployment"
+      - "Data pipeline 99.9% uptime"
+    kpis:
+      - endpoint_completion: on_time
+      - dashboard_usage: daily_active_users
+      - pipeline_uptime: percentage
+    cadence: weekly
+    interfaces:
+      strateg_is: [data_pipeline, api_builder]
+      terminal: [reporting_automation]
+    last_check_in: null
+    performance_rating: medium
+
+  - name: Henok
+    role: DevOps Engineer - Platform reliability & scaling
+    status: active
+    objectives:
+      - "Zero downtime incidents"
+      - "50% faster deployment cycles"
+      - "Cost optimization"
+    kpis:
+      - uptime: "99.9%"
+      - deployment_speed: minutes
+      - cost_efficiency: percentage
+    cadence: weekly
+    interfaces:
+      terminal: [infrastructure_monitor]
+      strateg_is: [system_health]
+    last_check_in: null
+    performance_rating: medium
+
+  - name: Tahmid
+    role: QA/Test Engineer - Quality assurance & testing
+    status: active
+    objectives:
+      - "95% test coverage"
+      - "Zero production bugs"
+      - "Automated testing pipeline"
+    kpis:
+      - test_coverage: percentage
+      - bug_rate: per_release
+      - automation_coverage: percentage
+    cadence: weekly
+    interfaces:
+      terminal: [test_runner, quality_monitor]
+    last_check_in: null
+    performance_rating: medium
+
+  - name: Maryna
+    role: Product Manager - Requirements & prioritization
+    status: active
+    objectives:
+      - "Clear PRDs for all features"
+      - "On-time delivery rate 90%"
+      - "Stakeholder satisfaction"
+    kpis:
+      - prd_completion: on_time
+      - delivery_rate: percentage
+      - satisfaction_score: nps
+    cadence: weekly
+    interfaces:
+      strateg_is: [requirements_tracker]
+      terminal: [roadmap_planner]
+    last_check_in: null
+    performance_rating: medium
+

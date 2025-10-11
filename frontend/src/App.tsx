@@ -5,6 +5,7 @@ import { UserProfile } from './components/UserProfile';
 import { LoginPage } from './pages/LoginPage';
 import { SignUpPage } from './pages/SignUpPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
+import { CatalystDemo } from './components/CatalystDemo';
 
 const Dashboard = () => {
   return (
@@ -41,15 +42,16 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route 
-          path="/dashboard" 
+        <Route
+          path="/dashboard"
           element={
             <ProtectedRoute>
               <Dashboard />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/demo" element={<CatalystDemo />} />
+        <Route path="/" element={<Navigate to="/demo" replace />} />
       </Routes>
     </Router>
   );

@@ -189,6 +189,7 @@ Advisors can be invoked to generate guidance and create artifacts:
 warren "How would you scale Facebook margin to $5k/day?"
 warren "Should we scale this campaign to $10k/day?"
 jim "Design a ROAS nowcast with 168-hour baselines"
+zuck "Stabilize learning phase without killing winners"
 
 # Queue an advisor task for review
 ai-queue add aion "Review TJ's scaling strategy"

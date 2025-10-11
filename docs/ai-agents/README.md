@@ -13,6 +13,9 @@ aion "How would you scale Facebook margin to $5k/day?"
 # Invoke Warren for financial decisions
 warren "Should we invest in this campaign optimization?"
 
+# Invoke Zuck for systems architecture (Facebook Ads feedback loops)
+zuck "Stabilize learning phase without killing winners"
+
 # List available agents
 ai-agents list
 

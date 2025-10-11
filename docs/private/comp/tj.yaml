@@ -25,3 +25,4 @@ sops:
     mac: ENC[AES256_GCM,data:NiRFda2gaWO69bx+SkhEflS1Kb+vMkj+5MfOu9ASojJL9eDj8O+Clr1KSbaY91ak4iiNtLtoaXKivTXXuByh4FGfeH/ZsNEjABtPvR9RvTLOYENRMCGykPduz0anqVfsVjKNzterMH269LwIKovujoKC9NEgrsmI/PMkFWDPfIU=,iv:b4o0awBR/QRZt4Afm6WH37V+H2IurtI5IKTy8bkJhfQ=,tag:+xsXGY6bicnSzRTxXV4H9w==,type:str]
     encrypted_regex: ^(.*)$
     version: 3.11.0
+

@@ -51,3 +51,4 @@ Warren provides:
 - Invoked for major spending decisions and scaling
 - Provides counterpoint to growth-at-all-costs mentality
 - Focuses on profitability and capital preservation
+

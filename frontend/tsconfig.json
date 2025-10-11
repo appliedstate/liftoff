@@ -21,9 +21,12 @@
     "jsx": "react-jsx"
   },
   "include": [
-    "src"
+    "src",
+    "src/types/**/*"
   ],
   "exclude": [
-    "src/components/Catalyst/**/*"
+    "node_modules",
+    "build",
+    "dist"
   ]
 }

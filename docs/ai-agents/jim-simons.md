@@ -83,3 +83,4 @@ Use Terminal commands to create artifacts (see Terminal doc) and link to Impact 
 - Invoked on demand (`jim "..."`) or queued via `ai-queue add jim "..."`
 - Outputs include hypotheses, models, validation plans, and actions
 - Referenced in weekly Impact Filters and decision reviews
+

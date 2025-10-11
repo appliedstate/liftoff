@@ -93,3 +93,4 @@ Use Terminal advisor commands to queue output and create artifacts linked to Imp
 - Invoke on demand (`aion "..."`) or queue via `ai-queue add aion "..."`
 - Reviewed in weekly check‑ins; outputs become SOPs and tasks  
 - References system docs; emphasizes deletion before optimization
+

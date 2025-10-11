@@ -2,20 +2,26 @@ import type { StorybookConfig } from '@storybook/react-webpack5';
 
 const config: StorybookConfig = {
   "stories": [
-    "../src/**/*.mdx",
-    "../src/**/*.stories.@(js|jsx|mjs|ts|tsx)"
+    "../src/**/*.stories.@(js|jsx|ts|tsx)"
   ],
   "addons": [
     "@storybook/preset-create-react-app",
-    "@storybook/addon-docs",
-    "@storybook/addon-onboarding"
+    "@storybook/addon-docs"
   ],
   "framework": {
     "name": "@storybook/react-webpack5",
-    "options": {}
+    "options": {
+      builder: {
+        viteConfigPath: undefined,
+      }
+    }
   },
   "staticDirs": [
     "../public"
-  ]
+  ],
+  "typescript": {
+    "check": false,
+    "reactDocgen": false
+  }
 };
 export default config;

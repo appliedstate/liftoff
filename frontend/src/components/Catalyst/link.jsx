@@ -1,15 +1,23 @@
 /**
- * TODO: Update this component to use your client-side framework's link
- * component. We've provided examples of how to do this for Next.js, Remix, and
- * Inertia.js in the Catalyst documentation:
- *
- * https://catalyst.tailwindui.com/docs#client-side-router-integration
+ * React Router integration for Catalyst UI Link component
+ * Updated to work with React Router v6+
  */
 
 import * as Headless from '@headlessui/react'
 import React, { forwardRef } from 'react'
+import { Link as RouterLink } from 'react-router-dom'
 
-export const Link = forwardRef(function Link(props, ref) {
+export const Link = forwardRef(function Link({ href, ...props }, ref) {
+  // If href is provided, use React Router Link
+  if (href) {
+    return (
+      <Headless.DataInteractive>
+        <RouterLink to={href} {...props} ref={ref} />
+      </Headless.DataInteractive>
+    )
+  }
+
+  // Otherwise, use regular anchor tag
   return (
     <Headless.DataInteractive>
       <a {...props} ref={ref} />
