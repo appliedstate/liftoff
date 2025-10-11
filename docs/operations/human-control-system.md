@@ -245,7 +245,7 @@ Definition of Done: [Measurable completion criteria]
 
 ### Persona AI Agents
 On-demand guidance from expert personas (docs/ai-agents/):
-- **elon**: First-principles problem-solving, scaling, innovation
+- **aion**: First-principles problem-solving, scaling, innovation
 - **warren**: Value investing, financial decisions, long-term thinking
 - **steve**: Product design, user experience, brand building
 - **jeff**: Operations, customer obsession, efficiency
@@ -254,7 +254,7 @@ On-demand guidance from expert personas (docs/ai-agents/):
 
 Advisors can author systems (architectures), processes (SOPs), and tasks (atomic actions). Link outputs to Impact Filters and queue via Terminal.
 
-**Invocation**: Use terminal commands like `elon "solve this scaling problem"`, `warren "capital allocation"`, or `jim "model ROAS nowcast"`. Queue via `ai-queue add {name} "review strategy"`. Responses include references to system docs and apply persona principles.
+**Invocation**: Use terminal commands like `aion "solve this scaling problem"`, `warren "capital allocation"`, or `jim "model ROAS nowcast"`. Queue via `ai-queue add {name} "review strategy"`. Responses include references to system docs and apply persona principles.
 
 ### Escalation Policy
 - **Level 1**: Human solves within 4 hours

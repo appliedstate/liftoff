@@ -7,8 +7,8 @@ This directory contains AI agent personas that can be invoked for guidance in th
 Use terminal commands to queue AI assistance:
 
 ```bash
-# Invoke Elon for problem-solving
-elon "How would you scale Facebook margin to $5k/day?"
+# Invoke Aion for problem-solving
+aion "How would you scale Facebook margin to $5k/day?"
 
 # Invoke Warren for financial decisions
 warren "Should we invest in this campaign optimization?"
@@ -17,7 +17,7 @@ warren "Should we invest in this campaign optimization?"
 ai-agents list
 
 # Queue assistance for review
-ai-queue add elon "Review TJ's scaling strategy"
+ai-queue add aion "Review TJ's scaling strategy"
 ```
 
 ## Persona Structure
