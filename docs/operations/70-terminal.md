@@ -179,3 +179,30 @@ Critical gap: While Facebook ad set control APIs (budget/status/bid) exist and w
 - **Missing scheduling/observability**: CONFIRMED - add H+5 hourly job, nightly refresh job, endpoints (/nowcasts, /intents, /execute, /freeze), freeze/kill-switch, comprehensive audit/change_log, bias/reversal dashboards, backtest/simulator
 
 **Immediate priority**: Strateg.is ingestion and canonical table creation to enable data flow for playbooks.
+
+## Advisor Commands (Personas)
+
+Advisors can be invoked to generate guidance and create artifacts:
+
+```
+# Ask an advisor (response saved to ai-queue)
+elon "How would you scale Facebook margin to $5k/day?"
+warren "Should we scale this campaign to $10k/day?"
+jim "Design a ROAS nowcast with 168-hour baselines"
+
+# Queue an advisor task for review
+ai-queue add elon "Review TJ's scaling strategy"
+
+# Create artifacts from advisor output
+ai-systems create --name "RPC Learning System" --source ai-queue:elon:123
+ai-process create --name "ROAS Scaling SOP" --source ai-queue:warren:456
+ai-task create --owner TJ --title "Apply scaling SOP to CC Canada" --due 2025-10-15 --source ai-queue:elon:789
+
+# List advisors and queue
+ai-agents list
+ai-queue list
+```
+
+Notes:
+- Advisor outputs should link to relevant docs and Impact Filters
+- Tasks created via `ai-task create` include Definition of Done and owner/cadence
