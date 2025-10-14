@@ -3,7 +3,7 @@
 Role: Efficient Buyer — High-ROAS specialist
 
 Objectives (current quarter):
-- Margin contribution: $____/day
+- Margin contribution: $1,000/day (team coordination + individual contribution)
 - Launches: 2–3/week, ≥40% break-even in 72h
 - Scaling velocity: +20–40%/day on ROAS rules
 
