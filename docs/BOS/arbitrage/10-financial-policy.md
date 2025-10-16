@@ -34,6 +34,11 @@ Approvals & non‑reversible changes
 Reporting
 - Daily dashboards by 07:00; weekly rebalance note; monthly equity pack (P&L bridge, cashflow, comp vs caps, efficiency bands).
 
+Related docs
+- Finance Overview & Targets — `../../finance/public/README.md`
+- Finance Metrics & Definitions — `../../finance/public/metrics.md`
+- Private Templates — `../../finance/private/templates/`
+
 References
 - Returns Model — `../../operations/arbitrage-portfolio-returns-model.md`
 - Portfolio Reporting PRD — `../../prd/arbitrage-portfolio-reporting-prd.md`

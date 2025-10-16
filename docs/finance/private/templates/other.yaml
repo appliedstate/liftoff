@@ -1,0 +1,9 @@
+# Other overhead template (private)
+# status: draft
+# last_reviewed: 2025-10-16
+other_overhead:
+  - name: <Expense Name>
+    category: <rent|legal|marketing|misc>
+    monthly_cost: 0
+    allocation: <arbitrage|liftoff|shared>
+    notes: <optional>

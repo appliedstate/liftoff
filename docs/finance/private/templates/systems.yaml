@@ -1,0 +1,9 @@
+# Systems costs template (private)
+# status: draft
+# last_reviewed: 2025-10-16
+systems:
+  - name: <System Name>
+    category: <infra|tools|platform>
+    monthly_cost: 0
+    allocation: <arbitrage|liftoff|shared>
+    notes: <optional>

@@ -1,0 +1,11 @@
+# People costs template (private)
+# status: draft
+# last_reviewed: 2025-10-16
+people:
+  - name: <Full Name>
+    role: <Role>
+    team: <arbitrage|liftoff|shared>
+    annual_base_salary: 0
+    variable_cap_pct_of_portfolio_net: 0.20
+    benefits_monthly: 0
+    other_costs_monthly: 0
