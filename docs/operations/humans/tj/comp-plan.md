@@ -47,6 +47,20 @@ Steps:
 - EmployerROI = (20,167 − 1,516.70) / (4,960×1.12) ≈ 3.3×
 - Guardrails → pass (≥2.0) → payout = $1,516.70
 
+## 2024–2025 Compensation Actuals (from TJ 2025 Earnings sheet)
+
+Summary (USD):
+- Annual Salary: $55,000
+- Monthly Salary: $4,583.33
+- Avg Monthly Bonus: 2024 $1,472.75 → 2025 $963.44 (−34.58%)
+- Avg Monthly Compensation: 2024 $6,056.08 → 2025 $5,546.78 (−8.41%)
+- Benefits Monthly Avg: 2024 $350.66 → 2025 $462.03 (+31.76%)
+- Comp + Benefits Monthly Avg: 2024 $6,406.75 → 2025 $6,008.81 (−6.21%)
+
+Notes:
+- Monthly breakdowns (salary, bonus, total) are tracked in the source sheet; use these for month-by-month reconciliation against the formula and guardrails above.
+- Source: [TJ 2025 Earnings — Google Sheet](https://docs.google.com/spreadsheets/d/1aHEPwINLIEfyKL5jwpRfDGey_2JOJjNAk-si21osoqc/edit?usp=sharing)
+
 ## Administration
 
 - Source of truth (private): `docs/private/comp/tj.yaml` (SOPS‑encrypted; includes base, M, and tier config).
