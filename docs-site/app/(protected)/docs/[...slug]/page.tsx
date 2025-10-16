@@ -31,9 +31,25 @@ export default async function DocPage({ params }: PageProps) {
         <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
           {doc.meta.title}
         </h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          {doc.meta.path}
-        </p>
+        <div className="text-sm text-gray-500 dark:text-gray-400 space-y-1">
+          <p>{doc.meta.path}</p>
+          {doc.frontmatter && (
+            <div className="flex flex-wrap gap-3">
+              {doc.frontmatter.owners && (
+                <span>Owners: {Array.isArray(doc.frontmatter.owners) ? doc.frontmatter.owners.join(', ') : String(doc.frontmatter.owners)}</span>
+              )}
+              {doc.frontmatter.status && (
+                <span>Status: {String(doc.frontmatter.status)}</span>
+              )}
+              {doc.frontmatter.last_reviewed && (
+                <span>Last reviewed: {String(doc.frontmatter.last_reviewed)}</span>
+              )}
+              {doc.frontmatter.approved_by && (
+                <span>Approved by: {String(doc.frontmatter.approved_by)}</span>
+              )}
+            </div>
+          )}
+        </div>
       </header>
       <Markdown content={doc.content} />
     </article>
