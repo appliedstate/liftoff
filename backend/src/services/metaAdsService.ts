@@ -4,6 +4,9 @@ import { extractHook } from '../lib/hook';
 import { extractKeywordsFromUrl, loadUrlMapping } from '../lib/urlMapping';
 import { extractForcekeys, ForcekeyEntry } from '../lib/forcekeys';
 import { resolveFinalUrl } from '../lib/urlResolve';
+import { extractFacebookPixelIdsFromUrl } from '../lib/pixel';
+import { extractFacebookPixelIdsHeadless } from '../lib/pixelHeadless';
+import { extractWidgetPhrasesHeadless } from '../lib/widgetHeadless';
 
 export interface AnalyzePagesInput {
   pageIds: string[];
@@ -31,6 +34,8 @@ export interface AdRecord {
   extracted_keywords?: string[];
   forcekeys?: ForcekeyEntry[];
   extracted_param_keys?: string[];
+  pixel_ids?: string[];
+  widget_phrases?: string[];
 }
 
 export async function fetchAdsForPages(input: AnalyzePagesInput): Promise<AdRecord[]> {
@@ -44,6 +49,46 @@ export async function fetchAdsForPages(input: AnalyzePagesInput): Promise<AdReco
   } = input;
 
   const allAds: AdRecord[] = [];
+
+  // Cache pixel IDs per hostname to avoid repeated fetches across many ads on same domain
+  const pixelCache = new Map<string, string[]>();
+  const useHeadlessPixel = (process.env.HEADLESS_PIXEL || '').toLowerCase() === '1' || (process.env.HEADLESS_PIXEL || '').toLowerCase() === 'true';
+  const enableClicks = (process.env.HEADLESS_PIXEL_CLICKS || '').toLowerCase() === '1' || (process.env.HEADLESS_PIXEL_CLICKS || '').toLowerCase() === 'true';
+  const appendFbclid = (process.env.HEADLESS_PIXEL_FBCLID || '').toLowerCase() === '1' || (process.env.HEADLESS_PIXEL_FBCLID || '').toLowerCase() === 'true';
+  const useHeadlessWidget = (process.env.HEADLESS_WIDGET || '').toLowerCase() === '1' || (process.env.HEADLESS_WIDGET || '').toLowerCase() === 'true';
+
+  async function getPixelIdsCached(finalUrl?: string): Promise<string[]> {
+    if (!finalUrl) return [];
+    try {
+      const u = new URL(finalUrl);
+      const key = u.hostname.toLowerCase() + (useHeadlessPixel ? ':headless' : ':static');
+      if (pixelCache.has(key)) return pixelCache.get(key)!;
+      const ids = useHeadlessPixel
+        ? await extractFacebookPixelIdsHeadless(finalUrl, {
+            clicksEnabled: enableClicks,
+            appendFbclid,
+            waitAfterNavMs: 4000,
+            waitBetweenClicksMs: 1200,
+            maxClicks: 3,
+            scrollBeforeClicks: true
+          })
+        : await extractFacebookPixelIdsFromUrl(finalUrl);
+      const uniqueSorted = Array.from(new Set(ids)).sort();
+      pixelCache.set(key, uniqueSorted);
+      return uniqueSorted;
+    } catch {
+      return [];
+    }
+  }
+
+  async function getWidgetPhrases(finalUrl?: string): Promise<string[]> {
+    if (!finalUrl || !useHeadlessWidget) return [];
+    try {
+      return await extractWidgetPhrasesHeadless(finalUrl, { appendFbclid: true, waitAfterNavMs: 2500, scrollBeforeExtract: true });
+    } catch {
+      return [];
+    }
+  }
 
   for (const page_id of pageIds) {
     let next_page_token: string | undefined = undefined;
@@ -71,7 +116,7 @@ export async function fetchAdsForPages(input: AnalyzePagesInput): Promise<AdReco
 
         // Determine media type heuristically
         const snapStr = JSON.stringify(snapshot).toLowerCase();
-        const hasVideo = snapStr.includes('video') || /display_format\"\s*:\s*\".*video/.test(snapStr);
+        const hasVideo = snapStr.includes('video') || /display_format"\s*:\s*".*video/.test(snapStr);
         const hasImage = snapStr.includes('original_image_url') || snapStr.includes('resized_image_url');
         let media_type: 'image' | 'video' | 'mixed' | 'unknown' = 'unknown';
         if (hasVideo && hasImage) media_type = 'mixed';
@@ -97,6 +142,11 @@ export async function fetchAdsForPages(input: AnalyzePagesInput): Promise<AdReco
           }
         } catch {}
 
+        // Extract Facebook pixel IDs via static HTML or headless inspection (cached per hostname)
+        const pixel_ids = await getPixelIdsCached(finalLink);
+        // Extract widget phrases via headless (if enabled)
+        const widget_phrases = await getWidgetPhrases(finalLink);
+
         allAds.push({
           ad_archive_id: ad.ad_archive_id,
           page_id: ad.page_id || ad.snapshot?.page_id,
@@ -113,7 +163,9 @@ export async function fetchAdsForPages(input: AnalyzePagesInput): Promise<AdReco
           ad_copy: textBlob,
           extracted_keywords,
           forcekeys,
-          extracted_param_keys
+          extracted_param_keys,
+          pixel_ids,
+          widget_phrases
         });
       }
       next_page_token = data?.pagination?.next_page_token;

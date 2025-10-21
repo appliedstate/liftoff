@@ -58,7 +58,7 @@ async function main() {
   const outCsv = path.resolve(baseDir, path.basename(outFile));
 
   // Dedup already done; output CSV
-  const headers = ['ad_archive_id','page_id','page_name','is_active','start_date','end_date','publisher_platform','total_active_time','categories','link_url','media_type','hook','ad_copy','extracted_keywords','param_keys','competitor_id','forcekeys','forcekeyA','forcekeyB','forcekeyC','forcekeyD','forcekeyE'];
+  const headers = ['ad_archive_id','page_id','page_name','is_active','start_date','end_date','publisher_platform','total_active_time','categories','link_url','media_type','hook','ad_copy','extracted_keywords','param_keys','pixel_ids','widget_phrases','widget_forcekey_matches','competitor_id','forcekeys','forcekeyA','forcekeyB','forcekeyC','forcekeyD','forcekeyE'];
   const rows = [headers.join(',')];
   for (const ad of ads) {
     const fkMap = new Map<string, string>();
@@ -66,10 +66,25 @@ async function main() {
       for (const fk of ad.forcekeys) fkMap.set(fk.key.toUpperCase(), fk.value);
     }
     const paramKeys = (ad.extracted_param_keys || []).join('|');
-    // Competitor ID heuristic: hash of paramKeys signature (or fallback to host)
+    const pixelIds = (ad.pixel_ids || []).join('|');
+    const widgetPhrases = (ad.widget_phrases || []).join('|');
+    // Compute widget_forcekey_matches: any phrase matching any forcekey value (case-insensitive contains)
+    const widgetForcekeyMatches: string[] = [];
+    if (ad.widget_phrases && ad.widget_phrases.length > 0 && ad.forcekeys && ad.forcekeys.length > 0) {
+      const phrasesLower = ad.widget_phrases.map(p => p.toLowerCase());
+      for (const fk of ad.forcekeys) {
+        const val = (fk.value || '').toLowerCase();
+        if (!val) continue;
+        if (phrasesLower.some(p => p.includes(val))) {
+          widgetForcekeyMatches.push(`${fk.key}:${fk.value}`);
+        }
+      }
+    }
+
+    // Competitor ID heuristic: prefer pixel IDs; else hash of paramKeys; else host
     let competitorId = '';
     try {
-      const sig = paramKeys || (ad.link_url ? new URL(ad.link_url).hostname : '');
+      const sig = pixelIds || paramKeys || (ad.link_url ? new URL(ad.link_url).hostname : '');
       competitorId = Buffer.from(sig).toString('base64').slice(0, 12);
     } catch { competitorId = ''; }
 
@@ -89,6 +104,9 @@ async function main() {
       ad.ad_copy,
       (ad.extracted_keywords || []).join('|'),
       paramKeys,
+      pixelIds,
+      widgetPhrases,
+      widgetForcekeyMatches.join('|'),
       competitorId,
       (ad.forcekeys || []).map(f => `${f.key}:${f.value}`).join('|'),
       fkMap.get('FORCEKEYA') || '',
@@ -211,25 +229,73 @@ async function main() {
   fs.writeFileSync(setFile, setRows.join('\n'));
   console.log('Wrote', setFile);
 
-  // competitors.csv summarizing param_keys signature to competitor_id
+  // competitors.csv summarizing signature to competitor_id
   const compMap = new Map<string, { competitor_id: string; count: number }>();
   for (const line of rows.slice(1)) {
     const cols = line.split(',');
     const pk = cols[14] || '';
-    const cid = cols[15] || '';
+    const px = cols[15] || '';
+    const wp = cols[16] || '';
+    const wpm = cols[17] || '';
+    const cid = cols[18] || '';
     if (!cid) continue;
-    const key = `${cid}||${pk}`;
+    const key = `${cid}||${px}||${pk}||${wp}||${wpm}`;
     if (!compMap.has(key)) compMap.set(key, { competitor_id: cid, count: 0 });
     compMap.get(key)!.count++;
   }
-  const compRows = [['competitor_id','param_keys','ad_count'].join(',')];
+  const compRows = [['competitor_id','pixel_ids','param_keys','widget_phrases','widget_forcekey_matches','ad_count'].join(',')];
   for (const [k, v] of compMap.entries()) {
-    const [, pk] = k.split('||');
-    compRows.push(toCsvRow([v.competitor_id, pk, v.count]));
+    const [, px, pk, wp, wpm] = k.split('||');
+    compRows.push(toCsvRow([v.competitor_id, px, pk, wp, wpm, v.count]));
   }
   const compFile = path.resolve(baseDir, 'competitors.csv');
   fs.writeFileSync(compFile, compRows.join('\n'));
   console.log('Wrote', compFile);
+
+  // Write pixel_matches.csv: pixel_id, page_ids (unique), unique_page_count, ad_count
+  const pixelMap = new Map<string, { pages: Set<string>; adCount: number }>();
+  for (const a of ads) {
+    const pids = a.pixel_ids || [];
+    for (const pid of pids) {
+      if (!pixelMap.has(pid)) pixelMap.set(pid, { pages: new Set<string>(), adCount: 0 });
+      const entry = pixelMap.get(pid)!;
+      entry.pages.add(a.page_id);
+      entry.adCount++;
+    }
+  }
+  const pixRows = [['pixel_id','page_ids','unique_page_count','ad_count'].join(',')];
+  for (const [pid, v] of pixelMap.entries()) {
+    const pages = Array.from(v.pages).sort();
+    pixRows.push(toCsvRow([pid, pages.join('|'), pages.length, v.adCount]));
+  }
+  const pixFile = path.resolve(baseDir, 'pixel_matches.csv');
+  fs.writeFileSync(pixFile, pixRows.join('\n'));
+  console.log('Wrote', pixFile);
+
+  // Write widget_phrase_matches.csv: phrase, page_ids, unique_page_count, matched_forcekeys
+  const phraseMap = new Map<string, { pages: Set<string>; forcekeys: Set<string> }>();
+  for (const a of ads) {
+    const phrases = a.widget_phrases || [];
+    const matches = (phrases.length > 0 && a.forcekeys && a.forcekeys.length > 0)
+      ? phrases.filter(p => a.forcekeys!.some(fk => (p.toLowerCase()).includes((fk.value || '').toLowerCase())))
+      : [];
+    for (const ph of matches) {
+      if (!phraseMap.has(ph)) phraseMap.set(ph, { pages: new Set<string>(), forcekeys: new Set<string>() });
+      phraseMap.get(ph)!.pages.add(a.page_id);
+      for (const fk of (a.forcekeys || [])) {
+        if ((ph.toLowerCase()).includes((fk.value || '').toLowerCase())) phraseMap.get(ph)!.forcekeys.add(`${fk.key}:${fk.value}`);
+      }
+    }
+  }
+  const phraseRows = [['phrase','page_ids','unique_page_count','matched_forcekeys'].join(',')];
+  for (const [ph, o] of phraseMap.entries()) {
+    const pages = Array.from(o.pages).sort();
+    const fks = Array.from(o.forcekeys).sort();
+    phraseRows.push(toCsvRow([ph, pages.join('|'), pages.length, fks.join('|')]));
+  }
+  const phraseFile = path.resolve(baseDir, 'widget_phrase_matches.csv');
+  fs.writeFileSync(phraseFile, phraseRows.join('\n'));
+  console.log('Wrote', phraseFile);
 
   // Write manifest.json
   const manifest = {

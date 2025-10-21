@@ -6,9 +6,11 @@ owner: Eric Roach
 product: Iterate
 ---
 
-# PRD — Iterate
+# PRD — Iterate (feeds Attention Engine Factory)
 
 ## Working Notes
+- Factory linkage: Inputs are sourced from the Facebook Discovery System; outputs feed the Creative Factory and Sandbox lane tests under the Attention Engine Factory.
+- Reference: `../attention/10-attention-engine-factory.md`
 - Product name: Iterate — enables fast creative versioning (single brand-swapped variant).
 - Source list may originate from: (a) Facebook Ad Library page, or (b) the curated winners list produced by our Facebook Discovery Pipeline. For v1 we will prefer the Discovery Pipeline API as the primary input.
 
@@ -91,6 +93,66 @@ Growth teams need a faster way to ideate, produce, and test high-performing Face
 - M1: Scrape → store → generate images (single model) → manifest + gallery.
 - M2: Add batch controls, retries, and basic policy checks.
 - M3: Add review UI (keeper tags) and ZIP export.
+
+### M1 — Ingest → Generate → Gallery (Detailed)
+
+**Objective**: End-to-end single-model flow that ingests winning ads (via Discovery API or specified ad ids), generates one brand-swapped image per source, and outputs a reviewable gallery and `manifest.json` under a versioned `runs/` directory.
+
+**Inputs**
+- **Source**: Discovery winners list id OR explicit `adIds[]`.
+- **Brand asset**: Single product/brand image (PNG/JPG, min 1024px on the long side).
+- **Optional**: Prompt overrides (brand name, product name, tone, color hints), limit `maxAds`.
+
+**Flow**
+1. Ingest
+   - Fetch source creatives + metadata from the Facebook Discovery Pipeline API.
+   - Persist raw images and metadata to `source/`.
+2. Prepare
+   - Normalize image sizes (e.g., 1024×1024 or model-preferred aspect), deduplicate exact files.
+3. Generate (single model)
+   - Build prompt schema with brand/product/tone and palette hints.
+   - Call Gemini via Nano Banana; produce one output per source image.
+4. Assemble Outputs
+   - Save generated images to `generated/`.
+   - Write `manifest.json` mapping originals → generated with metadata and costs.
+   - Render a simple side-by-side gallery (`index.md` or `gallery.html`).
+
+**Storage Layout (per run)**
+- `runs/facebook-discovery/{date}/{list_or_ad_id}/source/*`
+- `runs/facebook-discovery/{date}/{list_or_ad_id}/generated/*`
+- `runs/facebook-discovery/{date}/{list_or_ad_id}/manifest.json`
+- `runs/facebook-discovery/{date}/{list_or_ad_id}/index.md` (or `gallery.html`)
+
+**Data Contracts**
+- `config.json`
+  - Minimal example:
+    - `runId: string` — timestamped id (e.g., `2025-10-21_674166542440211`)
+    - `input: { source: 'discovery_api' | 'ad_ids', listId?: string, adIds?: string[], brandImage: string }`
+    - `model: { provider: 'gemini-nano-banana', version?: string, seed?: number }`
+    - `limits: { maxAds?: number }`
+- `manifest.json` (per run)
+  - Top-level:
+    - `runId: string`
+    - `summary: { numSources: number, numGenerated: number, costUsd: number, errors: { adId: string, message: string }[] }`
+    - `items: Array<{
+        adId: string,
+        original: { imagePath: string, headline?: string, body?: string, destUrl?: string },
+        generated: Array<{ imagePath: string, promptId?: string, seed?: number, costUsd?: number, status: 'ok' | 'error', errorMessage?: string }>
+      }>`
+
+**Acceptance Criteria**
+- Given valid inputs (Discovery list id or `adIds[]`) and a brand image, running the workflow produces:
+  - Raw source images and metadata under `source/`.
+  - One generated image per source in `generated/`.
+  - A valid `manifest.json` linking each original to its generated output(s) with costs and statuses.
+  - A side-by-side gallery file (`index.md`/`gallery.html`) rendering original vs. generated with basic metadata.
+- End-to-end latency for a single ad ≤ 5 minutes (happy path).
+- Transient API errors are retried with backoff at least 2×; failures are recorded to `manifest.json`.
+- Runs are idempotent by `runId`; re-running with the same `runId` does not overwrite without an explicit `--overwrite` flag (or equivalent control).
+
+**Out of Scope for M1**
+- Multi-model ensembles, advanced prompt exploration, video variants, and Ads Manager trafficking.
+- Keeper tagging UI; ZIP export is planned for M3.
 
 ## 11. Risks & Mitigations
 - Policy/Trademark risk: Add clearly visible disclaimer; avoid exact replicas; allow manual review step.

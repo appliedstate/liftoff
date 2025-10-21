@@ -16,6 +16,7 @@ dependencies:
   - infra/capi-setup.md
   - content/30-article-factory.md
   - creative/40-creative-factory.md
+  - attention/10-attention-engine-factory.md
   - taxonomy/01-schema.md
 licensing: internal
 ---
@@ -43,10 +44,13 @@ We’re not arbitraging traffic. We’re building a **signal flywheel**: Faceboo
 ---
 
 ## 1) System Architecture (mental model)
+- **Attention Engine Factory** orchestrates Discovery → Iterate → Test → Decide.
+- **Facebook Discovery System** sources winners/categories; feeds **Iterate** and Creative factory backlogs.
+- **Iterate** generates brand-swapped variants; outputs galleries/manifests for Sandbox tests.
 - **Creative Factory** feeds **ASC / LAL** lanes with winners (Mon/Thu promotion).
 - **Article Factory (LPIDs)** hosts RSOC widgets; layouts tuned for **vRPS**.
-- **CAPI** returns **Purchase(value)** with match keys (email/phone/IP/UA/fbc/fbp) to raise **EMQ**.
-- **Terminal** is the automation brain: budgets, pauses, bid caps, cooldowns.  
+- **Strateg.is** is reporting/decision surface; APIs power gates and dashboards.
+- **Terminal** is the automation brain: budgets, pauses, bid caps, cooldowns.
 - **Launcher** (human/CI) handles **entity creation & sharding** when we need parallel scale.
 
 ---
