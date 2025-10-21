@@ -1,0 +1,35 @@
+[
+  {
+    "run_dir": "backend/runs/2025-10-20_593450633843471/",
+    "generated_at": "2025-10-21T00:00:32.052Z",
+    "country": "US",
+    "start_date": "2025-09-20",
+    "end_date": "2025-10-20",
+    "min_days": 7,
+    "platforms_min": 1,
+    "page_ids": "593450633843471",
+    "files": "ads.csv|categories.csv|competitors.csv|hook_forcekey_sets.csv|hook_forcekeys.csv|hook_forcekeys_summary.csv|hooks.csv"
+  },
+  {
+    "run_dir": "backend/runs/2025-10-20_674166542440211/",
+    "generated_at": "2025-10-21T00:13:32.534Z",
+    "country": "US",
+    "start_date": "2025-09-20",
+    "end_date": "2025-10-20",
+    "min_days": 7,
+    "platforms_min": 1,
+    "page_ids": "674166542440211",
+    "files": "ads.csv|categories.csv|competitors.csv|hook_forcekey_sets.csv|hook_forcekeys.csv|hook_forcekeys_summary.csv|hooks.csv"
+  },
+  {
+    "run_dir": "backend/runs/2025-10-20_793983330455470/",
+    "generated_at": "2025-10-21T00:13:56.730Z",
+    "country": "US",
+    "start_date": "2025-09-20",
+    "end_date": "2025-10-20",
+    "min_days": 7,
+    "platforms_min": 1,
+    "page_ids": "793983330455470",
+    "files": "ads.csv|categories.csv|competitors.csv|hook_forcekey_sets.csv|hook_forcekeys.csv|hook_forcekeys_summary.csv|hooks.csv"
+  }
+]

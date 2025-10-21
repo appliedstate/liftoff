@@ -1,0 +1,13 @@
+{
+  "global": {
+    "keywordsFromParams": ["utm_term", "utm_campaign", "keyword", "kw"]
+  },
+  "pages": {
+    "674166542440211": {
+      "keywordsFromParams": ["sub1", "sub2"],
+      "keywordsFromPath": ["dental", "hearing", "solar"]
+    }
+  }
+}
+
+

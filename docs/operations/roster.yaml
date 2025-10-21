@@ -42,21 +42,24 @@ people:
     performance_rating: high
 
   - name: Dan
-    role: Efficient Buyer - High-ROAS specialist
+    role: Efficient Buyer - High-ROAS specialist (MediaGo + Facebook); Strateg.is liaison; Facebook Factory architect/QA
     status: active
     objectives:
-      - "$200/day margin contribution"
-      - "2-3 new campaigns/week"
-      - "40%+ break-even rate"
+      - "$1,000/day individual net margin (MediaGo + Facebook)"
+      - "2-3 new campaigns/week; ≥40% break-even in 72h"
+      - "Delegate 80% launch flow to Maryna/Catherine; Dan reviewer only"
+      - "Strateg.is PRDs on-time with clear acceptance criteria"
     kpis:
       - margin_per_spend: 0.28
       - efficiency_ratio: "0.15_spend_per_conversion"
       - scale_ceiling: "$500_max_campaign_budget"
-    cadence: daily
+      - media_go_net_margin: daily
+      - prd_on_time_delivery: 1.0
+    cadence: daily (runs weekly meeting Wed)
     interfaces:
-      ai_agents: [conversion_optimizer]
-      terminal: [performance_tracker]
-      strateg_is: [efficiency_reports]
+      ai_agents: [aion, jim]
+      terminal: [performance_tracker, checklist_automation]
+      strateg_is: [efficiency_reports, prd_tracker]
     last_check_in: "2025-10-07"
     performance_rating: medium
 

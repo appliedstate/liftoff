@@ -1,0 +1,4 @@
+run_dir,generated_at,country,start_date,end_date,min_days,platforms_min,page_ids,files
+backend/runs/2025-10-20_593450633843471/,2025-10-21T00:00:32.052Z,US,2025-09-20,2025-10-20,7,1,593450633843471,ads.csv|categories.csv|competitors.csv|hook_forcekey_sets.csv|hook_forcekeys.csv|hook_forcekeys_summary.csv|hooks.csv
+backend/runs/2025-10-20_674166542440211/,2025-10-21T00:13:32.534Z,US,2025-09-20,2025-10-20,7,1,674166542440211,ads.csv|categories.csv|competitors.csv|hook_forcekey_sets.csv|hook_forcekeys.csv|hook_forcekeys_summary.csv|hooks.csv
+backend/runs/2025-10-20_793983330455470/,2025-10-21T00:13:56.730Z,US,2025-09-20,2025-10-20,7,1,793983330455470,ads.csv|categories.csv|competitors.csv|hook_forcekey_sets.csv|hook_forcekeys.csv|hook_forcekeys_summary.csv|hooks.csv

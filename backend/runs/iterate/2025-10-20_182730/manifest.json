@@ -1,0 +1,16 @@
+{
+  "run_id": "2025-10-20_182730",
+  "created_at": "2025-10-21T01:27:30.589Z",
+  "inputs": {
+    "winnersCsv": "/Users/ericroach/Desktop/Desktop - Eric’s MacBook Air/Liftoff/backend/runs/2025-10-20_593450633843471/ads.csv",
+    "brandImage": ""
+  },
+  "counts": {
+    "total_rows": 481
+  },
+  "files": {
+    "runDir": "/Users/ericroach/Desktop/Desktop - Eric’s MacBook Air/Liftoff/backend/runs/iterate/2025-10-20_182730",
+    "srcDir": "/Users/ericroach/Desktop/Desktop - Eric’s MacBook Air/Liftoff/backend/runs/iterate/2025-10-20_182730/source",
+    "genDir": "/Users/ericroach/Desktop/Desktop - Eric’s MacBook Air/Liftoff/backend/runs/iterate/2025-10-20_182730/generated"
+  }
+}

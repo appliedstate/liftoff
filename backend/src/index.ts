@@ -46,6 +46,10 @@ app.get('/api/public', optionalAuth, (req: any, res) => {
   });
 });
 
+// Meta Ad Library route
+import metaAdLibraryRouter from './routes/metaAdLibrary';
+app.use('/api/meta-ad-library', metaAdLibraryRouter);
+
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
