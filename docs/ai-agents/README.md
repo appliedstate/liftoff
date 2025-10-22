@@ -44,3 +44,12 @@ Each persona file includes:
 2. Follow the template structure
 3. Add invocation command to terminal automation
 4. Test with HCS weekly flow
+
+---
+
+## Best Practices & References
+
+- OpenAI: A practical guide to building agents — `./openai-practical-guide-to-building-agents.pdf`
+- Liftoff summary & checklists — `./openai-agent-best-practices.md`
+
+Adopt these for model selection, tool design, orchestration, guardrails, and human-in-the-loop.

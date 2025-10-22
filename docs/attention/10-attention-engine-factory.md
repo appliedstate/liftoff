@@ -34,6 +34,7 @@ We "make the thing that makes the thing" for attention: a decisioning/telemetry 
   - Delete before optimizing: always remove steps first; only optimize what survives.
   - One‑button exit: p95 exit latency ≤ 24h; weekly simulation required.
   - 72h MVB cadence: idea → build → ship → telemetry → delete or scale.
+  - Agent guardrails: relevance and safety checks, tool risk ratings, schema-validated outputs, and human-in-the-loop for high-risk actions. See `../ai-agents/openai-agent-best-practices.md` and `../ai-agents/openai-practical-guide-to-building-agents.pdf`.
 
 ---
 
