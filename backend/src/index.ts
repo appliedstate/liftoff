@@ -50,6 +50,14 @@ app.get('/api/public', optionalAuth, (req: any, res) => {
 import metaAdLibraryRouter from './routes/metaAdLibrary';
 app.use('/api/meta-ad-library', metaAdLibraryRouter);
 
+// Strategist router
+import strategistRouter from './routes/strategist';
+app.use('/api/strategist', strategistRouter);
+
+// Terminal router
+import terminalRouter from './routes/terminal';
+app.use('/api/terminal', terminalRouter);
+
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });

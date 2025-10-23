@@ -14,3 +14,7 @@ ALLOWED_DOMAIN=yourdomain.com
 # BASIC_AUTH_PASS=secure-password
 
 
+# Backend API base URL for Strategist
+NEXT_PUBLIC_BACKEND_URL=http://localhost:3001
+
+

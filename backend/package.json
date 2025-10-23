@@ -7,6 +7,7 @@
     "dev": "nodemon src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
+    "snapshots:ingest-reconciled": "ts-node src/scripts/ingestReconciled.ts",
     "analyze:pages": "ts-node src/scripts/analyzePages.ts",
     "iterate:hook": "ts-node src/scripts/iterateHook.ts",
     "filter:hook": "ts-node src/scripts/selectByHook.ts",
@@ -14,6 +15,10 @@
     "assets:transcribe": "ts-node src/scripts/transcribeVideos.ts",
     "generate:images": "ts-node src/scripts/generate.ts",
     "generate:video": "ts-node src/scripts/generateVeo.ts",
+    "slack:summarize": "ts-node --transpile-only src/scripts/summarizeSlack.ts",
+    "slack:contributors": "ts-node --transpile-only src/scripts/contributorDigest.ts",
+    "auth:save": "ts-node src/scripts/saveStorageState.ts",
+    "reports:fetch-ingest": "ts-node src/scripts/fetchAndIngestReport.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -24,10 +29,12 @@
     "axios": "^1.7.7",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
+    "duckdb": "^1.4.1",
     "express": "^5.1.0",
     "form-data": "^4.0.0",
     "helmet": "^8.1.0",
-    "morgan": "^1.10.1"
+    "morgan": "^1.10.1",
+    "openai": "^4.73.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
