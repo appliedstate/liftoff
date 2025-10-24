@@ -47,7 +47,7 @@ Growth teams need a faster way to ideate, produce, and test high-performing Face
   - Output: Write a simple reviewable artifact (Markdown/HTML) plus a JSON manifest of the run.
   - Ops: Log run metadata; keep reproducible source/outputs per run date.
 - Out of Scope (v1)
-  - Video ad recreation.
+  - Video ad recreation (see Video Track below for alpha scope).
   - Automated A/B launch in Ads Manager.
   - Multi-language copy generation (may be a prompt option).
 
@@ -66,6 +66,7 @@ Growth teams need a faster way to ideate, produce, and test high-performing Face
 5) Output Assembly
    - Write a simple Markdown/HTML artifact showing the original creative and the generated image, plus metadata.
    - Save all images and `manifest.json` in-repo linking originals → generated.
+   - Include provenance panel: originating asset links (ad library URL, landing URL), prompt used, and model settings for trust and review.
 6) Review and Export
    - Allow operator to mark keepers; export ZIP of selected artifacts + manifest.
 
@@ -75,10 +76,28 @@ Growth teams need a faster way to ideate, produce, and test high-performing Face
 - Cost: Expose per-run cost estimate from model usage.
 - Compliance: Add visible disclaimer and policy checks (no false claims, restricted categories, trademark caution).
 
+## 7.1 Creative Guardrails (Style)
+
+- Favor candid, everyday, mobile-native aesthetics; avoid over-polished/stock photo look.
+- When applicable (e.g., injectables): prioritize attention-grabbing detail in one scene (e.g., needle close-up) and a simple post-treatment shot.
+- Allow image-only variants and all-text variants (some categories perform with text-only creatives).
+- Avoid literal brand names or device names (e.g., "iPhone") in prompts; emulate style instead.
+
 ## 8. External Integrations
 - Facebook Discovery Pipeline API (internal): Provide winners list and ad assets/metadata.
 - Gemini via Nano Banana: Image generation API for brand-swapped assets.
 - (Future) Google Drive/Slides API: Optional gallery/export surface for sharing iterations.
+
+## 9.1 Video Track (Alpha)
+
+Objective: Minimal video lane to support short-form variants informed by Discovery, with strict constraints and review.
+
+- Defaults: 8 seconds, 2 scenes (Scene 1: attention-grabbing detail; Scene 2: post/outcome shot).
+- Aspect Ratios: Support square (1:1) and vertical (9:16); generate vertical by default for Stories/Reels.
+- Captions: On by default; toggleable. Voiceover optional; provide variant with and without VO.
+- Provenance: Show originating video/image sources and prompts; render per-item metadata.
+- Output: Save MP4s under `generated/` with `manifest.json` entries analogous to images.
+- Human-in-the-loop: Route selected outputs to assembly by an editor (e.g., 15s, 4–5 clip compilation) outside of alpha lane.
 
 ## 9. System Design (v1)
 - Orchestrator: n8n workflow or Node/TS script runner with steps: ingest → prepare → generate → assemble → export.
@@ -93,6 +112,10 @@ Growth teams need a faster way to ideate, produce, and test high-performing Face
 - M1: Scrape → store → generate images (single model) → manifest + gallery.
 - M2: Add batch controls, retries, and basic policy checks.
 - M3: Add review UI (keeper tags) and ZIP export.
+
+### M1.5 — Provenance + Vertical Export (Images and Video Alpha)
+
+Adds provenance panel to galleries, and supports 9:16 vertical export and captions/VO options for the video alpha lane.
 
 ### M1 — Ingest → Generate → Gallery (Detailed)
 

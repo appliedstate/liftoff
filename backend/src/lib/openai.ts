@@ -30,12 +30,24 @@ export async function generateText({ system, prompt, temperature = 0.2, maxToken
   const c = getClient();
   const input = system ? `System:\n${system}\n\nUser:\n${prompt}` : prompt;
 
-  const resp = await c.responses.create({
-    model: 'gpt-5',
-    input,
-    temperature,
-    max_output_tokens: maxTokens,
-  });
+  const model = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
+  // Some models error on temperature; send only when defined and supported
+  const base: any = { model, input };
+  if (typeof temperature === 'number' && !/^gpt-5($|-)/.test(model)) base.temperature = temperature;
+  if (typeof maxTokens === 'number') base.max_output_tokens = maxTokens;
+
+  let resp;
+  try {
+    resp = await c.responses.create(base);
+  } catch (e: any) {
+    // Retry without temperature if model rejects it
+    if (base.temperature) {
+      delete base.temperature;
+      resp = await c.responses.create(base);
+    } else {
+      throw e;
+    }
+  }
 
   const text = (resp as any)?.output_text || '';
   return String(text).trim();

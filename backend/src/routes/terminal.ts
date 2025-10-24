@@ -268,9 +268,9 @@ router.get('/summary', authenticateUser, async (req, res) => {
 // Inspect policy + cooldown state
 router.get('/state', authenticateUser, async (req, res) => {
   try {
-    const entityPolicy2 = loadPolicy();
+    const entityPolicy = loadPolicy();
     const cooldowns = loadCooldowns();
-    return res.status(200).json({ policy: entityPolicy2, cooldowns });
+    return res.status(200).json({ policy: entityPolicy, cooldowns });
   } catch (err) {
     console.error('terminal.state error', err);
     return res.status(500).json({ code: 'internal_error', message: 'Failed to load state' });
@@ -337,18 +337,18 @@ router.post('/learn', authenticateUser, async (req, res) => {
       if (!outcome) continue;
       const roas = Number(outcome.roas || 0);
       const key = String(id);
-      const prev = policy[key] || { id: key, level };
+      const prev = entityPolicy[key] || { id: key, level };
       const n = (prev.updates || 0) + 1;
       const meanPrev = prev.roas_mean ?? roas;
       const mean = decayFactor * meanPrev + (1 - decayFactor) * roas;
       const varPrev = prev.roas_var ?? 0;
       const roasVar = decayFactor * varPrev + (1 - decayFactor) * Math.pow(roas - mean, 2);
-      policy[key] = { id: key, level, roas_mean: mean, roas_var: roasVar, updates: n, half_life_days: halfLifeDays };
+      entityPolicy[key] = { id: key, level, roas_mean: mean, roas_var: roasVar, updates: n, half_life_days: halfLifeDays };
     }
-    savePolicy(policy);
+    savePolicy(entityPolicy);
 
     // Emit a brief learn report
-    const updated = Object.keys(policy).length;
+    const updated = Object.keys(entityPolicy).length;
     return res.status(200).json({ date, level, learned_from: decisions.length, policy_size: updated });
   } catch (err) {
     console.error('terminal.learn error', err);
@@ -458,7 +458,7 @@ router.post('/suggest', authenticateUser, async (req, res) => {
     function simulate_kelly(r: any) { const cfg = laneCfg(r); const roas = Number(r.roas || 0); const edge = Math.max(-0.5, Math.min(0.5, roas - 1.0)); let action='hold', delta=0; if (edge>0.05){action='bump_budget'; delta=Math.min(cfg.max_step_up!, Math.max(cfg.step_up!, edge));} else if (edge<-0.05){action='trim_budget'; delta=Math.max(cfg.max_step_down!, Math.min(cfg.step_down!, edge));} return { action, delta, reason: `kelly edge=${edge.toFixed(3)}`}; }
     function simulate_ucb(r: any) { const cfg = laneCfg(r); const impressions = Math.max(1, Number(r.impressions || 1)); const mean = Number(r.roas || 0); const c=1.5; const ucb = mean + Math.sqrt((c*Math.log(Math.max(1, impressionsTotal)))/impressions); let action='hold', delta=0; if (ucb>=cfg.roas_up!){action='bump_budget'; delta=cfg.step_up!;} else if (mean<cfg.roas_down!){action='trim_budget'; delta=cfg.step_down!;} return { action, delta, reason: `ucb=${ucb.toFixed(3)} mean=${mean.toFixed(3)}`}; }
     const cooldowns = loadCooldowns();
-    const entityPolicy2 = loadPolicy();
+    const entityPolicy = loadPolicy();
     const minUpdates = Number(process.env.TERMINAL_MIN_UPDATES ?? '3');
     const maxSigma = Number(process.env.TERMINAL_MAX_SIGMA ?? '0.5');
 
@@ -595,14 +595,14 @@ router.post('/copilot/suggest', authenticateUser, async (req, res) => {
     function simulate_kelly(r: any) { const cfg = laneCfg(r); const roas = Number(r.roas || 0); const edge = Math.max(-0.5, Math.min(0.5, roas - 1.0)); let action='hold', delta=0; if (edge>0.05){action='bump_budget'; delta=Math.min(cfg.max_step_up!, Math.max(cfg.step_up!, edge));} else if (edge<-0.05){action='trim_budget'; delta=Math.max(cfg.max_step_down!, Math.min(cfg.step_down!, edge));} return { action, delta, reason: `kelly edge=${edge.toFixed(3)}`}; }
     function simulate_ucb(r: any) { const cfg = laneCfg(r); const impressions = Math.max(1, Number(r.impressions || 1)); const mean = Number(r.roas || 0); const c=1.5; const ucb = mean + Math.sqrt((c*Math.log(Math.max(1, impressionsTotal)))/impressions); let action='hold', delta=0; if (ucb>=cfg.roas_up!){action='bump_budget'; delta=cfg.step_up!;} else if (mean<cfg.roas_down!){action='trim_budget'; delta=cfg.step_down!;} return { action, delta, reason: `ucb=${ucb.toFixed(3)} mean=${mean.toFixed(3)}`}; }
     const cooldowns = loadCooldowns();
-    const policy = loadPolicy();
+    const entityPolicy = loadPolicy();
     const minUpdates = Number(process.env.TERMINAL_MIN_UPDATES ?? '3');
     const maxSigma = Number(process.env.TERMINAL_MAX_SIGMA ?? '0.5');
 
     const intents = rows.map((r: any) => {
       const sim = mode === 'ucb' ? simulate_ucb(r) : mode === 'kelly' ? simulate_kelly(r) : simulate_simple(r);
       const id = r.adset_id || r.campaign_id;
-      const st = entityPolicy2[String(id)];
+      const st = entityPolicy[String(id)];
       const updates = st?.updates ?? 0;
       const sigma = Math.sqrt(st?.roas_var ?? 0);
       const updatesFactor = Math.min(1, updates / 10);

@@ -54,9 +54,188 @@ app.use('/api/meta-ad-library', metaAdLibraryRouter);
 import strategistRouter from './routes/strategist';
 app.use('/api/strategist', strategistRouter);
 
-// Terminal router
+// Terminal router (re-enabled)
 import terminalRouter from './routes/terminal';
 app.use('/api/terminal', terminalRouter);
+
+// Generic Zuck Co-Pilot router (product-agnostic)
+import copilotRouter from './routes/copilot';
+app.use('/api/copilot', copilotRouter);
+
+// Elon Co-Pilot router (product-agnostic)
+import elonRouter from './routes/elon';
+app.use('/api/elon', elonRouter);
+
+// Minimal unauthenticated CoPilot chat UI for local/dev usage
+app.get('/copilot', (_req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(`<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Facebook CoPilot (Dev)</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 20px; }
+      textarea { width: 100%; min-height: 120px; font-family: inherit; font-size: 14px; }
+      pre { background: #111; color: #eee; padding: 12px; border-radius: 6px; overflow: auto; white-space: pre-wrap; }
+      .row { display: flex; gap: 12px; align-items: center; }
+      .row > * { flex: 1; }
+      button { padding: 10px 16px; border-radius: 6px; border: 1px solid #ccc; background: #1f6feb; color: white; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <h1>Facebook CoPilot (Dev)</h1>
+    <p>Auth is disabled for this page in dev. Provide a prompt and press Send.</p>
+    <div>
+      <label>Prompt</label>
+      <textarea id="prompt">Summarize yesterday performance and suggest next actions.</textarea>
+    </div>
+    <div class="row">
+      <button id="send">Send</button>
+      <label>Temperature <input id="temp" type="number" min="0" max="2" step="0.1" value="0.2" style="width: 80px;" /></label>
+      <label>Max Tokens <input id="max" type="number" step="50" value="500" style="width: 100px;" /></label>
+    </div>
+    <h3>Response</h3>
+    <pre id="out"></pre>
+    <script>
+      async function post(path, body) {
+        const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const ct = res.headers.get('content-type') || '';
+        if (!res.ok) throw new Error(await res.text());
+        return ct.includes('application/json') ? res.json() : res.text();
+      }
+      document.getElementById('send').addEventListener('click', async () => {
+        const prompt = document.getElementById('prompt').value;
+        const temperature = parseFloat(document.getElementById('temp').value) || 0.2;
+        const maxTokens = parseInt(document.getElementById('max').value, 10) || undefined;
+        const out = document.getElementById('out');
+        out.textContent = 'Loading...';
+        try {
+          const resp = await post('/api/strategist/chat', { prompt, temperature, maxTokens });
+          out.textContent = typeof resp === 'string' ? resp : (resp.output || JSON.stringify(resp, null, 2));
+        } catch (e) {
+          out.textContent = 'Error: ' + (e.message || e);
+        }
+      });
+    </script>
+  </body>
+</html>`);
+});
+
+// Minimal unauthenticated Zuck Co-Pilot dev page
+app.get('/zuck', (_req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(`<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Zuck Co-Pilot (Dev)</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 20px; }
+      textarea { width: 100%; min-height: 120px; font-family: inherit; font-size: 14px; }
+      pre { background: #111; color: #eee; padding: 12px; border-radius: 6px; overflow: auto; white-space: pre-wrap; }
+      .row { display: flex; gap: 12px; align-items: center; }
+      .row > * { flex: 1; }
+      button { padding: 10px 16px; border-radius: 6px; border: 1px solid #ccc; background: #1f6feb; color: white; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <h1>Zuck Co-Pilot (Dev)</h1>
+    <p>Auth is disabled for this page in dev. Provide a prompt and press Send.</p>
+    <div>
+      <label>Prompt</label>
+      <textarea id="prompt">Design a product experiment loop to improve signal quality.</textarea>
+    </div>
+    <div class="row">
+      <button id="send">Send</button>
+      <label>Temperature <input id="temp" type="number" min="0" max="2" step="0.1" value="0.2" style="width: 80px;" /></label>
+      <label>Max Tokens <input id="max" type="number" step="50" value="500" style="width: 100px;" /></label>
+    </div>
+    <h3>Response</h3>
+    <pre id="out"></pre>
+    <script>
+      async function post(path, body) {
+        const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const ct = res.headers.get('content-type') || '';
+        if (!res.ok) throw new Error(await res.text());
+        return ct.includes('application/json') ? res.json() : res.text();
+      }
+      document.getElementById('send').addEventListener('click', async () => {
+        const prompt = document.getElementById('prompt').value;
+        const temperature = parseFloat(document.getElementById('temp').value) || 0.2;
+        const maxTokens = parseInt(document.getElementById('max').value, 10) || undefined;
+        const out = document.getElementById('out');
+        out.textContent = 'Loading...';
+        try {
+          const resp = await post('/api/copilot/chat', { prompt, temperature, maxTokens });
+          out.textContent = typeof resp === 'string' ? resp : (resp.output || JSON.stringify(resp, null, 2));
+        } catch (e) {
+          out.textContent = 'Error: ' + (e.message || e);
+        }
+      });
+    </script>
+  </body>
+</html>`);
+});
+
+// Minimal unauthenticated Elon Co-Pilot dev page
+app.get('/elon', (_req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(`<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Elon Co-Pilot (Dev)</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 20px; }
+      textarea { width: 100%; min-height: 120px; font-family: inherit; font-size: 14px; }
+      pre { background: #111; color: #eee; padding: 12px; border-radius: 6px; overflow: auto; white-space: pre-wrap; }
+      .row { display: flex; gap: 12px; align-items: center; }
+      .row > * { flex: 1; }
+      button { padding: 10px 16px; border-radius: 6px; border: 1px solid #ccc; background: #1f6feb; color: white; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <h1>Elon Co-Pilot (Dev)</h1>
+    <p>Auth is disabled for this page in dev. Provide a prompt and press Send.</p>
+    <div>
+      <label>Prompt</label>
+      <textarea id="prompt">Identify constraints and propose a first-principles simplification plan.</textarea>
+    </div>
+    <div class="row">
+      <button id="send">Send</button>
+      <label>Temperature <input id="temp" type="number" min="0" max="2" step="0.1" value="0.2" style="width: 80px;" /></label>
+      <label>Max Tokens <input id="max" type="number" step="50" value="500" style="width: 100px;" /></label>
+    </div>
+    <h3>Response</h3>
+    <pre id="out"></pre>
+    <script>
+      async function post(path, body) {
+        const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const ct = res.headers.get('content-type') || '';
+        if (!res.ok) throw new Error(await res.text());
+        return ct.includes('application/json') ? res.json() : res.text();
+      }
+      document.getElementById('send').addEventListener('click', async () => {
+        const prompt = document.getElementById('prompt').value;
+        const temperature = parseFloat(document.getElementById('temp').value) || 0.2;
+        const maxTokens = parseInt(document.getElementById('max').value, 10) || undefined;
+        const out = document.getElementById('out');
+        out.textContent = 'Loading...';
+        try {
+          const resp = await post('/api/elon/chat', { prompt, temperature, maxTokens });
+          out.textContent = typeof resp === 'string' ? resp : (resp.output || JSON.stringify(resp, null, 2));
+        } catch (e) {
+          out.textContent = 'Error: ' + (e.message || e);
+        }
+      });
+    </script>
+  </body>
+</html>`);
+});
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

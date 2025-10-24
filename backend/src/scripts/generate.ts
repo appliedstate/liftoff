@@ -54,6 +54,7 @@ async function main() {
   const idxAd = header.indexOf('ad_archive_id');
   const idxHook = header.indexOf('hook');
   const idxLink = header.indexOf('link_url');
+  const idxCopy = header.indexOf('ad_copy');
 
   let produced = 0;
   const max = isNaN(Number(maxArg)) ? 10 : Number(maxArg);
@@ -62,6 +63,7 @@ async function main() {
     const adId = (idxAd >= 0 ? (r[idxAd] || '') : '').trim();
     const hook = (idxHook >= 0 ? (r[idxHook] || '') : '').trim();
     const link = (idxLink >= 0 ? (r[idxLink] || '') : '').trim();
+    const adCopy = (idxCopy >= 0 ? (r[idxCopy] || '') : '').trim();
 
     // Try to find a source image saved by fetchAssets
     const assetsDir = path.resolve('assets');
@@ -77,7 +79,8 @@ async function main() {
       }
     }
 
-    const prompt = `Recreate this ad image with our brand while preserving layout and concept. Hook: ${hook}. Destination: ${link || 'n/a'}. Style: clean, high-contrast, legible text, brand-safe.`;
+    const copyForPrompt = adCopy || hook;
+    const prompt = `Create a new image ad inspired by the original for ad ${adId}. Use the following Facebook ad copy verbatim in the design (typeset cleanly, high-contrast, legible): ${copyForPrompt}. Destination: ${link || 'n/a'}. Preserve the overall layout and concept while ensuring brand-safe aesthetics.`;
     try {
       let buf: Buffer;
       if (process.env.GEMINI_API_KEY) {

@@ -3,6 +3,8 @@ import { authenticateUser, optionalAuth } from '../middleware/auth';
 import { generateText } from '../lib/openai';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import path from 'path';
+import { latestSnapshotDir, defaultSnapshotsBase, defaultDaySnapshotsBase } from '../lib/snapshots';
 import axios from 'axios';
 
 const router = express.Router();
@@ -11,6 +13,21 @@ const execFileAsync = promisify(execFile);
 // Simple in-memory store of ingested reconciled rows keyed by a storage key
 // Storage key is typically the authenticated user id or a provided key
 const ingests = new Map<string, any[]>();
+// Lazy DuckDB query helper (mirrors terminal route style)
+async function queryDuckDb(sql: string, params: any[] = []): Promise<any[]> {
+  const duckdb = await import('duckdb');
+  const db = new duckdb.Database(':memory:');
+  const conn = db.connect();
+  try {
+    const rows: any[] = await new Promise((resolve, reject) => {
+      conn.all(sql, params, (err: any, res: any[]) => (err ? reject(err) : resolve(res)));
+    });
+    return rows;
+  } finally {
+    conn.close();
+  }
+}
+
 
 type ReconciledQuery = {
   date?: string;
@@ -352,11 +369,22 @@ router.get('/reconciled', authenticateUser, async (req: any, res) => {
 });
 
 // POST /chat — minimal LLM scaffold
-router.post('/chat', authenticateUser, async (req, res) => {
+router.post('/chat', optionalAuth, async (req: any, res) => {
   try {
-    const { prompt, system, temperature, maxTokens } = req.body || {};
+    const { prompt, system, maxTokens } = req.body || {};
     if (!prompt || typeof prompt !== 'string') {
       return res.status(400).json({ code: 'bad_request', message: 'Missing prompt' });
+    }
+
+    // If unauthenticated, always provide a dev fallback so it works without Supabase
+    if (!req.user) {
+      return res.status(200).json({ output: `DEV (unauthenticated) fallback:\n\n${prompt}` });
+    }
+
+    const devMode = process.env.STRATEGIST_DEV_MODE === 'true' || !process.env.OPENAI_API_KEY;
+    if (devMode) {
+      // Dev fallback to allow unauthenticated/local usage without OpenAI configured
+      return res.status(200).json({ output: `DEV mode (no OPENAI_API_KEY):\n\n${prompt}` });
     }
 
     const systemPrompt =
@@ -370,11 +398,47 @@ router.post('/chat', authenticateUser, async (req, res) => {
         'Be precise, concise, and provide actionable steps. Ask for missing details.',
       ].join(' ');
 
-    const text = await generateText({ system: systemPrompt, prompt, temperature, maxTokens });
+    const text = await generateText({ system: systemPrompt, prompt, maxTokens });
     return res.status(200).json({ output: text });
   } catch (err) {
     console.error('strategist.chat error', err);
+    if (process.env.STRATEGIST_DEV_MODE === 'true' || !process.env.OPENAI_API_KEY) {
+      return res.status(200).json({ output: 'DEV fallback due to error. Echoing prompt:\n\n' + (req.body?.prompt || '') });
+    }
     return res.status(500).json({ code: 'internal_error', message: 'Chat failed' });
+  }
+});
+
+// GET /ask?prompt=... — plain text response for simple chat UIs (e.g., Atlas)
+router.get('/ask', optionalAuth, async (req: any, res) => {
+  try {
+    const prompt = String(req.query.prompt || '').trim();
+    if (!prompt) {
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      return res.status(400).send('Missing prompt');
+    }
+
+    // Unauth fallback: echo-style dev response
+    if (!req.user || process.env.STRATEGIST_DEV_MODE === 'true' || !process.env.OPENAI_API_KEY) {
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      return res.status(200).send(`DEV response\n\n${prompt}`);
+    }
+
+    const systemPrompt = [
+      'You are Facebook Strategist, a trading co-pilot for media buyers.',
+      'Be precise and actionable. Keep answers concise.',
+    ].join(' ');
+
+    const text = await generateText({ system: systemPrompt, prompt, maxTokens: 400 });
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    return res.status(200).send(text);
+  } catch (err) {
+    console.error('strategist.ask error', err);
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    if (process.env.STRATEGIST_DEV_MODE === 'true' || !process.env.OPENAI_API_KEY) {
+      return res.status(200).send('DEV fallback due to error');
+    }
+    return res.status(500).send('Ask failed');
   }
 });
 
@@ -432,6 +496,183 @@ router.post('/exec', authenticateUser, async (req, res) => {
   } catch (err: any) {
     console.error('strategist.exec error', err);
     return res.status(500).json({ code: 'internal_error', message: err?.message || 'Execution failed' });
+  }
+});
+
+// GET /recommendations — read-only simulator over reconciled rows
+router.get('/recommendations', optionalAuth, async (req: any, res) => {
+  try {
+    const q = req.query as any;
+    const level = (q.level === 'campaign' ? 'campaign' : 'adset') as 'adset' | 'campaign';
+    const source = String(q.source || 'day').toLowerCase(); // day | reconciled
+    const limit = Math.min(Math.max(parseInt(q.limit || '100', 10) || 100, 1), 5000);
+    const storageKey = (q.key as string) || req.user?.id || 'default';
+
+    // Source rows: prefer ingested; else use demo rows
+    let rows: any[] = ingests.get(storageKey) || [];
+    if (!rows.length) {
+      // Attempt to read from day/reconciled snapshots if available
+      const base = source === 'reconciled' ? defaultSnapshotsBase() : defaultDaySnapshotsBase();
+      const snap = latestSnapshotDir(base);
+      if (snap) {
+        const globPath = path.join(snap, `level=${level}`, `date=${q.date || '*'}`, `*.*`);
+        try {
+          const sql = `
+            WITH unioned AS (
+              SELECT * FROM read_parquet('${globPath}')
+              UNION ALL
+              SELECT * FROM read_csv_auto('${globPath}', IGNORE_ERRORS=true)
+            )
+            SELECT * FROM unioned ${q.date ? 'WHERE date = ?' : ''} LIMIT ${limit}
+          `;
+          rows = await queryDuckDb(sql, q.date ? [q.date] : []);
+        } catch {}
+      }
+    }
+    if (!rows.length) {
+      rows = Array.from({ length: Math.min(limit, 25) }, () => ({
+        date: new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 10),
+        level,
+        account_id: 'act_demo',
+        campaign_id: '120000000000001',
+        adset_id: level === 'adset' ? '238600000000001' : null,
+        lane: 'ASC',
+        spend_usd: Math.random() * 300 + 50,
+        revenue_usd: Math.random() * 800 + 50,
+        roas: Math.random() * 2.0 + 0.2,
+        impressions: 50000 + Math.floor(Math.random() * 100000),
+        clicks: 100 + Math.floor(Math.random() * 1500),
+        supports_bid_cap: true,
+        supports_budget_change: true,
+      }));
+    }
+
+    // Filter by level/date if provided
+    if (q.date) rows = rows.filter((r) => String(r.date) === q.date);
+    rows = rows.filter((r) => String(r.level).toLowerCase() === level);
+    rows = rows.slice(0, limit);
+
+    // Deterministic simple simulator
+    const cfg = {
+      roas_up: Number(process.env.RECS_ROAS_UP ?? '1.3'),
+      roas_down: Number(process.env.RECS_ROAS_DOWN ?? '0.8'),
+      step_up: Number(process.env.RECS_STEP_UP ?? '0.2'),
+      step_down: Number(process.env.RECS_STEP_DOWN ?? '-0.2'),
+    };
+
+    function simulate(r: any) {
+      const roas = Number(r.roas || 0);
+      let action = 'hold';
+      let delta = 0;
+      if (roas >= cfg.roas_up) { action = 'bump_budget'; delta = cfg.step_up; }
+      else if (roas < cfg.roas_down) { action = 'trim_budget'; delta = cfg.step_down; }
+      if (!r.supports_budget_change && (action === 'bump_budget' || action === 'trim_budget')) {
+        action = 'hold'; delta = 0;
+      }
+      const id = r.adset_id || r.campaign_id;
+      return {
+        decision_id: `${r.date}:${level}:${id}`,
+        id,
+        level,
+        account_id: r.account_id || null,
+        action,
+        budget_multiplier: action === 'hold' ? 1 : 1 + delta,
+        bid_cap_multiplier: action === 'trim_budget' && r.supports_bid_cap ? 0.9 : null,
+        reason: `roas=${roas.toFixed(2)}`,
+        date: r.date,
+      };
+    }
+
+    const intents = rows.map(simulate);
+    intents.sort((a, b) => {
+      const score = (x: any) => (x.action === 'hold' ? 0 : Math.abs((x.budget_multiplier || 1) - 1));
+      return score(b) - score(a);
+    });
+
+    return res.status(200).json({ meta: { level, date: q.date || rows[0]?.date || null, source }, data: intents });
+  } catch (err) {
+    console.error('strategist.recommendations error', err);
+    return res.status(500).json({ code: 'internal_error', message: 'Recommendations failed' });
+  }
+});
+
+// GET /query — filterable read-only query over latest reconciled snapshot (DuckDB)
+router.get('/query', optionalAuth, async (req: any, res) => {
+  try {
+    const level = (String(req.query.level) === 'campaign' ? 'campaign' : 'adset') as 'adset' | 'campaign';
+    const date = String(req.query.date || '') || null;
+    const startDate = req.query.start_date ? String(req.query.start_date) : null;
+    const endDate = req.query.end_date ? String(req.query.end_date) : null;
+    const source = String(req.query.source || 'day').toLowerCase(); // day | reconciled
+    const owner = req.query.owner ? String(req.query.owner).toLowerCase() : null;
+    const lane = req.query.lane ? String(req.query.lane) : null;
+    const category = req.query.category ? String(req.query.category) : null;
+    const roasGt = req.query.roas_gt ? Number(req.query.roas_gt) : null;
+    const roasLt = req.query.roas_lt ? Number(req.query.roas_lt) : null;
+    const campaignId = req.query.campaign_id ? String(req.query.campaign_id) : null;
+    const adsetId = req.query.adset_id ? String(req.query.adset_id) : null;
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit || '100'), 10) || 100, 1), 10000);
+    const wantsCsv = (String(req.query.format || '').toLowerCase() === 'csv') || (req.headers['accept']?.includes('text/csv') ?? false);
+
+    const base = source === 'reconciled' ? defaultSnapshotsBase() : defaultDaySnapshotsBase();
+    const snap = latestSnapshotDir(base);
+    if (!snap) return res.status(404).json({ code: 'not_found', message: 'No snapshots found' });
+
+    const globPath = path.join(snap, `level=${level}`, `date=${date || '*'}`, `*.*`);
+
+    // Settle-time gate for day source
+    if (source === 'day') {
+      const settleHour = Number(process.env.DAY_SETTLE_HOUR_LOCAL ?? '5');
+      const now = new Date();
+      const gate = new Date(now);
+      gate.setHours(settleHour, 0, 0, 0);
+      const manifestOk = true; // optional: add a manifest check for dates when available
+      if (now < gate && date) {
+        return res.status(425).json({ code: 'not_ready', message: `Day snapshot not settled before ${String(settleHour).padStart(2,'0')}:00 local` });
+      }
+    }
+
+    const whereParts: string[] = [];
+    const params: any[] = [];
+    if (date) { whereParts.push(`date = ?`); params.push(date); }
+    else if (startDate && endDate) { whereParts.push(`date BETWEEN ? AND ?`); params.push(startDate, endDate); }
+    else if (startDate) { whereParts.push(`date >= ?`); params.push(startDate); }
+    else if (endDate) { whereParts.push(`date <= ?`); params.push(endDate); }
+    if (owner) { whereParts.push(`lower(owner) = ?`); params.push(owner); }
+    if (lane) { whereParts.push(`lane = ?`); params.push(lane); }
+    if (category) { whereParts.push(`lower(category) = ?`); params.push(category.toLowerCase()); }
+    if (roasGt !== null && !Number.isNaN(roasGt)) { whereParts.push(`CAST(roas AS DOUBLE) > ?`); params.push(roasGt); }
+    if (roasLt !== null && !Number.isNaN(roasLt)) { whereParts.push(`CAST(roas AS DOUBLE) < ?`); params.push(roasLt); }
+    if (campaignId) { whereParts.push(`campaign_id = ?`); params.push(campaignId); }
+    if (adsetId) { whereParts.push(`adset_id = ?`); params.push(adsetId); }
+    const where = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
+
+    const sql = `
+      WITH unioned AS (
+        SELECT * FROM read_parquet('${globPath}')
+        UNION ALL
+        SELECT * FROM read_csv_auto('${globPath}', IGNORE_ERRORS=true)
+      )
+      SELECT 
+        *,
+        (CASE WHEN clicks > 0 THEN CAST(revenue_usd AS DOUBLE)/CAST(clicks AS DOUBLE) ELSE NULL END) AS revenue_per_click,
+        (CASE WHEN conversions > 0 THEN CAST(spend_usd AS DOUBLE)/CAST(conversions AS DOUBLE) ELSE NULL END) AS cost_per_action
+      FROM unioned
+      ${where}
+      LIMIT ${limit}
+    `;
+    const rows = await queryDuckDb(sql, params);
+
+    if (wantsCsv) {
+      const csv = toCsv(rows as any[]);
+      res.setHeader('Content-Type', 'text/csv');
+      return res.status(200).send(csv);
+    }
+
+    return res.status(200).json({ meta: { snapshot_dir: snap, level, date, limit, source }, data: rows });
+  } catch (err) {
+    console.error('strategist.query error', err);
+    return res.status(500).json({ code: 'internal_error', message: 'Query failed' });
   }
 });
 

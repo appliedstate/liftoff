@@ -6,6 +6,11 @@ export function defaultSnapshotsBase(): string {
   return process.env.RECONCILED_SNAPSHOTS_BASE || path.join(process.cwd(), 'data', 'snapshots', 'facebook', 'reconciled');
 }
 
+export function defaultDaySnapshotsBase(): string {
+  // Project-local default under data/snapshots/facebook/day
+  return process.env.DAY_SNAPSHOTS_BASE || path.join(process.cwd(), 'data', 'snapshots', 'facebook', 'day');
+}
+
 export function listSnapshotDirs(baseDir?: string): string[] {
   const base = baseDir || defaultSnapshotsBase();
   if (!fs.existsSync(base)) return [];

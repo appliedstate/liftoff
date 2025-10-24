@@ -34,8 +34,8 @@ function parseCsvLine(line: string): string[] {
 }
 
 async function main() {
-  // Args: winnersCsv outDir [model=veo-3.1-generate-preview]
-  const [,, winnersCsvArg, outDirArg, modelArg] = process.argv;
+  // Args: winnersCsv outDir [model=veo-3.1-generate-preview] [promptOverride]
+  const [,, winnersCsvArg, outDirArg, modelArg, promptOverrideArg] = process.argv;
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     console.error('Missing GEMINI_API_KEY');
@@ -51,8 +51,14 @@ async function main() {
   const header = parseCsvLine(lines[0] || '');
   const data = lines.slice(1).map(parseCsvLine);
   const idxHook = header.indexOf('hook');
+  const idxCopy = header.indexOf('ad_copy');
+  const copy = (idxCopy >= 0 && data[0]) ? (data[0][idxCopy] || '').trim() : '';
   const hook = (idxHook >= 0 && data[0]) ? (data[0][idxHook] || '').trim() : '';
-  const prompt = hook ? `${hook}. 7-8 second 16:9 promo video. Brand-safe, clean, realistic.` : 'Create a 7-8 second 16:9 promo video. Brand-safe, clean, realistic.';
+  const text = copy || hook;
+  const basePrompt = text ? `${text}. Create a 7–8 second 16:9 promo video that visualizes this copy. Keep it brand‑safe, clean, and realistic with clear typography.` : 'Create a 7–8 second 16:9 promo video. Brand-safe, clean, realistic.';
+  const prompt = (promptOverrideArg && promptOverrideArg.length > 0)
+    ? (text ? `${text}. ${promptOverrideArg}` : promptOverrideArg)
+    : basePrompt;
 
   const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
   const model = modelArg || 'veo-3.1-generate-preview';

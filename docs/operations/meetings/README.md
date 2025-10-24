@@ -27,3 +27,9 @@ docs/operations/meetings/
 - Keep transcript verbatim but readable; outcomes should be organized into decisions, actions, projects, principles, and PRDs.
 
 
+## Index
+
+- 2025-10-24 — 1:1 — Eric & Ben — Facebook Discovery + Iterate
+  - Folder: `docs/operations/meetings/2025/2025-10-24-1on1-ben-eric-facebook-discovery-iterate/`
+  - Files: `transcript.md`, `outcomes.md`
+
