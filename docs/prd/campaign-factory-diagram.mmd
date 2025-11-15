@@ -1,0 +1,134 @@
+flowchart TD
+    %% Input Sources
+    S1[System 1 CSV Export] --> S1Intake[System 1 Intake Script]
+    FB[Meta Ad Library API] --> FBDiscovery[Facebook Discovery Service]
+    
+    %% Opportunity Identification
+    S1Intake --> S1Norm[Normalize & Cluster]
+    S1Norm --> S1API[System 1 API<br/>/campaign/pack]
+    FBDiscovery --> FBScore[Score by Signals<br/>versions, duration, platforms]
+    
+    S1API --> OppEngine[Opportunity Engine]
+    FBScore --> OppEngine
+    OppEngine --> OppScore[Score & Rank Opportunities]
+    OppScore --> OppQueue[Opportunity Queue<br/>status: pending]
+    
+    %% Blueprint Generation
+    OppQueue --> BlueprintGen[Blueprint Generator]
+    BlueprintGen --> BudgetCalc[Calculate Budget Allocation<br/>ASC 33%, LAL 17%, etc.]
+    BudgetCalc --> TargetPlan[Set Targeting Plan<br/>geo, audiences, LAL %]
+    TargetPlan --> CreativeReq[Define Creative Requirements<br/>hooks, formats, LPIDs]
+    CreativeReq --> KPISet[Set KPI Targets<br/>ROAS ≥1.30, EMQ ≥5]
+    KPISet --> BlueprintDB[(Campaign Blueprints<br/>status: draft)]
+    
+    %% Human Review
+    BlueprintDB --> HumanReview{Human Review<br/>Dan/Maryna}
+    HumanReview -->|Reject| OppQueue
+    HumanReview -->|Approve| BlueprintApproved[Blueprint Approved<br/>status: approved]
+    
+    %% Creative Pipeline
+    BlueprintApproved --> LPIDQuery[Query Article Factory<br/>Get LPIDs by Angle]
+    LPIDQuery --> LPIDSelect[Select LPIDs<br/>≥3k sessions, vRPS ≥ median]
+    
+    LPIDSelect --> HookGen[Hook Ideation Agent]
+    OppQueue -.->|System 1 keywords| HookGen
+    OppQueue -.->|Facebook ad samples| HookGen
+    
+    HookGen --> HookIdeation[Generate Hooks<br/>Ideation or Clone Mode]
+    HookIdeation --> HookScore[Score Hooks<br/>keyword alignment, uniqueness]
+    HookScore --> HookSelect[Select Top Hooks<br/>6-8 ASC, 3-5 LAL]
+    HookSelect --> HookDB[(Hook Concepts<br/>status: generated)]
+    
+    HookDB --> VariantGen[Generate Variants<br/>916/45/11 formats]
+    VariantGen --> ScriptGen[Generate Scripts<br/>60-90w, widget tie-in]
+    ScriptGen --> AssetRender[Render Assets<br/>video, images, captions]
+    AssetRender --> CreativeQA[QA Checklist<br/>naming, compliance, format mix]
+    CreativeQA --> CreativeDB[(Creatives<br/>status: ready)]
+    
+    %% Launch Pipeline
+    CreativeDB --> Preflight[Pre-flight Checks<br/>T-1d]
+    Preflight --> AEMCheck{AEM Purchase<br/>ranked #1?}
+    AEMCheck -->|No| Preflight
+    AEMCheck -->|Yes| SignalCheck{Signal Health<br/>EMQ ≥5, Latency ≤300s?}
+    SignalCheck -->|No| Preflight
+    SignalCheck -->|Yes| CreativeCheck{Creatives Ready<br/>≥hooks × 3?}
+    CreativeCheck -->|No| CreativeDB
+    CreativeCheck -->|Yes| LPIDCheck{LPIDs Active<br/>widget viewability ≥70%?}
+    LPIDCheck -->|No| LPIDQuery
+    LPIDCheck -->|Yes| LaunchGo[Go/No-Go Decision]
+    
+    LaunchGo -->|Go| LaunchExec[Campaign Launcher]
+    LaunchExec --> CreateCampaigns[Create Campaigns<br/>per lane]
+    CreateCampaigns --> CreateAdSets[Create Ad Sets<br/>budgets, targeting]
+    CreateAdSets --> CreateAds[Create Ads<br/>10-15 per ad set]
+    CreateAds --> EnableEntities[Enable All Entities]
+    EnableEntities --> InitCooldown[Initialize Terminal<br/>Cooldown Registry]
+    InitCooldown --> LaunchDB[(Campaign Launches<br/>status: launched)]
+    
+    %% Launch Freeze
+    LaunchDB --> Freeze[Launch Freeze<br/>48-72h]
+    Freeze --> Monitor[Monitor Only<br/>Terminal dryRun=true]
+    Monitor --> FreezeCheck{Freeze Period<br/>Elapsed?}
+    FreezeCheck -->|No| Monitor
+    FreezeCheck -->|Yes| PostFreeze[Post-Freeze Validation]
+    
+    %% Optimization
+    PostFreeze --> DailyOpt[Daily Optimization<br/>Post-Freeze]
+    DailyOpt --> LoadPerf[Load Reconciled Performance<br/>from Strategist]
+    LoadPerf --> EvalGates[Evaluate Gates<br/>signal health, learning density]
+    EvalGates --> GateCheck{Gates Passed?}
+    GateCheck -->|No| Hold[Hold Action]
+    GateCheck -->|Yes| GenDecisions[Generate Decisions<br/>ROAS-based rules]
+    GenDecisions --> ApplyCooldown[Apply Cooldowns<br/>max 1 change/24h]
+    ApplyCooldown --> ExecuteDecisions[Execute Decisions<br/>bump/trim budgets]
+    ExecuteDecisions --> DecisionDB[(Terminal Decisions)]
+    
+    %% Promotion Cycles
+    DecisionDB --> PromoCycle{Promotion Cycle<br/>Mon/Thu}
+    PromoCycle --> EvalSandbox[Evaluate Sandbox<br/>7d performance]
+    EvalSandbox --> PromoteWinners[Promote Top 10-20%<br/>to ASC/LAL]
+    EvalSandbox --> PruneLosers[Prune Bottom 50-60%<br/>pause ads]
+    PromoteWinners --> DecisionDB
+    PruneLosers --> DecisionDB
+    
+    %% Intraday Optimization
+    DecisionDB --> IntradayOpt{Intraday Optimization<br/>D3+}
+    IntradayOpt --> Nowcast[Nowcast Revenue<br/>account for 12h delay]
+    Nowcast --> HourlyCheck[2h Confirmation Windows]
+    HourlyCheck --> SmallSteps[Small Steps ±10%<br/>stricter gates]
+    SmallSteps --> DecisionDB
+    
+    %% Performance Monitoring
+    DecisionDB --> PerfMonitor[Performance Monitor]
+    PerfMonitor --> StrategistAPI[Strategist API<br/>/reconciled]
+    StrategistAPI --> CalcAggregates[Calculate Aggregates<br/>ROAS, CTR, CPM]
+    CalcAggregates --> GenAlerts[Generate Alerts<br/>signal health, learning, spend]
+    GenAlerts --> Dashboard[Dashboard & Reports]
+    
+    %% Ongoing Management
+    Dashboard --> OngoingMgmt[Ongoing Management]
+    OngoingMgmt --> WeeklyRefresh[Weekly Refresh<br/>new opportunities]
+    WeeklyRefresh --> OppEngine
+    
+    %% Styling
+    classDef inputSource fill:#e1f5ff,stroke:#01579b,stroke-width:2px,color:#000000
+    classDef process fill:#f3e5f5,stroke:#4a148c,stroke-width:2px,color:#000000
+    classDef decision fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000000
+    classDef storage fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px,color:#000000
+    classDef optimization fill:#fce4ec,stroke:#880e4f,stroke-width:2px,color:#000000
+    
+    class S1,FB inputSource
+    class S1Intake,S1Norm,S1API,FBDiscovery,FBScore process
+    class OppEngine,OppScore,BlueprintGen,BudgetCalc,TargetPlan process
+    class CreativeReq,KPISet,LPIDQuery,LPIDSelect,HookGen process
+    class HookIdeation,HookScore,HookSelect,VariantGen,ScriptGen process
+    class AssetRender,CreativeQA,Preflight,LaunchExec,CreateCampaigns process
+    class CreateAdSets,CreateAds,EnableEntities,InitCooldown,LoadPerf process
+    class EvalGates,GenDecisions,ApplyCooldown,ExecuteDecisions,EvalSandbox process
+    class PromoteWinners,PruneLosers,Nowcast,HourlyCheck,SmallSteps process
+    class PerfMonitor,StrategistAPI,CalcAggregates,GenAlerts process
+    class HumanReview,AEMCheck,SignalCheck,CreativeCheck,LPIDCheck decision
+    class LaunchGo,FreezeCheck,GateCheck,PromoCycle,IntradayOpt decision
+    class OppQueue,BlueprintDB,HookDB,CreativeDB,LaunchDB,DecisionDB storage
+    class DailyOpt,Monitor,PostFreeze,OngoingMgmt,WeeklyRefresh optimization
+
