@@ -24,6 +24,12 @@ export async function searchMetaAdLibrary(params: MetaAdLibraryParams) {
   const apiKey = process.env.SEARCHAPI_API_KEY;
   if (!apiKey) throw new Error('Missing SEARCHAPI_API_KEY');
 
+  // Allow overriding request timeout via env (default 90s for slower pages)
+  const requestTimeoutMs =
+    Number(process.env.SEARCHAPI_TIMEOUT_MS) > 0
+      ? Number(process.env.SEARCHAPI_TIMEOUT_MS)
+      : 90000;
+
   // Filter undefined/null params to avoid sending e.g. next_page_token=undefined
   const filtered: Record<string, string> = { engine: 'meta_ad_library' } as any;
   for (const [k, v] of Object.entries(params)) {
@@ -42,7 +48,7 @@ export async function searchMetaAdLibrary(params: MetaAdLibraryParams) {
     try {
       const resp = await axios.get(url, {
         headers: { 'Authorization': `Bearer ${apiKey}` },
-        timeout: 30000
+        timeout: requestTimeoutMs
       });
       return resp.data;
     } catch (err: any) {

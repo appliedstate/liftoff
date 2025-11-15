@@ -7,14 +7,19 @@ import { resolveFinalUrl } from '../lib/urlResolve';
 import { extractFacebookPixelIdsFromUrl } from '../lib/pixel';
 import { extractFacebookPixelIdsHeadless } from '../lib/pixelHeadless';
 import { extractWidgetPhrasesHeadless } from '../lib/widgetHeadless';
+import { findSlugsByKeywords, findSlugsByManualMapping, SlugMatch, ManualMapping } from './system1SlugMatcher';
+import { getPageIdsFromDiscoveryRuns } from './discoveryPageIndex';
 
 export interface AnalyzePagesInput {
-  pageIds: string[];
+  pageIds?: string[];
+  discoveryRun?: string; // Use page IDs from this discovery run
+  max_pages?: number; // Limit number of pages to analyze
   country?: string;
   start_date?: string;
   end_date?: string;
   platforms?: string;
   active_status?: 'active' | 'inactive' | 'all';
+  manualMappings?: ManualMapping[]; // Manual keyword→slug mappings
 }
 
 export interface AdRecord {
@@ -36,17 +41,39 @@ export interface AdRecord {
   extracted_param_keys?: string[];
   pixel_ids?: string[];
   widget_phrases?: string[];
+  matching_slugs?: SlugMatch[];
 }
 
 export async function fetchAdsForPages(input: AnalyzePagesInput): Promise<AdRecord[]> {
   const {
-    pageIds,
+    pageIds: providedPageIds,
+    discoveryRun,
+    max_pages,
     country,
     start_date,
     end_date,
     platforms = 'facebook,instagram',
-    active_status = 'active'
+    active_status = 'active',
+    manualMappings
   } = input;
+
+  // Get page IDs from discovery run if specified, otherwise use provided
+  let pageIds: string[] = [];
+  if (discoveryRun) {
+    pageIds = getPageIdsFromDiscoveryRuns(discoveryRun);
+    if (pageIds.length === 0) {
+      throw new Error(`No page IDs found in discovery run: ${discoveryRun}`);
+    }
+  } else if (providedPageIds && providedPageIds.length > 0) {
+    pageIds = providedPageIds;
+  } else {
+    throw new Error('Either pageIds or discoveryRun must be provided');
+  }
+
+  // Apply optional page limit to avoid long-running requests
+  if (typeof max_pages === 'number' && max_pages > 0) {
+    pageIds = pageIds.slice(0, max_pages);
+  }
 
   const allAds: AdRecord[] = [];
 
@@ -147,6 +174,22 @@ export async function fetchAdsForPages(input: AnalyzePagesInput): Promise<AdReco
         // Extract widget phrases via headless (if enabled)
         const widget_phrases = await getWidgetPhrases(finalLink);
 
+        // Match keywords to System1 slugs
+        // Use manual mappings if provided, otherwise auto-match
+        let matching_slugs: SlugMatch[] = [];
+        if (manualMappings && manualMappings.length > 0) {
+          matching_slugs = await findSlugsByManualMapping(manualMappings);
+        } else {
+          // Combine extracted_keywords and widget_phrases for automatic matching
+          const allKeywords = [
+            ...(extracted_keywords || []),
+            ...(widget_phrases || [])
+          ];
+          if (allKeywords.length > 0) {
+            matching_slugs = await findSlugsByKeywords(allKeywords);
+          }
+        }
+
         allAds.push({
           ad_archive_id: ad.ad_archive_id,
           page_id: ad.page_id || ad.snapshot?.page_id,
@@ -165,7 +208,8 @@ export async function fetchAdsForPages(input: AnalyzePagesInput): Promise<AdReco
           forcekeys,
           extracted_param_keys,
           pixel_ids,
-          widget_phrases
+          widget_phrases,
+          matching_slugs: matching_slugs.length > 0 ? matching_slugs : undefined
         });
       }
       next_page_token = data?.pagination?.next_page_token;

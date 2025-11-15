@@ -2,6 +2,7 @@ import express from 'express';
 import { optionalAuth } from '../middleware/auth';
 import { generateText } from '../lib/openai';
 import ZUCK_SYSTEM_PROMPT from '../agents/zuck';
+import ELON_SYSTEM_PROMPT from '../agents/elon';
 
 const router = express.Router();
 
@@ -15,12 +16,28 @@ router.post('/chat', optionalAuth, async (req: any, res) => {
 
     // Dev-friendly fallback only when explicitly in dev mode or missing API key
     const devMode = process.env.COPILOT_DEV_MODE === 'true' || !process.env.OPENAI_API_KEY;
-    if (devMode) {
-      return res.status(200).json({ output: `DEV (generic Zuck co-pilot)\n\n${prompt}` });
+    // Slash-command routing: /elon or /zuck at start of prompt selects persona
+    let effectivePrompt: string = prompt;
+    let effectiveSystem = system || ZUCK_SYSTEM_PROMPT;
+    let personaLabel = 'Zuck';
+    const slashMatch = /^\/(elon|zuck)\b[:\s]*/i.exec(effectivePrompt);
+    if (slashMatch) {
+      const who = (slashMatch[1] || '').toLowerCase();
+      effectivePrompt = effectivePrompt.replace(/^\/(elon|zuck)\b[:\s]*/i, '');
+      if (who === 'elon') {
+        effectiveSystem = ELON_SYSTEM_PROMPT;
+        personaLabel = 'Elon';
+      } else {
+        effectiveSystem = ZUCK_SYSTEM_PROMPT;
+        personaLabel = 'Zuck';
+      }
     }
 
-    const systemPrompt = system || ZUCK_SYSTEM_PROMPT;
-    const text = await generateText({ system: systemPrompt, prompt, temperature, maxTokens });
+    if (devMode) {
+      return res.status(200).json({ output: `DEV (${personaLabel} co-pilot)\n\n${effectivePrompt}` });
+    }
+
+    const text = await generateText({ system: effectiveSystem, prompt: effectivePrompt, temperature, maxTokens });
     return res.status(200).json({ output: text });
   } catch (err) {
     console.error('copilot.chat error', err);

@@ -11,6 +11,14 @@ export const authenticateUser = async (
   next: NextFunction
 ) => {
   try {
+    // Dev/admin token bypass for local tooling
+    const adminHeader = (req.headers['x-admin-token'] as string) || (req.headers['x-strategist-token'] as string);
+    const adminToken = process.env.STRATEGIST_ADMIN_TOKEN || process.env.STRATEGIST_DEV_ADMIN_TOKEN;
+    if (adminHeader && adminToken && adminHeader === adminToken) {
+      req.user = { id: 'dev-admin', role: 'admin', email: 'dev@local' };
+      return next();
+    }
+
     const authHeader = req.headers.authorization;
     
     if (!authHeader) {
@@ -43,6 +51,14 @@ export const optionalAuth = async (
   next: NextFunction
 ) => {
   try {
+    // Dev/admin token bypass for local tooling
+    const adminHeader = (req.headers['x-admin-token'] as string) || (req.headers['x-strategist-token'] as string);
+    const adminToken = process.env.STRATEGIST_ADMIN_TOKEN || process.env.STRATEGIST_DEV_ADMIN_TOKEN;
+    if (adminHeader && adminToken && adminHeader === adminToken) {
+      req.user = { id: 'dev-admin', role: 'admin', email: 'dev@local' };
+      return next();
+    }
+
     const authHeader = req.headers.authorization;
     
     if (authHeader) {

@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import { getLastIngestTimestamps, getLastValidateSummary, getQueryMetrics, getAdminMetrics } from './lib/health';
 
 dotenv.config();
 
@@ -10,7 +11,13 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
-app.use(helmet());
+// In dev, disable CSP so inline scripts on local dev pages (/copilot, /zuck, /elon) work
+{
+  const helmetOptions: any = {};
+  const disableCsp = (process.env.NODE_ENV !== 'production') || (process.env.DISABLE_DEV_CSP === 'true');
+  if (disableCsp) helmetOptions.contentSecurityPolicy = false;
+  app.use(helmet(helmetOptions));
+}
 app.use(cors());
 app.use(morgan('combined'));
 app.use(express.json());
@@ -21,8 +28,41 @@ app.get('/', (req, res) => {
   res.json({ message: 'Backend server is running!' });
 });
 
+// Import and mount route modules
+import copilotRouter from './routes/copilot';
+import elonRouter from './routes/elon';
+import metaAdLibraryRouter from './routes/metaAdLibrary';
+import strategistRouter from './routes/strategist';
+import system1Router from './routes/system1';
+import decisionEngineRouter from './routes/decisionEngine';
+import vectorRouter from './routes/vector';
+import campaignFactoryRouter from './routes/campaignFactory';
+import opportunityQueueRouter from './routes/opportunityQueue';
+import workflowRouter from './routes/workflow';
+
+app.use('/api/copilot', copilotRouter);
+app.use('/api/elon', elonRouter);
+app.use('/api/meta-ad-library', metaAdLibraryRouter);
+app.use('/api/strategist', strategistRouter);
+app.use('/api/system1', system1Router);
+app.use('/api/decision-engine', decisionEngineRouter);
+app.use('/api/vector', vectorRouter);
+app.use('/api/campaign-factory', campaignFactoryRouter);
+app.use('/api/opportunities', opportunityQueueRouter);
+app.use('/api/workflow', workflowRouter);
+
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+  const last = getLastIngestTimestamps();
+  const validate = getLastValidateSummary();
+  const query = getQueryMetrics();
+  res.json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    last_ingest: last,
+    last_validate: validate,
+    query_metrics: query,
+    admin_metrics: getAdminMetrics(),
+  });
 });
 
 // Protected route example
@@ -46,25 +86,7 @@ app.get('/api/public', optionalAuth, (req: any, res) => {
   });
 });
 
-// Meta Ad Library route
-import metaAdLibraryRouter from './routes/metaAdLibrary';
-app.use('/api/meta-ad-library', metaAdLibraryRouter);
-
-// Strategist router
-import strategistRouter from './routes/strategist';
-app.use('/api/strategist', strategistRouter);
-
-// Terminal router (re-enabled)
-import terminalRouter from './routes/terminal';
-app.use('/api/terminal', terminalRouter);
-
-// Generic Zuck Co-Pilot router (product-agnostic)
-import copilotRouter from './routes/copilot';
-app.use('/api/copilot', copilotRouter);
-
-// Elon Co-Pilot router (product-agnostic)
-import elonRouter from './routes/elon';
-app.use('/api/elon', elonRouter);
+// Routes are already registered above (lines 41-48)
 
 // Minimal unauthenticated CoPilot chat UI for local/dev usage
 app.get('/copilot', (_req, res) => {
@@ -99,8 +121,10 @@ app.get('/copilot', (_req, res) => {
     <h3>Response</h3>
     <pre id="out"></pre>
     <script>
+      const BASE = (location.port === '3001') ? location.origin : (location.protocol + '//' + location.hostname + ':3001');
       async function post(path, body) {
-        const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const url = path.startsWith('http') ? path : (BASE + path);
+        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         const ct = res.headers.get('content-type') || '';
         if (!res.ok) throw new Error(await res.text());
         return ct.includes('application/json') ? res.json() : res.text();
@@ -156,8 +180,10 @@ app.get('/zuck', (_req, res) => {
     <h3>Response</h3>
     <pre id="out"></pre>
     <script>
+      const BASE = (location.port === '3001') ? location.origin : (location.protocol + '//' + location.hostname + ':3001');
       async function post(path, body) {
-        const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const url = path.startsWith('http') ? path : (BASE + path);
+        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         const ct = res.headers.get('content-type') || '';
         if (!res.ok) throw new Error(await res.text());
         return ct.includes('application/json') ? res.json() : res.text();
@@ -213,8 +239,10 @@ app.get('/elon', (_req, res) => {
     <h3>Response</h3>
     <pre id="out"></pre>
     <script>
+      const BASE = (location.port === '3001') ? location.origin : (location.protocol + '//' + location.hostname + ':3001');
       async function post(path, body) {
-        const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const url = path.startsWith('http') ? path : (BASE + path);
+        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         const ct = res.headers.get('content-type') || '';
         if (!res.ok) throw new Error(await res.text());
         return ct.includes('application/json') ? res.json() : res.text();
