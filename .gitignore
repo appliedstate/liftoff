@@ -142,3 +142,24 @@ docs/private/comp/plaintext/**
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+# macOS
+.DS_Store
+
+# Node / TypeScript
+node_modules/
+dist/
+*.log
+
+# Backend generated stuff / data
+backend/node_modules/
+backend/dist/
+backend/out.csv
+backend/data/
+backend/reports/
+backend/runs/
+backend/logs/
+backend/assets/1123579293306083/
+
+# Environment files
+.env
+backend/.env
