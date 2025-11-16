@@ -8,7 +8,6 @@ export default function S1SerpChatPage() {
     <C1Chat
       apiUrl="/api/s1-serp-chat"
       theme={{ mode: "dark" }}
-      placeholder="Ask about System1 SERP performance…"
     />
   );
 }
