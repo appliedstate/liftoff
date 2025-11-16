@@ -163,7 +163,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return new NextResponse(stream as any, {
+    return new NextResponse(stream, {
       status: 200,
       headers: {
         "Content-Type": "text/event-stream",
