@@ -36,7 +36,7 @@ export async function extractFacebookPixelIdsHeadless(url: string, options: Head
     const page: Page = await context.newPage();
 
     // Capture pixel ids from network
-    page.on('request', (req) => {
+    page.on('request', (req: any) => {
       try {
         const u = new URL(req.url());
         const isFb = /facebook\.(com|net)$/i.test(u.hostname) || u.hostname.includes('facebook');
