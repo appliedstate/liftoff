@@ -1,17 +1,17 @@
 import { Router } from 'express';
 import fs from 'fs';
 import path from 'path';
-import duckdb from 'duckdb';
+import { Database } from 'duckdb';
 import axios from 'axios';
-import { ensureDir } from '../lib/snapshots';
+import { ensureDir } from '../.lib/snapshots';
 
 const router = Router();
 
 // Get or create persistent DuckDB database for session revenue
-function getSessionRevenueDb(): duckdb.Database {
+function getSessionRevenueDb(): Database {
   const dbPath = path.resolve(process.cwd(), 'data', 'session_revenue.duckdb');
   ensureDir(path.dirname(dbPath));
-  return new duckdb.Database(dbPath);
+  return new Database(dbPath);
 }
 
 function getLatestRunDir(): string {
