@@ -6,8 +6,14 @@ async function queryCsv(csvPath: string, sql: string): Promise<any[]> {
   const db = new duckdb.Database(':memory:');
   const conn = db.connect();
   const escaped = csvPath.replace(/'/g, "''");
-  const run = (q: string) => new Promise<void>((resolve, reject) => (conn as any).run(q, (err: Error | null) => err ? reject(err) : resolve()));
-  const all = (q: string) => new Promise<any[]>((resolve, reject) => (conn as any).all(q, (err: Error | null, rows: any[]) => (err ? reject(err) : resolve(rows)));
+  const run = (q: string) =>
+    new Promise<void>((resolve, reject) =>
+      (conn as any).run(q, (err: Error | null) => (err ? reject(err) : resolve()))
+    );
+  const all = (q: string) =>
+    new Promise<any[]>((resolve, reject) =>
+      (conn as any).all(q, (err: Error | null, rows: any[]) => (err ? reject(err) : resolve(rows)))
+    );
   await run(`CREATE TABLE t AS SELECT * FROM read_csv_auto('${escaped}', header=true, all_varchar=true, ignore_errors=true);`);
   const rows = await all(sql);
   conn.close(() => db.close(() => {}));

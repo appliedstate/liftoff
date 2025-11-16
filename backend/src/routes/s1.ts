@@ -11,6 +11,7 @@ const router = Router();
  */
 router.post('/serp/search', async (req, res) => {
   try {
+    const startedAt = Date.now();
     const { query, regionCodes, runDate, limit, minRevenue } = req.body || {};
 
     if (!query || typeof query !== 'string') {
@@ -26,6 +27,7 @@ router.post('/serp/search', async (req, res) => {
       ? regionCodes.map((r) => String(r)).filter((r) => r.trim().length > 0)
       : undefined;
 
+    const searchStartedAt = Date.now();
     const searchResult = await serpVectorSearch({
       query,
       runDate: runDate || undefined,
@@ -36,8 +38,9 @@ router.post('/serp/search', async (req, res) => {
           : undefined,
       limit: safeLimit,
     });
+    const searchMs = Date.now() - searchStartedAt;
 
-    return res.status(200).json({
+    const payload = {
       status: 'ok',
       runDate: searchResult.runDate,
       query,
@@ -47,7 +50,17 @@ router.post('/serp/search', async (req, res) => {
         limit: safeLimit,
       },
       results: searchResult.results,
+    };
+
+    console.log('[s1.serp.search]', {
+      t_total_ms: Date.now() - startedAt,
+      t_search_ms: searchMs,
+      limit: safeLimit,
+      rows: searchResult.results.length,
+      runDate: searchResult.runDate,
     });
+
+    return res.status(200).json(payload);
   } catch (e: any) {
     console.error('[s1.serp.search] Error:', e?.message || e);
     const status = e?.statusCode && Number.isFinite(e.statusCode) ? e.statusCode : 500;
@@ -66,6 +79,7 @@ router.post('/serp/search', async (req, res) => {
  */
 router.post('/serp/qa', async (req, res) => {
   try {
+    const startedAt = Date.now();
     const { query, regionCodes, runDate, limit, minRevenue, temperature, maxTokens } = req.body || {};
 
     if (!query || typeof query !== 'string') {
@@ -74,14 +88,16 @@ router.post('/serp/qa', async (req, res) => {
 
     const safeLimit =
       typeof limit === 'number'
-        ? Math.max(1, Math.min(50, Math.floor(limit)))
-        : 20;
+        ? Math.max(1, Math.min(200, Math.floor(limit)))
+        : 50;
 
     const regionList = Array.isArray(regionCodes)
       ? regionCodes.map((r) => String(r)).filter((r) => r.trim().length > 0)
       : undefined;
 
-    // Fetch richer context than we plan to show to user; we can always truncate in the answer
+    // Fetch richer context than we plan to show to user; we can always truncate for the LLM
+    const searchLimit = Math.max(safeLimit, 40);
+    const searchStartedAt = Date.now();
     const searchResult = await serpVectorSearch({
       query,
       runDate: runDate || undefined,
@@ -90,13 +106,18 @@ router.post('/serp/qa', async (req, res) => {
         typeof minRevenue === 'number' && Number.isFinite(minRevenue)
           ? minRevenue
           : undefined,
-      limit: Math.max(safeLimit, 40),
+      limit: searchLimit,
     });
+    const searchMs = Date.now() - searchStartedAt;
 
-    const rows = searchResult.results.slice(0, safeLimit);
+    const allRows = searchResult.results;
+    // Use at most 20 rows for the LLM answer to keep prompts small/fast
+    const answerRows = allRows.slice(0, Math.min(20, allRows.length));
+    // Limit table size to something reasonable as well
+    const tableRows = allRows.slice(0, safeLimit);
 
     // If no rows returned, answer gracefully without calling LLM
-    if (!rows.length) {
+    if (!allRows.length) {
       return res.status(200).json({
         status: 'ok',
         runDate: searchResult.runDate,
@@ -118,10 +139,10 @@ router.post('/serp/qa', async (req, res) => {
       'You are analyzing System1 SERP performance rows. Each row is a (keyword, content_slug, region) with performance metrics.',
       'Fields: serp_keyword, content_slug, region_code, est_net_revenue, sellside_searches, sellside_clicks_network, rpc, rps, cos, finalScore.',
       '',
-      `Top ${rows.length} rows (sorted by finalScore):`
+      `Top ${answerRows.length} rows (sorted by finalScore):`
     );
 
-    for (const r of rows) {
+    for (const r of answerRows) {
       contextLines.push(
         [
           `keyword="${r.serp_keyword}"`,
@@ -155,14 +176,17 @@ router.post('/serp/qa', async (req, res) => {
       'Now answer the user question. Start with a 2–3 sentence summary, then list 3–7 specific recommendations.',
     ].join('\n');
 
+    const llmStartedAt = Date.now();
     const answerText = await generateText({
       system: systemPrompt,
       prompt: promptText,
+      // Slightly lower default temperature and max tokens to reduce latency
       temperature: typeof temperature === 'number' ? temperature : 0.2,
-      maxTokens: typeof maxTokens === 'number' ? maxTokens : 600,
+      maxTokens: typeof maxTokens === 'number' ? maxTokens : 300,
     });
+    const llmMs = Date.now() - llmStartedAt;
 
-    return res.status(200).json({
+    const payload = {
       status: 'ok',
       runDate: searchResult.runDate,
       query,
@@ -173,9 +197,22 @@ router.post('/serp/qa', async (req, res) => {
       },
       answer: answerText,
       context: {
-        rows,
+        rows: tableRows,
       },
+    };
+
+    console.log('[s1.serp.qa]', {
+      t_total_ms: Date.now() - startedAt,
+      t_search_ms: searchMs,
+      t_llm_ms: llmMs,
+      limit: safeLimit,
+      search_limit: searchLimit,
+      answer_rows: answerRows.length,
+      table_rows: tableRows.length,
+      runDate: searchResult.runDate,
     });
+
+    return res.status(200).json(payload);
   } catch (e: any) {
     console.error('[s1.serp.qa] Error:', e?.message || e);
     const status = e?.statusCode && Number.isFinite(e.statusCode) ? e.statusCode : 500;

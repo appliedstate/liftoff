@@ -3,7 +3,7 @@
 import { C1Chat } from "@thesysai/genui-sdk";
 import "@crayonai/react-ui/styles/index.css";
 
-export default function Home() {
+export default function S1SerpChatPage() {
   return (
     <C1Chat
       apiUrl="/api/s1-serp-chat"
@@ -12,3 +12,5 @@ export default function Home() {
     />
   );
 }
+
+

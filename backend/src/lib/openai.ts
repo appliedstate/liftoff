@@ -10,11 +10,18 @@ if (!process.env.OPENAI_API_KEY) {
 }
 
 let client: OpenAI | null = null;
+
 function getClient(): OpenAI {
   if (!client) {
     const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new Error('Missing OPENAI_API_KEY');
-    client = new OpenAI({ apiKey });
+    if (!apiKey) {
+      throw new Error('Missing OPENAI_API_KEY');
+    }
+    // Limit request time so Cloudflare’s 100s timeout doesn’t kill long LLM calls with 524
+    client = new OpenAI({
+      apiKey,
+      timeout: 30000, // 30 seconds
+    });
   }
   return client;
 }
