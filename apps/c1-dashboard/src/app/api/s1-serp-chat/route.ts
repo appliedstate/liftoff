@@ -11,8 +11,13 @@ const BACKEND_BASE =
 
 export async function POST(req: NextRequest) {
   try {
-    const { prompt } = (await req.json()) as {
+    // C1Chat sends { prompt, threadId, responseId } - match the working /api/chat route
+    const body = await req.json();
+    console.log("[/api/s1-serp-chat] received request body:", JSON.stringify(body, null, 2));
+    
+    const { prompt } = body as {
       prompt: {
+        role?: string;
         content:
           | string
           | Array<
@@ -22,7 +27,16 @@ export async function POST(req: NextRequest) {
                 }
             >;
       };
+      threadId?: string;
+      responseId?: string;
     };
+
+    if (!prompt) {
+      console.error("[/api/s1-serp-chat] prompt is missing from request");
+      throw new Error("prompt is required");
+    }
+    
+    console.log("[/api/s1-serp-chat] prompt:", JSON.stringify(prompt, null, 2));
 
     // Extract the latest user text from the prompt
     const queryText =
@@ -45,12 +59,21 @@ export async function POST(req: NextRequest) {
             .join(" ")
         : "";
 
+    if (!queryText || queryText.trim().length === 0) {
+      console.error("[/api/s1-serp-chat] queryText is empty");
+      throw new Error("prompt.content is empty or invalid");
+    }
+
+    console.log("[/api/s1-serp-chat] extracted queryText:", queryText);
+
     // Build backend copilot request from the latest user message
-    const body = {
+    const backendBody = {
       query: queryText,
       runDate: "2025-11-11",
       limit: 100,
     };
+    
+    console.log("[/api/s1-serp-chat] calling backend:", `${BACKEND_BASE}/api/s1/copilot`);
 
     let answer = "";
 
@@ -58,8 +81,10 @@ export async function POST(req: NextRequest) {
       const backendRes = await fetch(`${BACKEND_BASE}/api/s1/copilot`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(backendBody),
       });
+      
+      console.log("[/api/s1-serp-chat] backend response status:", backendRes.status);
 
       if (!backendRes.ok) {
         const text = await backendRes.text();
@@ -73,6 +98,7 @@ export async function POST(req: NextRequest) {
         }`;
       } else {
         answer = await backendRes.text();
+        console.log("[/api/s1-serp-chat] backend answer length:", answer.length);
       }
     } catch (e: unknown) {
       const message =
@@ -80,15 +106,20 @@ export async function POST(req: NextRequest) {
       console.error("[/api/s1-serp-chat] fetch failed", e);
       answer = `Failed to reach backend: ${message}`;
     }
+    
+    console.log("[/api/s1-serp-chat] returning answer, length:", answer.length);
 
-    const stream = new ReadableStream<string>({
+    // Create a simple text stream - C1Chat will handle SSE formatting
+    // Match the pattern from the working /api/chat route
+    const responseStream = new ReadableStream<string>({
       start(controller) {
+        // Send the full answer as a single chunk
         controller.enqueue(answer);
         controller.close();
       },
     });
 
-    return new NextResponse(stream as any, {
+    return new NextResponse(responseStream, {
       headers: {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache, no-transform",
@@ -99,14 +130,16 @@ export async function POST(req: NextRequest) {
     const message =
       e instanceof Error ? e.message : e ? String(e) : "Unknown error";
     console.error("[/api/s1-serp-chat] handler error", e);
-    const stream = new ReadableStream<string>({
+    
+    // Return error as text stream
+    const responseStream = new ReadableStream<string>({
       start(controller) {
-        controller.enqueue(`Error in s1-serp-chat route: ${message}`);
+        controller.enqueue(`Error: ${message}`);
         controller.close();
       },
     });
 
-    return new NextResponse(stream as any, {
+    return new NextResponse(responseStream, {
       status: 200,
       headers: {
         "Content-Type": "text/event-stream",

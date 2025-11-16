@@ -385,6 +385,172 @@ router.post('/serp/metrics', async (req, res) => {
 });
 
 /**
+ * GET /api/s1/copilot
+ *
+ * Atlas-friendly GET endpoint for S1 SERP copilot.
+ * Query param: `prompt` (required, URL-encoded)
+ * Returns: plain text answer (ideal for ChatGPT Atlas Browser Companion)
+ */
+router.get('/copilot', async (req, res) => {
+  try {
+    const { prompt, runDate, limit } = req.query || {};
+
+    if (!prompt || typeof prompt !== 'string') {
+      return res
+        .status(400)
+        .type('text/plain; charset=utf-8')
+        .send('prompt query parameter is required (string)');
+    }
+
+    // Reuse the POST handler logic by calling it internally
+    // Convert query params to match POST body format
+    const body = {
+      query: prompt,
+      runDate: typeof runDate === 'string' ? runDate : undefined,
+      limit: typeof limit === 'string' ? parseInt(limit, 10) : undefined,
+    };
+
+    // Call the internal copilot logic
+    const qLower = prompt.toLowerCase();
+    let mode: SerpMetricsMode | null = null;
+
+    if (qLower.includes('total revenue')) {
+      mode = 'total_revenue';
+    } else if (qLower.includes('top slugs') || (qLower.includes('slugs') && qLower.includes('revenue'))) {
+      mode = 'top_slugs';
+    } else if (
+      qLower.includes('by state') ||
+      qLower.includes('for state') ||
+      qLower.includes('for keyword')
+    ) {
+      mode = 'keyword_state_breakdown';
+    }
+
+    let answerText: string;
+
+    if (mode) {
+      const metrics = await runSerpMetricsQuery({
+        mode,
+        runDate: body.runDate,
+        limit: body.limit,
+        keyword: prompt,
+      });
+
+      const systemPrompt =
+        'You are a SERP analytics copilot. You receive a marketer question and JSON metrics from System1 revenue data. ' +
+        'Answer the question using ONLY the provided JSON, referencing concrete numbers where helpful. Be concise and avoid fabricating data.';
+
+      const promptText = [
+        `User question: ${prompt}`,
+        '',
+        'Metrics JSON:',
+        JSON.stringify(
+          {
+            mode,
+            runDate: metrics.runDate,
+            rows: metrics.rows,
+          },
+          null,
+          2
+        ),
+        '',
+        'Explain the answer clearly in plain English.',
+      ].join('\n');
+
+      answerText = await generateText({
+        system: systemPrompt,
+        prompt: promptText,
+        temperature: 0.2,
+        maxTokens: 300,
+      });
+    } else {
+      const safeLimit = body.limit ? Math.max(1, Math.min(200, Math.floor(body.limit))) : 50;
+      const searchLimit = Math.max(safeLimit, 40);
+      const searchResult = await serpVectorSearch({
+        query: prompt,
+        runDate: body.runDate || undefined,
+        limit: searchLimit,
+      });
+
+      const allRows = searchResult.results;
+      const answerRows = allRows.slice(0, Math.min(20, allRows.length));
+
+      if (!allRows.length) {
+        answerText =
+          'No matching SERP rows were found for this question with the current filters. Try broadening the query or removing region/revenue filters.';
+      } else {
+        const contextLines: string[] = [];
+        contextLines.push(
+          'You are analyzing System1 SERP performance rows. Each row is a (keyword, content_slug, region) with performance metrics.',
+          'Fields: serp_keyword, content_slug, region_code, est_net_revenue, sellside_searches, sellside_clicks_network, rpc, rps, cos, finalScore.',
+          '',
+          `Top ${answerRows.length} rows (sorted by finalScore):`
+        );
+
+        for (const r of answerRows as any[]) {
+          contextLines.push(
+            [
+              `keyword="${r.serp_keyword}"`,
+              `slug="${r.content_slug}"`,
+              `region="${r.region_code}"`,
+              `revenue=${r.est_net_revenue ?? 0}`,
+              `searches=${r.sellside_searches ?? 0}`,
+              `clicks=${r.sellside_clicks_network ?? 0}`,
+              `rpc=${r.rpc ?? 0}`,
+              `rps=${r.rps ?? 0}`,
+            ].join(' | ')
+          );
+        }
+
+        const systemPrompt = [
+          'You are an optimization and market-mapping copilot for System1 SERP data.',
+          'You are given a user question and a list of SERP rows with revenue and efficiency metrics.',
+          'Your job is to answer the question using ONLY the provided rows, focusing on:',
+          '- which slugs and keywords are strongest opportunities;',
+          '- regional patterns;',
+          '- concrete next steps (e.g., which slugs/regions to prioritize).',
+          'Be concise, structured, and avoid fabricating data. If something is unknown, say so explicitly.',
+        ].join(' ');
+
+        const promptText = [
+          `User question: ${prompt}`,
+          '',
+          'Context rows:',
+          contextLines.join('\n'),
+          '',
+          'Now answer the user question. Start with a 2–3 sentence summary, then list 3–7 specific recommendations.',
+        ].join('\n');
+
+        answerText = await generateText({
+          system: systemPrompt,
+          prompt: promptText,
+          temperature: 0.2,
+          maxTokens: 300,
+        });
+      }
+    }
+
+    console.log('[s1.copilot.GET]', {
+      prompt_length: prompt.length,
+      mode: mode || 'qa_fallback',
+      answer_length: answerText.length,
+    });
+
+    res
+      .status(200)
+      .type('text/plain; charset=utf-8')
+      .send(answerText);
+  } catch (e: any) {
+    console.error('[s1.copilot.GET] Error:', e?.message || e);
+    const status = e?.statusCode && Number.isFinite(e.statusCode) ? e.statusCode : 500;
+    return res
+      .status(status)
+      .type('text/plain; charset=utf-8')
+      .send(e?.message || 'S1 copilot failed');
+  }
+});
+
+/**
  * POST /api/s1/copilot
  *
  * Text-only copilot that routes between metrics modes and SERP QA.
