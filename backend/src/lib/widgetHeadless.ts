@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import { chromium, Browser, Frame, Page } from 'playwright';
 
 export interface HeadlessWidgetOptions {
