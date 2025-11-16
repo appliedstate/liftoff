@@ -51,7 +51,7 @@ export default function S1SerpCopilotPage() {
     setResponse(null);
 
     try {
-      const body: any = {
+      const body: Record<string, unknown> = {
         query,
         runDate: runDate || undefined,
         limit,
@@ -80,8 +80,10 @@ export default function S1SerpCopilotPage() {
 
       const json = (await res.json()) as QaResponse;
       setResponse(json);
-    } catch (err: any) {
-      setError(err?.message || "Request failed");
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : err ? String(err) : "Request failed";
+      setError(message);
     } finally {
       setLoading(false);
     }

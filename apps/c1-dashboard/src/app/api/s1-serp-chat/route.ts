@@ -39,9 +39,16 @@ export async function POST(req: NextRequest) {
         ? prompt.content
         : Array.isArray(prompt.content)
         ? prompt.content
-            .map((c: any) => {
+            .map((c: unknown) => {
               if (typeof c === "string") return c;
-              if (c && typeof c.text === "string") return c.text;
+              if (
+                c &&
+                typeof c === "object" &&
+                "text" in c &&
+                typeof (c as { text?: string }).text === "string"
+              ) {
+                return (c as { text: string }).text;
+              }
               return "";
             })
             .join(" ")
@@ -55,7 +62,7 @@ export async function POST(req: NextRequest) {
     };
 
     let qaAnswer = "";
-    let qaContext: any = null;
+    let qaContext: { rows?: unknown[] } | null = null;
 
     try {
       const backendRes = await fetch(`${BACKEND_BASE}/api/s1/serp/qa`, {
@@ -82,9 +89,11 @@ export async function POST(req: NextRequest) {
           qaContext = json.context || null;
         }
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const message =
+        e instanceof Error ? e.message : e ? String(e) : "Unknown error";
       console.error("[/api/s1-serp-chat] fetch failed", e);
-      qaAnswer = `Failed to reach backend: ${e?.message || String(e)}`;
+      qaAnswer = `Failed to reach backend: ${message}`;
       qaContext = null;
     }
 
@@ -143,13 +152,13 @@ export async function POST(req: NextRequest) {
         Connection: "keep-alive",
       },
     });
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const message =
+      e instanceof Error ? e.message : e ? String(e) : "Unknown error";
     console.error("[/api/s1-serp-chat] handler error", e);
     const stream = new ReadableStream<string>({
       start(controller) {
-        controller.enqueue(
-          `Error in s1-serp-chat route: ${e?.message || String(e)}`
-        );
+        controller.enqueue(`Error in s1-serp-chat route: ${message}`);
         controller.close();
       },
     });
