@@ -36,6 +36,26 @@ type SerpMetricsInput = {
   states?: string[];
 };
 
+// Generic analytics query spec used by the S1 agent and tools.
+export type S1QueryMetric = 'total_revenue' | 'rpc' | 'rps';
+export type S1QueryGroupBy = 'slug' | 'keyword' | 'region';
+
+export type S1QuerySpec = {
+  metric: S1QueryMetric;
+  groupBy?: S1QueryGroupBy[];
+  filters?: {
+    slug?: string;
+    keyword?: string;
+    minRevenue?: number;
+    runDate?: string;
+  };
+  orderBy?: {
+    field: S1QueryMetric;
+    direction?: 'asc' | 'desc';
+  };
+  limit?: number;
+};
+
 async function resolveSerpRunDate(client: any, runDate?: string): Promise<string> {
   if (runDate) return runDate;
   const r = await client.query(
@@ -182,6 +202,149 @@ export async function runSerpMetricsQuery(input: SerpMetricsInput): Promise<{ ru
 
     const result = await client.query(sql, params);
     return { runDate: baseRunDate, rows: result.rows };
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Generic analytics query runner for S1 SERP data.
+ *
+ * This accepts a constrained S1QuerySpec and compiles it into a parametrized
+ * SQL query over serp_keyword_slug_embeddings. It is intentionally limited to:
+ * - Metrics: total_revenue, rpc, rps
+ * - Group by: slug, keyword, region
+ * - Filters: slug, keyword (ILIKE), minRevenue, runDate
+ * - Order by: one of the metric fields
+ * - Limit: 1–1000
+ */
+export async function runSerpQuerySpec(
+  input: S1QuerySpec
+): Promise<{ runDate: string; spec: S1QuerySpec; rows: any[] }> {
+  const pool = getPgPool();
+  const client = await pool.connect();
+  try {
+    const metric: S1QueryMetric = input.metric || 'total_revenue';
+    const groupBy: S1QueryGroupBy[] = input.groupBy && input.groupBy.length
+      ? Array.from(new Set(input.groupBy))
+      : [];
+
+    const filters = input.filters || {};
+    const rawLimit =
+      typeof input.limit === 'number' && Number.isFinite(input.limit)
+        ? Math.floor(input.limit)
+        : 100;
+    const safeLimit = Math.max(1, Math.min(1000, rawLimit));
+
+    // Resolve runDate if not provided, using the existing helper.
+    const baseRunDate = await resolveSerpRunDate(client, filters.runDate);
+
+    const params: any[] = [baseRunDate];
+    const where: string[] = ['run_date = $1'];
+
+    // Map groupBy fields to actual columns.
+    const groupCols: string[] = [];
+    for (const g of groupBy) {
+      if (g === 'slug') groupCols.push('content_slug');
+      if (g === 'keyword') groupCols.push('serp_keyword_norm');
+      if (g === 'region') groupCols.push('region_code');
+    }
+
+    // Filters
+    let paramIndex = params.length;
+    if (filters.slug) {
+      params.push(filters.slug.trim());
+      paramIndex += 1;
+      where.push(`content_slug = $${paramIndex}`);
+    }
+    if (filters.keyword) {
+      params.push(`%${filters.keyword.trim()}%`);
+      paramIndex += 1;
+      where.push(`serp_keyword_norm ILIKE $${paramIndex}`);
+    }
+
+    // Base metric aggregates (same as top_slugs).
+    const selectPieces: string[] = [];
+    if (groupCols.length) {
+      selectPieces.push(groupCols.join(', '));
+    }
+    selectPieces.push(
+      'SUM(COALESCE(est_net_revenue, 0)) AS total_revenue',
+      `CASE
+        WHEN SUM(COALESCE(sellside_clicks_network, 0)) > 0
+          THEN SUM(COALESCE(est_net_revenue, 0)) / SUM(COALESCE(sellside_clicks_network, 0))
+        ELSE 0
+      END AS rpc`,
+      `CASE
+        WHEN SUM(COALESCE(sellside_searches, 0)) > 0
+          THEN SUM(COALESCE(est_net_revenue, 0)) / SUM(COALESCE(sellside_searches, 0))
+        ELSE 0
+      END AS rps`
+    );
+
+    const selectClause = `SELECT ${selectPieces.join(',\n          ')}`;
+    const fromClause = 'FROM serp_keyword_slug_embeddings';
+    const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const groupClause = groupCols.length
+      ? `GROUP BY ${groupCols.join(', ')}`
+      : '';
+
+    // HAVING for minRevenue (on the aggregate total_revenue).
+    const having: string[] = [];
+    if (
+      typeof filters.minRevenue === 'number' &&
+      Number.isFinite(filters.minRevenue)
+    ) {
+      params.push(filters.minRevenue);
+      paramIndex += 1;
+      having.push(`SUM(COALESCE(est_net_revenue, 0)) >= $${paramIndex}`);
+    }
+    const havingClause = having.length ? `HAVING ${having.join(' AND ')}` : '';
+
+    // ORDER BY
+    const orderField: S1QueryMetric =
+      input.orderBy && input.orderBy.field
+        ? input.orderBy.field
+        : metric;
+    const orderDir =
+      input.orderBy && input.orderBy.direction === 'asc' ? 'ASC' : 'DESC';
+    const orderClause = `ORDER BY ${orderField} ${orderDir}`;
+
+    params.push(safeLimit);
+    paramIndex += 1;
+    const limitClause = `LIMIT $${paramIndex}`;
+
+    const sql = `
+      ${selectClause}
+      ${fromClause}
+      ${whereClause}
+      ${groupClause}
+      ${havingClause}
+      ${orderClause}
+      ${limitClause}
+    `;
+
+    const result = await client.query(sql, params);
+
+    const effectiveSpec: S1QuerySpec = {
+      metric,
+      groupBy: groupBy.length ? groupBy : undefined,
+      filters: {
+        ...filters,
+        runDate: baseRunDate,
+      },
+      orderBy: {
+        field: orderField,
+        direction: orderDir.toLowerCase() as 'asc' | 'desc',
+      },
+      limit: safeLimit,
+    };
+
+    return {
+      runDate: baseRunDate,
+      spec: effectiveSpec,
+      rows: result.rows,
+    };
   } finally {
     client.release();
   }
@@ -450,6 +613,74 @@ router.post('/serp/metrics', async (req, res) => {
     return res
       .status(status)
       .json({ error: e?.message || 'SERP metrics query failed' });
+  }
+});
+
+/**
+ * POST /api/s1/query
+ *
+ * Generic analytics query endpoint for S1 SERP data.
+ * Accepts an S1QuerySpec and returns aggregated rows plus the effective spec.
+ */
+router.post('/query', async (req, res) => {
+  try {
+    const spec = (req.body || {}) as S1QuerySpec;
+
+    if (!spec || typeof spec.metric !== 'string') {
+      return res.status(400).json({ error: 'metric is required' });
+    }
+
+    // Basic server-side validation of the spec to prevent arbitrary SQL.
+    const allowedMetrics: S1QueryMetric[] = ['total_revenue', 'rpc', 'rps'];
+    if (!allowedMetrics.includes(spec.metric)) {
+      return res
+        .status(400)
+        .json({ error: `Unsupported metric: ${spec.metric}` });
+    }
+
+    if (spec.groupBy) {
+      const allowedGroups: S1QueryGroupBy[] = ['slug', 'keyword', 'region'];
+      for (const g of spec.groupBy) {
+        if (!allowedGroups.includes(g)) {
+          return res
+            .status(400)
+            .json({ error: `Unsupported groupBy field: ${g}` });
+        }
+      }
+    }
+
+    if (spec.orderBy) {
+      if (!allowedMetrics.includes(spec.orderBy.field)) {
+        return res
+          .status(400)
+          .json({ error: `Unsupported orderBy.field: ${spec.orderBy.field}` });
+      }
+      if (
+        spec.orderBy.direction &&
+        spec.orderBy.direction !== 'asc' &&
+        spec.orderBy.direction !== 'desc'
+      ) {
+        return res
+          .status(400)
+          .json({ error: 'orderBy.direction must be "asc" or "desc"' });
+      }
+    }
+
+    const { runDate, spec: effectiveSpec, rows } = await runSerpQuerySpec(spec);
+
+    return res.status(200).json({
+      status: 'ok',
+      runDate,
+      spec: effectiveSpec,
+      rows,
+    });
+  } catch (e: any) {
+    console.error('[s1.query] Error:', e?.message || e);
+    const status =
+      e?.statusCode && Number.isFinite(e.statusCode) ? e.statusCode : 500;
+    return res
+      .status(status)
+      .json({ error: e?.message || 'SERP query failed' });
   }
 });
 

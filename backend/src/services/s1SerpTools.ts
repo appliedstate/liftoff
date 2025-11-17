@@ -1,4 +1,4 @@
-import { runSerpMetricsQuery } from "../routes/s1";
+import { runSerpMetricsQuery, runSerpQuerySpec, S1QuerySpec } from "../routes/s1";
 import { serpVectorSearch } from "../scripts/vector/search_serp";
 
 /**
@@ -67,6 +67,23 @@ export async function toolSerpSearch(query: string, limit = 50) {
   return {
     type: "qa_search",
     ...searchResult,
+  };
+}
+
+/**
+ * Tool: generic S1QuerySpec runner.
+ *
+ * This exposes a constrained analytics surface to the agent so it can
+ * ask many different questions without inventing SQL or schema.
+ */
+export async function toolRunQuerySpec(spec: S1QuerySpec) {
+  const { runDate, spec: effectiveSpec, rows } = await runSerpQuerySpec(spec);
+
+  return {
+    type: "query_spec",
+    runDate,
+    spec: effectiveSpec,
+    rows,
   };
 }
 
