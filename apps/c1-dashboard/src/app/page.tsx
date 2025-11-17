@@ -2,13 +2,13 @@
 
 import dynamic from "next/dynamic";
 
-// Render the C1 chat only on the client to avoid hydration mismatches
-const S1SerpChat = dynamic(() => import("./s1-serp-chat/page"), {
+// Render the home navigation page
+const HomePage = dynamic(() => import("./home/page"), {
   ssr: false,
 });
 
 export default function Home() {
-  return <S1SerpChat />;
+  return <HomePage />;
 }
 
 

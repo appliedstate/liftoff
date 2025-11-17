@@ -1161,10 +1161,11 @@ You are given:
 - the tool plan that was chosen
 - JSON results from that tool
 
-Use ONLY the JSON values provided to answer. Be concise and concrete.
+Use ONLY the JSON values provided to answer; do not invent data, errors, or missing parameters.
 If a total revenue value is present, state the number clearly.
-If a list of rows is present, summarize the top patterns instead of dumping the full table.
-`;
+If the user asks for "top N" items and the JSON contains at least N rows, list exactly N rows (no placeholders such as "—") in a clear, ordered format (for example, a markdown table with Rank, Slug, and the requested metrics).
+If there are fewer rows than requested, say so explicitly and list all available rows.
+Never claim that a backend error occurred unless there is an explicit "error" field in the provided JSON.`;
 
     const answerPromptParts: string[] = [
       `User question: ${query}`,

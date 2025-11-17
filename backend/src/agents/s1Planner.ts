@@ -1,16 +1,19 @@
 import { generateText } from "../lib/openai";
+import type { S1QuerySpec } from "../routes/s1";
 
 export type S1ToolName =
   | "keyword_total"
   | "top_slugs"
   | "keywords_for_slug"
   | "keyword_state_breakdown"
-  | "qa_search";
+  | "qa_search"
+  | "query_spec";
 
 export type S1Plan =
   | { tool: "keyword_total"; keyword: string }
   | { tool: "top_slugs"; limit: number }
   | { tool: "keywords_for_slug"; slug: string; limit?: number }
+  | { tool: "query_spec"; spec: S1QuerySpec }
   | { tool: "qa_search"; query: string }
   | { tool: "keyword_state_breakdown"; keyword: string; states?: string[] };
 
