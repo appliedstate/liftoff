@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     console.log("[/api/s1-serp-chat] received request body:", JSON.stringify(body, null, 2));
     
-    const { prompt } = body as {
+    const { prompt, threadId, responseId } = body as {
       prompt: {
         role?: string;
         content:
@@ -78,20 +78,22 @@ export async function POST(req: NextRequest) {
 
     // Debug override is no longer needed now that we align with the working /api/chat pattern.
 
-    // Build backend copilot request from the latest user message
+    // Build backend agent request from the latest user message
     const backendBody = {
       query: queryText,
       runDate: "2025-11-11",
       limit: 100,
+      // Pass through threadId so the backend agent can keep per-thread context
+      threadId,
     };
     
-    const backendUrl = `${BACKEND_BASE}/api/s1/copilot`;
+    const backendUrl = `${BACKEND_BASE}/api/s1/agent`;
     console.log("[/api/s1-serp-chat] calling backend:", backendUrl);
 
     let answer = "";
 
     try {
-      const backendRes = await fetch(`${BACKEND_BASE}/api/s1/copilot`, {
+      const backendRes = await fetch(backendUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(backendBody),
@@ -110,8 +112,12 @@ export async function POST(req: NextRequest) {
           text || "No response body"
         }`;
       } else {
-        answer = await backendRes.text();
-        console.log("[/api/s1-serp-chat] backend answer length:", answer.length);
+        const json = await backendRes.json().catch(async () => {
+          const text = await backendRes.text();
+          return { answer: text };
+        });
+        answer = typeof json?.answer === "string" ? json.answer : JSON.stringify(json);
+        console.log("[/api/s1-serp-chat] backend agent answer length:", answer.length);
       }
     } catch (e: unknown) {
       const message =

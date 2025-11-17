@@ -6,12 +6,27 @@ import { planS1Action, S1Plan } from '../agents/s1Planner';
 import {
   toolKeywordTotalRevenue,
   toolTopSlugs,
+  toolKeywordsForSlug,
   toolSerpSearch,
 } from '../services/s1SerpTools';
 
 const router = Router();
 
-type SerpMetricsMode = 'total_revenue' | 'top_slugs' | 'keyword_state_breakdown';
+// In-memory thread state for the S1 agent. This lets us answer follow-up
+// questions like "why only 9?" using the previous plan + toolResult.
+const s1AgentState = new Map<
+  string,
+  {
+    lastPlan: S1Plan;
+    lastToolResult: any;
+  }
+>();
+
+type SerpMetricsMode =
+  | 'total_revenue'
+  | 'top_slugs'
+  | 'keyword_state_breakdown'
+  | 'keywords_for_slug';
 
 type SerpMetricsInput = {
   mode: SerpMetricsMode;
@@ -80,6 +95,44 @@ export async function runSerpMetricsQuery(input: SerpMetricsInput): Promise<{ ru
         LIMIT $2
       `,
         [baseRunDate, safeLimit]
+      );
+      return { runDate: baseRunDate, rows: result.rows };
+    }
+
+    if (input.mode === 'keywords_for_slug') {
+      const safeLimit =
+        typeof input.limit === 'number'
+          ? Math.max(1, Math.min(1000, Math.floor(input.limit)))
+          : 100;
+
+      const slug = (input.keyword || '').trim();
+      if (!slug) {
+        throw new Error('slug (keyword field) is required for keywords_for_slug');
+      }
+
+      const result = await client.query(
+        `
+        SELECT
+          serp_keyword_norm AS serp_keyword,
+          SUM(COALESCE(est_net_revenue, 0)) AS total_revenue,
+          CASE
+            WHEN SUM(COALESCE(sellside_clicks_network, 0)) > 0
+              THEN SUM(COALESCE(est_net_revenue, 0)) / SUM(COALESCE(sellside_clicks_network, 0))
+            ELSE 0
+          END AS rpc,
+          CASE
+            WHEN SUM(COALESCE(sellside_searches, 0)) > 0
+              THEN SUM(COALESCE(est_net_revenue, 0)) / SUM(COALESCE(sellside_searches, 0))
+            ELSE 0
+          END AS rps
+        FROM serp_keyword_slug_embeddings
+        WHERE run_date = $1
+          AND content_slug = $2
+        GROUP BY serp_keyword_norm
+        ORDER BY total_revenue DESC
+        LIMIT $3
+      `,
+        [baseRunDate, slug, safeLimit]
       );
       return { runDate: baseRunDate, rows: result.rows };
     }
@@ -814,29 +867,62 @@ router.post('/copilot', async (req, res) => {
  */
 router.post('/agent', async (req, res) => {
   try {
-    const { query } = req.body || {};
+    const { query, threadId } = req.body || {};
     if (!query || typeof query !== 'string') {
       return res.status(400).json({ error: 'query is required (string)' });
     }
 
-    // 1) PLAN
-    const plan: S1Plan = await planS1Action(query);
-    console.log('[s1.agent] plan:', plan);
+    const threadKey =
+      typeof threadId === 'string' && threadId.trim().length > 0
+        ? threadId
+        : 'default';
 
-    // 2) ACT
+    // Look up previous state for this thread so the agent can reason over
+    // both the current and prior results (Cursor-style behavior).
+    const previous = s1AgentState.get(threadKey);
+
+    const qLower = query.toLowerCase();
+    const isWhyOnlyFollowup =
+      !!previous &&
+      (qLower.includes('why only') ||
+        qLower.includes('why were the first') ||
+        qLower.includes('why did we only get') ||
+        qLower.includes('why just ') ||
+        qLower.includes('why are there only'));
+
+    let plan: S1Plan;
     let toolResult: any;
-    if (plan.tool === 'keyword_total') {
-      toolResult = await toolKeywordTotalRevenue(plan.keyword);
-    } else if (plan.tool === 'top_slugs') {
-      toolResult = await toolTopSlugs(plan.limit);
-    } else if (plan.tool === 'qa_search') {
-      toolResult = await toolSerpSearch(plan.query, 50);
+
+    if (isWhyOnlyFollowup && previous) {
+      // For "why only N?" style questions, reuse the previous plan/toolResult
+      // instead of calling new tools. This lets the LLM explain based on the
+      // already-fetched data, similar to how Cursor inspects prior steps.
+      plan = previous.lastPlan;
+      toolResult = previous.lastToolResult;
+      console.log('[s1.agent] follow-up using previous plan/result for thread', threadKey);
     } else {
-      // For now, fall back to qa_search for keyword_state_breakdown
-      toolResult = await toolSerpSearch(query, 50);
+      // 1) PLAN
+      plan = await planS1Action(query);
+      console.log('[s1.agent] plan:', plan);
+
+      // 2) ACT
+      if (plan.tool === 'keyword_total') {
+        toolResult = await toolKeywordTotalRevenue(plan.keyword);
+      } else if (plan.tool === 'top_slugs') {
+        toolResult = await toolTopSlugs(plan.limit);
+      } else if (plan.tool === 'keywords_for_slug') {
+        toolResult = await toolKeywordsForSlug(
+          plan.slug,
+          typeof plan.limit === 'number' ? plan.limit : 50
+        );
+      } else if (plan.tool === 'qa_search') {
+        toolResult = await toolSerpSearch(plan.query, 50);
+      } else {
+        // For now, fall back to qa_search for keyword_state_breakdown or unknown tools
+        toolResult = await toolSerpSearch(query, 50);
+      }
     }
 
-    // 3) ANSWER
     const system = `
 You are a System1 SERP analytics copilot.
 You are given:
@@ -849,17 +935,44 @@ If a total revenue value is present, state the number clearly.
 If a list of rows is present, summarize the top patterns instead of dumping the full table.
 `;
 
-    const answerPrompt = [
+    const answerPromptParts: string[] = [
       `User question: ${query}`,
       '',
+    ];
+
+    if (previous) {
+      answerPromptParts.push(
+        'Previous tool plan JSON:',
+        JSON.stringify(previous.lastPlan, null, 2),
+        '',
+        'Previous tool result JSON:',
+        JSON.stringify(previous.lastToolResult, null, 2),
+        '',
+      );
+    }
+
+    answerPromptParts.push(
       'Tool plan JSON:',
       JSON.stringify(plan, null, 2),
       '',
       'Tool result JSON:',
       JSON.stringify(toolResult, null, 2),
       '',
-      "Now answer the user's question clearly, using the numbers from the JSON.",
-    ].join('\n');
+    );
+
+    if (isWhyOnlyFollowup) {
+      answerPromptParts.push(
+        'The user is asking why only a certain number of items appeared in the previous results.',
+        'Explain the likely reasons based on the JSON (for example: explicit limits, filters, or data availability).',
+        'Do NOT invent backend errors or missing parameters unless they are explicitly present in the JSON.'
+      );
+    } else {
+      answerPromptParts.push(
+        "Now answer the user's question clearly, using the numbers from the JSON.",
+      );
+    }
+
+    const answerPrompt = answerPromptParts.join('\n');
 
     const answer = await generateText({
       system,
@@ -867,6 +980,9 @@ If a list of rows is present, summarize the top patterns instead of dumping the 
       temperature: 0.2,
       maxTokens: 400,
     });
+
+    // Update thread state so future follow-ups can reference this result.
+    s1AgentState.set(threadKey, { lastPlan: plan, lastToolResult: toolResult });
 
     return res.status(200).json({
       status: 'ok',

@@ -37,6 +37,25 @@ export async function toolTopSlugs(limit = 100) {
 }
 
 /**
+ * Tool: top keywords for a given slug by revenue (with RPC/RPS).
+ */
+export async function toolKeywordsForSlug(slug: string, limit = 50) {
+  const { runDate, rows } = await runSerpMetricsQuery({
+    mode: "keywords_for_slug",
+    keyword: slug,
+    limit,
+  });
+
+  return {
+    type: "keywords_for_slug",
+    slug,
+    runDate,
+    limit,
+    rows,
+  };
+}
+
+/**
  * Tool: generic SERP vector search.
  */
 export async function toolSerpSearch(query: string, limit = 50) {
