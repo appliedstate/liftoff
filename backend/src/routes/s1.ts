@@ -27,7 +27,7 @@ async function resolveSerpRunDate(client: any, runDate?: string): Promise<string
   return inferred;
 }
 
-async function runSerpMetricsQuery(input: SerpMetricsInput): Promise<{ runDate: string; rows: any[] }> {
+export async function runSerpMetricsQuery(input: SerpMetricsInput): Promise<{ runDate: string; rows: any[] }> {
   const pool = getPgPool();
   const client = await pool.connect();
   try {
@@ -56,7 +56,17 @@ async function runSerpMetricsQuery(input: SerpMetricsInput): Promise<{ runDate: 
         `
         SELECT
           content_slug,
-          SUM(COALESCE(est_net_revenue, 0)) AS total_revenue
+          SUM(COALESCE(est_net_revenue, 0)) AS total_revenue,
+          CASE
+            WHEN SUM(COALESCE(sellside_clicks_network, 0)) > 0
+              THEN SUM(COALESCE(est_net_revenue, 0)) / SUM(COALESCE(sellside_clicks_network, 0))
+            ELSE 0
+          END AS rpc,
+          CASE
+            WHEN SUM(COALESCE(sellside_searches, 0)) > 0
+              THEN SUM(COALESCE(est_net_revenue, 0)) / SUM(COALESCE(sellside_searches, 0))
+            ELSE 0
+          END AS rps
         FROM serp_keyword_slug_embeddings
         WHERE run_date = $1
         GROUP BY content_slug
@@ -414,16 +424,40 @@ router.get('/copilot', async (req, res) => {
     const qLower = prompt.toLowerCase();
     let mode: SerpMetricsMode | null = null;
 
-    if (qLower.includes('total revenue')) {
-      mode = 'total_revenue';
-    } else if (qLower.includes('top slugs') || (qLower.includes('slugs') && qLower.includes('revenue'))) {
-      mode = 'top_slugs';
-    } else if (
+    const hasTotalRevenue = qLower.includes('total revenue');
+    const hasTopWord =
+      qLower.includes('top ') ||
+      qLower.includes('top-') ||
+      qLower.includes('top_') ||
+      qLower.includes('highest') ||
+      qLower.includes('biggest') ||
+      qLower.includes('best');
+    const hasSlugLikeWord =
+      qLower.includes('slugs') ||
+      qLower.includes('slug ') ||
+      qLower.includes('articles') ||
+      qLower.includes('article ') ||
+      qLower.includes('pages') ||
+      qLower.includes('page ') ||
+      qLower.includes('content');
+    const mentionsRevenue = qLower.includes('revenue');
+    const mentionsRpcOrRps =
+      qLower.includes('rpc') || qLower.includes('rps') || qLower.includes('rev / click');
+
+    const wantsKeywordState =
       qLower.includes('by state') ||
       qLower.includes('for state') ||
-      qLower.includes('for keyword')
-    ) {
+      qLower.includes('for keyword');
+
+    const wantsTopSlugs =
+      (hasTopWord && hasSlugLikeWord && mentionsRevenue) || mentionsRpcOrRps;
+
+    if (wantsKeywordState) {
       mode = 'keyword_state_breakdown';
+    } else if (wantsTopSlugs) {
+      mode = 'top_slugs';
+    } else if (hasTotalRevenue) {
+      mode = 'total_revenue';
     }
 
     let answerText: string;
@@ -580,16 +614,40 @@ router.post('/copilot', async (req, res) => {
     const qLower = query.toLowerCase();
     let mode: SerpMetricsMode | null = null;
 
-    if (qLower.includes('total revenue')) {
-      mode = 'total_revenue';
-    } else if (qLower.includes('top slugs') || (qLower.includes('slugs') && qLower.includes('revenue'))) {
-      mode = 'top_slugs';
-    } else if (
+    const hasTotalRevenue = qLower.includes('total revenue');
+    const hasTopWord =
+      qLower.includes('top ') ||
+      qLower.includes('top-') ||
+      qLower.includes('top_') ||
+      qLower.includes('highest') ||
+      qLower.includes('biggest') ||
+      qLower.includes('best');
+    const hasSlugLikeWord =
+      qLower.includes('slugs') ||
+      qLower.includes('slug ') ||
+      qLower.includes('articles') ||
+      qLower.includes('article ') ||
+      qLower.includes('pages') ||
+      qLower.includes('page ') ||
+      qLower.includes('content');
+    const mentionsRevenue = qLower.includes('revenue');
+    const mentionsRpcOrRps =
+      qLower.includes('rpc') || qLower.includes('rps') || qLower.includes('rev / click');
+
+    const wantsKeywordState =
       qLower.includes('by state') ||
       qLower.includes('for state') ||
-      qLower.includes('for keyword')
-    ) {
+      qLower.includes('for keyword');
+
+    const wantsTopSlugs =
+      (hasTopWord && hasSlugLikeWord && mentionsRevenue) || mentionsRpcOrRps;
+
+    if (wantsKeywordState) {
       mode = 'keyword_state_breakdown';
+    } else if (wantsTopSlugs) {
+      mode = 'top_slugs';
+    } else if (hasTotalRevenue) {
+      mode = 'total_revenue';
     }
 
     let answerText: string;
