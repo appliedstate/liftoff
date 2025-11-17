@@ -1103,6 +1103,8 @@ router.post('/agent', async (req, res) => {
       return res.status(400).json({ error: 'query is required (string)' });
     }
 
+    const startedAt = Date.now();
+
     const threadKey =
       typeof threadId === 'string' && threadId.trim().length > 0
         ? threadId
@@ -1134,7 +1136,34 @@ router.post('/agent', async (req, res) => {
     } else {
       // 1) PLAN
       plan = await planS1Action(query);
-      console.log('[s1.agent] plan:', plan);
+      console.log('[s1.agent] plan_selected', {
+        threadKey,
+        query_len: query.length,
+        tool: plan.tool,
+        // Log only high-level params to avoid leaking PII
+        params:
+          plan.tool === 'top_slugs'
+            ? { limit: plan.limit }
+            : plan.tool === 'keywords_for_slug'
+            ? { slug: plan.slug, limit: plan.limit ?? 50 }
+            : plan.tool === 'keyword_total'
+            ? { keyword_len: plan.keyword.length }
+            : plan.tool === 'keyword_state_breakdown'
+            ? {
+                keyword_len: plan.keyword.length,
+                states: Array.isArray(plan.states) ? plan.states : undefined,
+              }
+            : plan.tool === 'qa_search'
+            ? { query_len: plan.query.length }
+            : plan.tool === 'query_spec'
+            ? {
+                metric: plan.spec.metric,
+                groupBy: plan.spec.groupBy,
+                hasFilters: !!plan.spec.filters,
+                limit: plan.spec.limit,
+              }
+            : undefined,
+      });
 
       // 2) ACT
       if (plan.tool === 'keyword_total') {
@@ -1154,6 +1183,49 @@ router.post('/agent', async (req, res) => {
       }
     }
 
+    // Compute summary stats for logging without leaking raw rows
+    let rowCount: number | null = null;
+    let revenueMin: number | null = null;
+    let revenueMax: number | null = null;
+
+    const rows: any[] | null = Array.isArray((toolResult as any)?.rows)
+      ? (toolResult as any).rows
+      : Array.isArray((toolResult as any)?.results)
+      ? (toolResult as any).results
+      : null;
+
+    if (rows) {
+      rowCount = rows.length;
+      for (const r of rows) {
+        const revenueRaw =
+          r.total_revenue ??
+          r.est_net_revenue ??
+          r.revenue ??
+          r.totalRevenue ??
+          null;
+        const revenue = typeof revenueRaw === 'string' ? Number(revenueRaw) : revenueRaw;
+        if (typeof revenue === 'number' && Number.isFinite(revenue)) {
+          if (revenueMin === null || revenue < revenueMin) revenueMin = revenue;
+          if (revenueMax === null || revenue > revenueMax) revenueMax = revenue;
+        }
+      }
+    }
+
+    const tTotalMs = Date.now() - startedAt;
+
+    console.log('[s1.agent] tool_result_summary', {
+      threadKey,
+      tool: plan.tool,
+      type: (toolResult as any)?.type,
+      is_followup: isWhyOnlyFollowup,
+      rows: rowCount,
+      revenue_min: revenueMin,
+      revenue_max: revenueMax,
+      t_total_ms: tTotalMs,
+    });
+
+    const wantsTable = /\btable\b/i.test(query);
+
     const system = `
 You are a System1 SERP analytics copilot.
 You are given:
@@ -1165,7 +1237,10 @@ Use ONLY the JSON values provided to answer; do not invent data, errors, or miss
 If a total revenue value is present, state the number clearly.
 If the user asks for "top N" items and the JSON contains at least N rows, list exactly N rows (no placeholders such as "—") in a clear, ordered format (for example, a markdown table with Rank, Slug, and the requested metrics).
 If there are fewer rows than requested, say so explicitly and list all available rows.
-Never claim that a backend error occurred unless there is an explicit "error" field in the provided JSON.`;
+Never claim that a backend error occurred unless there is an explicit "error" field in the provided JSON.
+Never use placeholder characters like em-dashes in place of real rows; if data is missing, explain it in plain text instead.
+When you present tabular results, always use a standard markdown table (pipes and header row) and do NOT emit any custom UI or C1 components.
+If the plan.tool is "top_slugs" or "keywords_for_slug" and the user requested a table, your primary output should be a markdown table built directly from the JSON rows in descending order of revenue, followed by a short text summary.`;
 
     const answerPromptParts: string[] = [
       `User question: ${query}`,
@@ -1199,6 +1274,30 @@ Never claim that a backend error occurred unless there is an explicit "error" fi
         'Do NOT invent backend errors or missing parameters unless they are explicitly present in the JSON.'
       );
     } else {
+      if (wantsTable && rows) {
+        if (plan.tool === 'keywords_for_slug') {
+          answerPromptParts.push(
+            'The user asked for the top revenue-producing keywords for a specific slug and explicitly requested a table.',
+            'Using ONLY the JSON rows (each row representing a keyword with total_revenue, rpc, and rps), produce a markdown table with columns: Rank, Keyword, Total Revenue, RPC, RPS.',
+            'Sort the table in descending order of total revenue, using the order provided in the JSON if it is already sorted.',
+            'Do not add or synthesize any rows that are not present in the JSON.'
+          );
+        } else if (plan.tool === 'top_slugs') {
+          answerPromptParts.push(
+            'The user asked for the top slugs by revenue and requested a table.',
+            'Using ONLY the JSON rows (each row representing a slug with total_revenue, rpc, and rps), produce a markdown table with columns: Rank, Slug, Total Revenue, RPC, RPS.',
+            'Sort the table in descending order of total revenue, using the order provided in the JSON if it is already sorted.',
+            'Do not add or synthesize any rows that are not present in the JSON.'
+          );
+        } else {
+          answerPromptParts.push(
+            'The user requested that results be displayed in a table.',
+            'If the JSON rows naturally form a list of items, render them as a markdown table using only fields that exist in the JSON.',
+            'Do not add or synthesize any rows or columns that are not present in the JSON.'
+          );
+        }
+      }
+
       answerPromptParts.push(
         "Now answer the user's question clearly, using the numbers from the JSON.",
       );

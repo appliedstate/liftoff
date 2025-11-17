@@ -44,6 +44,7 @@
     "system1:analyze": "ts-node src/scripts/analyzeSystem1.ts",
     "s1:intake": "ts-node src/scripts/s1Intake.ts",
     "slugs:top-rpc-rps": "ts-node src/scripts/vector/top_slugs_by_rpc_rps.ts",
+    "test:s1-agent": "ts-node src/scripts/testS1Agent.ts",
     "reports:keywords-daily": "ts-node src/scripts/system1/keywords_daily_viz.ts --end 2025-11-08 --days 2",
     "test:slug-connections": "ts-node src/scripts/testSlugConnections.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
