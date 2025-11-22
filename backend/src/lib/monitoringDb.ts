@@ -23,7 +23,10 @@ export function runSql(conn: duckdb.Connection, sql: string): Promise<void> {
 
 export function allRows<T = any>(conn: duckdb.Connection, sql: string): Promise<T[]> {
   return new Promise((resolve, reject) => {
-    conn.all(sql, (err: Error | null, rows: T[]) => (err ? reject(err) : resolve(rows)));
+    (conn as any).all(sql, (err: Error | null, rows: T[]) => {
+      if (err) return reject(err);
+      resolve(rows);
+    });
   });
 }
 
