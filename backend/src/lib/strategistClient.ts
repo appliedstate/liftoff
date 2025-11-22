@@ -41,6 +41,10 @@ export class StrategistClient {
     this.http = axios.create({
       baseURL: this.apiBaseUrl,
       timeout: 120000,
+      httpsAgent:
+        process.env.STRATEGIST_ALLOW_SELF_SIGNED === '1'
+          ? new (require('https').Agent)({ rejectUnauthorized: false })
+          : undefined,
     });
   }
 
