@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { serpVectorSearch } from '../scripts/vector/search_serp';
 import { generateText } from '../lib/openai';
 import { getPgPool } from '../lib/pg';
-import { planS1Action, S1Plan } from '../agents/s1Planner';
+import { planS1Action, S1Plan, S1WorkflowStep, S1WorkflowWiring } from '../agents/s1Planner';
 import {
   toolKeywordTotalRevenue,
   toolTopSlugs,
@@ -1162,6 +1162,11 @@ router.post('/agent', async (req, res) => {
                 hasFilters: !!plan.spec.filters,
                 limit: plan.spec.limit,
               }
+            : plan.tool === 'workflow'
+            ? {
+                steps: Array.isArray(plan.steps) ? plan.steps.map((s: S1WorkflowStep) => s.id) : [],
+                primaryStepId: plan.primaryStepId,
+              }
             : undefined,
       });
 
@@ -1177,6 +1182,79 @@ router.post('/agent', async (req, res) => {
         );
       } else if (plan.tool === 'qa_search') {
         toolResult = await toolSerpSearch(plan.query, 50);
+      } else if (plan.tool === 'workflow') {
+        const workflowPlan = plan;
+        const stepResults: Record<
+          string,
+          { kind: string; mode?: string; runDate?: string; rows?: any[]; spec?: S1QuerySpec }
+        > = {};
+
+        const wiring: S1WorkflowWiring | undefined = workflowPlan.wiring;
+
+        for (const step of workflowPlan.steps) {
+          const id = step.id;
+
+          // Start with any static params/spec defined on the step.
+          let stepParams: any = {};
+          if (step.kind === 'metrics') {
+            stepParams = { ...(step.params || {}) };
+          }
+
+          // Apply wiring (e.g., slug from previous step's top row).
+          if (wiring && wiring[id]) {
+            const wiringForStep = wiring[id];
+            for (const [paramName, source] of Object.entries(wiringForStep)) {
+              const sourceResult = stepResults[source.fromStepId];
+              if (!sourceResult) {
+                throw new Error(
+                  `Workflow wiring error: step "${id}" depends on "${source.fromStepId}" which has no result`
+                );
+              }
+              let value: any = undefined;
+              if (Array.isArray(sourceResult.rows) && sourceResult.rows.length > 0) {
+                const row0 = sourceResult.rows[0] as any;
+                if (row0 && Object.prototype.hasOwnProperty.call(row0, source.field)) {
+                  value = row0[source.field];
+                }
+              }
+              if (value === undefined && (sourceResult as any)[source.field] !== undefined) {
+                value = (sourceResult as any)[source.field];
+              }
+              stepParams[paramName] = value;
+            }
+          }
+
+          if (step.kind === 'metrics') {
+            const metricsResult = await runSerpMetricsQuery({
+              mode: step.mode as SerpMetricsMode,
+              runDate: undefined,
+              limit: stepParams.limit,
+              keyword: stepParams.keyword,
+              states: stepParams.states,
+            } as SerpMetricsInput);
+            stepResults[id] = {
+              kind: 'metrics',
+              mode: step.mode,
+              runDate: metricsResult.runDate,
+              rows: metricsResult.rows,
+            };
+          } else if (step.kind === 'query_spec') {
+            const specResult = await runSerpQuerySpec(step.spec);
+            stepResults[id] = {
+              kind: 'query_spec',
+              runDate: specResult.runDate,
+              spec: specResult.spec,
+              rows: specResult.rows,
+            };
+          }
+        }
+
+        const primaryId = workflowPlan.primaryStepId || workflowPlan.steps[workflowPlan.steps.length - 1]?.id;
+        toolResult = {
+          type: 'workflow',
+          primaryStepId: primaryId,
+          steps: stepResults,
+        };
       } else {
         // For now, fall back to qa_search for keyword_state_breakdown or unknown tools
         toolResult = await toolSerpSearch(query, 50);
@@ -1188,11 +1266,20 @@ router.post('/agent', async (req, res) => {
     let revenueMin: number | null = null;
     let revenueMax: number | null = null;
 
-    const rows: any[] | null = Array.isArray((toolResult as any)?.rows)
-      ? (toolResult as any).rows
-      : Array.isArray((toolResult as any)?.results)
-      ? (toolResult as any).results
-      : null;
+    let rows: any[] | null = null;
+    if (Array.isArray((toolResult as any)?.rows)) {
+      rows = (toolResult as any).rows;
+    } else if (Array.isArray((toolResult as any)?.results)) {
+      rows = (toolResult as any).results;
+    } else if (
+      (toolResult as any)?.type === 'workflow' &&
+      (toolResult as any)?.primaryStepId &&
+      (toolResult as any)?.steps &&
+      (toolResult as any).steps[(toolResult as any).primaryStepId] &&
+      Array.isArray((toolResult as any).steps[(toolResult as any).primaryStepId].rows)
+    ) {
+      rows = (toolResult as any).steps[(toolResult as any).primaryStepId].rows;
+    }
 
     if (rows) {
       rowCount = rows.length;
@@ -1240,7 +1327,8 @@ If there are fewer rows than requested, say so explicitly and list all available
 Never claim that a backend error occurred unless there is an explicit "error" field in the provided JSON.
 Never use placeholder characters like em-dashes in place of real rows; if data is missing, explain it in plain text instead.
 When you present tabular results, always use a standard markdown table (pipes and header row) and do NOT emit any custom UI or C1 components.
-If the plan.tool is "top_slugs" or "keywords_for_slug" and the user requested a table, your primary output should be a markdown table built directly from the JSON rows in descending order of revenue, followed by a short text summary.`;
+If the toolResult.type is "workflow", you may have multiple step results; focus on the step identified by toolResult.primaryStepId for the main answer, and use other steps only as supporting context.
+If the active step is a "top_slugs" or "keywords_for_slug" style metrics result and the user requested a table, your primary output should be a markdown table built directly from that step's JSON rows in descending order of revenue, followed by a short text summary.`;
 
     const answerPromptParts: string[] = [
       `User question: ${query}`,
@@ -1275,14 +1363,29 @@ If the plan.tool is "top_slugs" or "keywords_for_slug" and the user requested a 
       );
     } else {
       if (wantsTable && rows) {
-        if (plan.tool === 'keywords_for_slug') {
+        const workflowPrimary =
+          (toolResult as any)?.type === 'workflow' &&
+          (toolResult as any)?.primaryStepId &&
+          (toolResult as any)?.steps
+            ? (toolResult as any).steps[(toolResult as any).primaryStepId]
+            : null;
+        const activeMode: string | null =
+          plan.tool === 'keywords_for_slug'
+            ? 'keywords_for_slug'
+            : plan.tool === 'top_slugs'
+            ? 'top_slugs'
+            : workflowPrimary && workflowPrimary.kind === 'metrics'
+            ? workflowPrimary.mode
+            : null;
+
+        if (activeMode === 'keywords_for_slug') {
           answerPromptParts.push(
             'The user asked for the top revenue-producing keywords for a specific slug and explicitly requested a table.',
             'Using ONLY the JSON rows (each row representing a keyword with total_revenue, rpc, and rps), produce a markdown table with columns: Rank, Keyword, Total Revenue, RPC, RPS.',
             'Sort the table in descending order of total revenue, using the order provided in the JSON if it is already sorted.',
             'Do not add or synthesize any rows that are not present in the JSON.'
           );
-        } else if (plan.tool === 'top_slugs') {
+        } else if (activeMode === 'top_slugs') {
           answerPromptParts.push(
             'The user asked for the top slugs by revenue and requested a table.',
             'Using ONLY the JSON rows (each row representing a slug with total_revenue, rpc, and rps), produce a markdown table with columns: Rank, Slug, Total Revenue, RPC, RPS.',

@@ -102,3 +102,4 @@ The `c1-dashboard` app exposes a C1 page for docs QA:
 The `/api/docs-chat` Next route calls `/api/docs/qa`, formats the answer and sources as a C1 `TextContent` component, and streams a single `<content thesys="true">...</content>` block back to the `C1Chat` client.
 
 
+

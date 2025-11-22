@@ -340,3 +340,4 @@ As of the last session:
 Use this runbook as the source of truth for how to run, debug, and extend the S1 SERP copilot. When you make significant changes (e.g., new endpoints, env vars, deployment changes), update this file so the next agent has an accurate map of the system. 
 
 
+

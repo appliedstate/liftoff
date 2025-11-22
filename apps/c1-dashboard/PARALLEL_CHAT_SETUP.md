@@ -124,3 +124,4 @@ NEXT_PUBLIC_SERVICE_URL=http://localhost:3001
 
 The analytics-chat implementation does NOT interfere with s1-serp-chat in any way.
 
+

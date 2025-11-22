@@ -7,7 +7,34 @@ export type S1ToolName =
   | "keywords_for_slug"
   | "keyword_state_breakdown"
   | "qa_search"
-  | "query_spec";
+  | "query_spec"
+  | "workflow";
+
+export type S1WorkflowStep =
+  | {
+      id: string;
+      kind: "metrics";
+      mode: "top_slugs" | "keywords_for_slug" | "keyword_state_breakdown";
+      params?: {
+        limit?: number;
+        keyword?: string;
+        states?: string[];
+      };
+    }
+  | {
+      id: string;
+      kind: "query_spec";
+      spec: S1QuerySpec;
+    };
+
+export type S1WorkflowWiring = {
+  [stepId: string]: {
+    [paramName: string]: {
+      fromStepId: string;
+      field: string;
+    };
+  };
+};
 
 export type S1Plan =
   | { tool: "keyword_total"; keyword: string }
@@ -15,7 +42,13 @@ export type S1Plan =
   | { tool: "keywords_for_slug"; slug: string; limit?: number }
   | { tool: "query_spec"; spec: S1QuerySpec }
   | { tool: "qa_search"; query: string }
-  | { tool: "keyword_state_breakdown"; keyword: string; states?: string[] };
+  | { tool: "keyword_state_breakdown"; keyword: string; states?: string[] }
+  | {
+      tool: "workflow";
+      steps: S1WorkflowStep[];
+      wiring?: S1WorkflowWiring;
+      primaryStepId?: string;
+    };
 
 /**
  * Cheap heuristic routing for the most common intents.
@@ -62,8 +95,8 @@ function heuristicPlan(userQuestion: string): S1Plan | null {
     return null;
   }
 
-  // Top keywords for a specific slug, e.g.
-  // "top revenue producing keywords for careers/exploring-careers-in-home-repair-and-contracting-en-us/"
+  // Pattern A: "top keywords for <slug>" – direct keywords_for_slug tool
+  // Example: "top revenue producing keywords for careers/exploring-careers-in-home-repair-and-contracting-en-us/"
   const mentionsKeywords = qLower.includes("keyword");
   const hasForClause = qLower.includes(" for ");
   if (mentionsKeywords && hasForClause) {
@@ -76,6 +109,45 @@ function heuristicPlan(userQuestion: string): S1Plan | null {
         : 50;
       return { tool: "keywords_for_slug", slug, limit };
     }
+  }
+
+  // Pattern B: multi-step "top keywords for the slug with the highest revenue"
+  // Example: "What are the top 5 keywords by revenue for the slug with the highest estimated net revenue in the database"
+  const mentionsHighestSlug =
+    hasSlugLikeWord &&
+    (qLower.includes("highest estimated net revenue") ||
+      qLower.includes("highest revenue") ||
+      qLower.includes("highest est_net_revenue") ||
+      qLower.includes("max revenue"));
+  if (mentionsKeywords && mentionsHighestSlug && hasTopWord) {
+    const limitMatch = qLower.match(/top\s+(\d+)/);
+    const keywordLimit = limitMatch
+      ? Math.min(1000, Math.max(1, parseInt(limitMatch[1], 10)))
+      : 5;
+
+    return {
+      tool: "workflow",
+      steps: [
+        {
+          id: "topSlug",
+          kind: "metrics",
+          mode: "top_slugs",
+          params: { limit: 1 },
+        },
+        {
+          id: "topKeywords",
+          kind: "metrics",
+          mode: "keywords_for_slug",
+          params: { limit: keywordLimit },
+        },
+      ],
+      wiring: {
+        topKeywords: {
+          keyword: { fromStepId: "topSlug", field: "content_slug" },
+        },
+      },
+      primaryStepId: "topKeywords",
+    };
   }
 
   if (wantsTopSlugs) {
