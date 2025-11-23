@@ -138,10 +138,39 @@ Based on server logs:
 3. **Verify parameter names** - Some endpoints use `dimension` (singular), others use `dimensions` (plural)
 4. **Contact Devin** if endpoints are consistently failing - may need to adjust endpoint URLs or parameters
 
-## Resilience
+## Resilience & Monitoring (Devin's Recommendations Implemented)
+
+The ingestion pipeline now includes:
+
+### 1. Retry Logic
+- **Automatic retries** with exponential backoff for transient failures (502, 503, 504, 408)
+- **3 retries** for critical endpoints, **2 retries** for optional endpoints
+- Prevents false failures from temporary API outages
+
+### 2. Data Quality Checks
+- **Row count validation**: Warns if row count is <50% of 7-day average
+- **Required field checks**: Validates campaign IDs are present
+- **Financial indicators**: Tracks whether endpoints return revenue/spend data
+
+### 3. Completeness Tracking
+- **`endpoint_completeness` table**: Tracks status (OK/PARTIAL/FAILED) per endpoint/date/platform
+- **Retry counts**: Records how many retries were attempted
+- **Error messages**: Stores detailed error information for debugging
+- **Expected vs actual**: Compares row counts to historical averages
+
+### 4. Alerting Strategy
+- **Critical failures**: Fail entire pipeline (S1 daily/reconciled)
+- **Platform-critical**: Log warnings, continue pipeline (Facebook, major spend sources)
+- **Optional**: Log warnings, continue pipeline (small platforms)
+
+### 5. Partial Data Signaling
+- Completeness table allows downstream systems to detect incomplete data
+- Can query `endpoint_completeness` to see which platforms have missing spend data
+- Enables accurate ROI reporting by flagging incomplete cost data
 
 The ingestion pipeline is designed to be resilient:
 - **Critical endpoints** (S1 daily/reconciled) fail fast - ensures we always have revenue data
 - **Optional endpoints** (platform spend) log warnings but continue - ensures we get partial data even if some platforms are down
 - **Revenue data** is always captured (from S1) even if spend data fails
+- **Completeness tracking** enables backfill and data quality monitoring
 
