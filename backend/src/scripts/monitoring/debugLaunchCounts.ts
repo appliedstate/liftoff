@@ -155,18 +155,54 @@ async function main() {
       console.log(`\nTotal campaigns with duplicates: ${Number(totalDuplicates[0]?.count || 0)}`);
     }
     
-    // Check what DISTINCT would return
-    const distinctCampaigns = await allRows(
+    // Check what GROUP BY would return (the fixed version)
+    const groupByCampaigns = await allRows(
       conn,
-      `SELECT COUNT(DISTINCT campaign_id) as count
+      `SELECT COUNT(*) as count
+      FROM (
+        SELECT campaign_id
+        FROM campaign_index
+        WHERE date = '${date}'
+          AND campaign_id IS NOT NULL
+          AND campaign_id != ''
+        GROUP BY campaign_id
+      )`
+    );
+    
+    console.log(`\n## What Fixed trackCampaignLaunches Would See\n`);
+    console.log(`GROUP BY campaign_id count: ${Number(groupByCampaigns[0]?.count || 0)}`);
+    
+    // Check if campaign_index has data for multiple dates (maybe backfill ran incorrectly)
+    const dateRange = await allRows(
+      conn,
+      `SELECT 
+        MIN(date) as earliest,
+        MAX(date) as latest,
+        COUNT(DISTINCT date) as unique_dates
       FROM campaign_index
-      WHERE date = '${date}'
-        AND campaign_id IS NOT NULL
+      WHERE campaign_id IS NOT NULL
         AND campaign_id != ''`
     );
     
-    console.log(`\n## What trackCampaignLaunches Would See\n`);
-    console.log(`DISTINCT campaign_id count: ${Number(distinctCampaigns[0]?.count || 0)}`);
+    console.log(`\n## campaign_index Date Range\n`);
+    const dateRangeRow = dateRange[0];
+    console.log(`Earliest date: ${dateRangeRow.earliest || 'N/A'}`);
+    console.log(`Latest date: ${dateRangeRow.latest || 'N/A'}`);
+    console.log(`Unique dates: ${Number(dateRangeRow.unique_dates || 0)}`);
+    
+    // Check if all campaigns in campaign_launches have the same first_seen_date
+    const allSameDate = await allRows(
+      conn,
+      `SELECT 
+        COUNT(DISTINCT first_seen_date) as unique_dates
+      FROM campaign_launches`
+    );
+    
+    if (Number(allSameDate[0]?.unique_dates || 0) === 1) {
+      console.log(`\n⚠️  WARNING: All campaigns in campaign_launches have the same first_seen_date!`);
+      console.log(`   This suggests the backfill may have run incorrectly.`);
+      console.log(`   Consider resetting and re-running backfill.`);
+    }
     
     console.log('\n');
   } catch (err: any) {
