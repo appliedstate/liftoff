@@ -43,6 +43,7 @@
     "monitor:ingest-campaigns": "ts-node src/scripts/monitoring/ingestCampaignIndex.ts",
     "monitor:ingest-sessions": "ts-node src/scripts/monitoring/ingestSessionMetrics.ts",
     "monitor:verify": "ts-node src/scripts/monitoring/verifyData.ts",
+    "monitor:explore": "ts-node src/scripts/monitoring/exploreData.ts",
     "index:now": "ts-node src/scripts/indexNow.ts",
     "system1:analyze": "ts-node src/scripts/analyzeSystem1.ts",
     "s1:intake": "ts-node src/scripts/s1Intake.ts",
