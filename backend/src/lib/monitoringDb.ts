@@ -62,6 +62,8 @@ export async function initMonitoringSchema(conn: duckdb.Connection): Promise<voi
       lane TEXT,
       category TEXT,
       media_source TEXT,
+      rsoc_site TEXT,
+      s1_google_account TEXT,
       spend_usd DOUBLE,
       revenue_usd DOUBLE,
       sessions DOUBLE,

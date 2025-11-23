@@ -17,6 +17,26 @@ We're currently hitting **Facebook-specific endpoints** (`/api/facebook/report`,
 
 ## Questions for Devin
 
+### 0. RSOC Site & S1 Google AdSense Account Mapping
+
+**Q0.1**: We're extracting `rsocSite` from S1 daily reports - is this the correct field name?
+- Field appears as `rsocSite` in S1 daily response
+- We need to map `rsocSite` → S1 Google AdSense Account (see attached mapping table)
+
+**Q0.2**: Is the site → S1 Google Account mapping static, or does it change over time?
+- Should we maintain this as a hardcoded mapping table in code?
+- Or is there an API endpoint that returns this mapping?
+- Or is it stored in a database we can query?
+
+**Q0.3**: How do we query revenue by S1 Google AdSense Account?
+- Can we filter S1 daily reports by `rsocSite`?
+- Or do we need to aggregate after ingestion using the mapping table?
+- Is there a direct field in S1 reports that identifies the AdSense account?
+
+**Q0.4**: Are there other sites beyond the 11 listed in the mapping table?
+- Should we expect new sites to be added?
+- How do we discover new site → account mappings?
+
 ### 1. Campaign Metadata (Owner, Lane, Category, Media Source)
 
 **Q1.1**: What Strategis API endpoint returns campaign metadata (owner, lane, category, media_source) for **ALL campaigns** regardless of platform?
@@ -37,6 +57,10 @@ We're currently hitting **Facebook-specific endpoints** (`/api/facebook/report`,
 **Q1.3**: For campaigns that exist in S1 revenue data but don't have metadata in Strategis, how do we identify which platform they're from?
 - Does S1 hourly/daily data include `source` or `networkName` fields?
 - Is there a campaign_id → platform mapping table?
+
+**Q1.4**: We're extracting `rsocSite` from S1 daily - does this field exist in S1 hourly reports as well?
+- Need to map site → S1 Google Account for revenue attribution
+- Want to query revenue by AdSense account
 
 ### 2. Spend Data for Non-Facebook Platforms
 

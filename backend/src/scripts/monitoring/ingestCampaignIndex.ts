@@ -18,6 +18,8 @@ type CampaignRecordInput = {
   lane?: string | null;
   category?: string | null;
   mediaSource?: string | null;
+  rsocSite?: string | null;
+  s1GoogleAccount?: string | null;
   spendUsd?: number | null;
   revenueUsd?: number | null;
   sessions?: number | null;
@@ -36,6 +38,32 @@ function getFlag(name: string, def?: string): string {
 
 function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Maps rsocSite to S1 Google AdSense Account
+ * Based on the site → S1 Google Account mapping table
+ */
+function mapRsocSiteToS1GoogleAccount(rsocSite: string | null | undefined): string | null {
+  if (!rsocSite) return null;
+  const site = String(rsocSite).toLowerCase().trim();
+  
+  // Site → S1 Google Account mapping
+  const siteToAccountMap: Record<string, string> = {
+    'trusted-info': 'Zeus LLC',
+    'wesoughtit.com': 'Zeus LLC',
+    'read.travelroo.com': 'Sunday Market Media Inc',
+    'topicwhich.com': 'Infospace Holdings',
+    'eworld.tips': 'Huntley Media',
+    'secretprice.com': 'Huntley Media',
+    'trivia-library.com': 'Huntley Media',
+    'searchalike.com': 'System1OpCo',
+    'read.classroom67': '© 2025 read.Classroom67.com',
+    'topicassist': 'System1OpCo',
+    'dlg': 'System1OpCo',
+  };
+  
+  return siteToAccountMap[site] || null;
 }
 
 function pick(row: Record<string, any>, keys: string[]): any {
@@ -102,6 +130,8 @@ async function upsertRow(
     lane?: string | null;
     category?: string | null;
     mediaSource?: string | null;
+    rsocSite?: string | null;
+    s1GoogleAccount?: string | null;
     spendUsd?: number | null;
     revenueUsd?: number | null;
     sessions?: number | null;
@@ -135,6 +165,8 @@ async function upsertRow(
       lane,
       category,
       media_source,
+      rsoc_site,
+      s1_google_account,
       spend_usd,
       revenue_usd,
       sessions,
@@ -156,6 +188,8 @@ async function upsertRow(
       ${sqlString(opts.lane || null)},
       ${sqlString(opts.category || null)},
       ${sqlString(opts.mediaSource || null)},
+      ${sqlString(opts.rsocSite || null)},
+      ${sqlString(opts.s1GoogleAccount || null)},
       ${sqlNumber(opts.spendUsd)},
       ${sqlNumber(opts.revenueUsd)},
       ${sqlNumber(opts.sessions)},
@@ -219,6 +253,8 @@ type CampaignAggregate = {
   lane?: string | null;
   category?: string | null;
   mediaSource?: string | null;
+  rsocSite?: string | null;
+  s1GoogleAccount?: string | null;
   spendUsd: number;
   revenueUsd: number;
   sessions: number;
@@ -283,6 +319,15 @@ class CampaignAggregator {
       this.setIfEmpty(agg, 'category', pick(row, ['category']));
       this.setIfEmpty(agg, 'accountId', pick(row, ['networkAccountId', 'adAccountId', 'account_id', 'ad_account_id']));
       this.setIfEmpty(agg, 'campaignName', pick(row, ['networkCampaignName', 'campaign_name', 'name']));
+      // Extract rsocSite and map to S1 Google Account
+      const rsocSite = pick(row, ['rsocSite', 'rsoc_site', 'site']);
+      if (rsocSite) {
+        this.setIfEmpty(agg, 'rsocSite', rsocSite);
+        const s1GoogleAccount = mapRsocSiteToS1GoogleAccount(rsocSite);
+        if (s1GoogleAccount) {
+          this.setIfEmpty(agg, 's1GoogleAccount', s1GoogleAccount);
+        }
+      }
       // Media source: try networkId mapping or source/networkName fields
       const networkId = pick(row, ['networkId', 'network_id']);
       if (networkId) {
@@ -362,6 +407,8 @@ class CampaignAggregator {
         lane: agg.lane ?? null,
         category: agg.category ?? null,
         mediaSource: agg.mediaSource ?? null,
+        rsocSite: agg.rsocSite ?? null,
+        s1GoogleAccount: agg.s1GoogleAccount ?? null,
         spendUsd: spend,
         revenueUsd: revenue,
         sessions: asNullable(agg.sessions),
