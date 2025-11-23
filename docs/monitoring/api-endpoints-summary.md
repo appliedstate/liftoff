@@ -70,9 +70,21 @@ These provide spend data for ROAS calculation. Failures are logged but don't sto
     - Purpose: SmartNews spend data
     - Parameters: `dateStart`, `dateEnd`, `organization`, `dimensions=date-strategisCampaignId`
 
-15. **GoogleAds Report** (`/api/googleads/report`)
-    - Purpose: GoogleAds spend data
-    - Parameters: `dateStart`, `dateEnd`, `organization`, `adSource`, `timezone`, `dimensions=date-strategisCampaignId`
+## Current Status (from test run 2025-11-23)
+
+- ✅ **S1 Daily**: 140 rows (working)
+- ✅ **S1 Reconciled**: 0 rows (working, no data for date)
+- ✅ **S1 RPC Average**: 339 rows (working)
+- ✅ **Facebook endpoints**: All working (25-633 rows)
+- ✅ **Outbrain**: 40 rows (working)
+- ✅ **NewsBreak**: 0 rows (working, no data)
+- ✅ **MediaGo**: 97 rows (working)
+- ✅ **Zemanta**: 0 rows (working, no data)
+- ✅ **SmartNews**: 0 rows (working, no data)
+- ❌ **Taboola**: 502 Bad Gateway (server-side issue, optional endpoint)
+- ❌ **GoogleAds**: Removed (404 Not Found, not needed)
+
+**Total: 14 endpoints** (removed GoogleAds)
 
 ## Diagnosing Failures
 
