@@ -55,6 +55,7 @@
     "monitor:launch-velocity": "ts-node src/scripts/monitoring/reportLaunchVelocity.ts",
     "monitor:today-launches": "ts-node src/scripts/monitoring/queryTodayLaunches.ts",
     "monitor:launches-detail": "ts-node src/scripts/monitoring/queryLaunchesByBuyerNetworkSite.ts",
+    "monitor:launches-summary": "ts-node src/scripts/monitoring/summarizeLaunches.ts",
     "monitor:backfill-launches": "ts-node src/scripts/monitoring/backfillCampaignLaunches.ts",
     "monitor:debug-launches": "ts-node src/scripts/monitoring/debugLaunchCounts.ts",
     "monitor:reset-launches": "ts-node src/scripts/monitoring/resetCampaignLaunches.ts",
