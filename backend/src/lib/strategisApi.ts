@@ -1,4 +1,5 @@
 import { StrategistClient, createStrategisApiClient } from './strategistClient';
+import { getPlatformFromNetworkId } from './networkIds';
 
 const DEFAULT_ORG = process.env.STRATEGIS_ORGANIZATION || 'Interlincx';
 const DEFAULT_AD_SOURCE = process.env.STRATEGIS_AD_SOURCE || 'rsoc';
@@ -70,7 +71,8 @@ export class StrategisApi {
       adSource: this.adSource,
       timezone: this.timezone,
       dbSource: DEFAULT_DB_SOURCE,
-      dimensions: 'date-strategisCampaignId',
+      // Include buyer in dimensions to get lane/buyer field
+      dimensions: 'date-strategisCampaignId-buyer',
     };
     // Only include networkId filter if we want a specific network (default behavior)
     // If includeAllNetworks=true, omit networkId to get all platforms
@@ -78,6 +80,26 @@ export class StrategisApi {
       params.networkId = this.networkId;
     }
     const payload = await this.client.get('/api/s1/report/daily-v3', params);
+    return extractRows(payload);
+  }
+
+  /**
+   * Fetch S1 reconciled report (high-level) which includes buyer field directly
+   */
+  async fetchS1Reconciled(date: string, includeAllNetworks: boolean = false): Promise<any[]> {
+    const params: Record<string, any> = {
+      ...this.singleDayRange(date),
+      organization: this.organization,
+      adSource: this.adSource,
+      timezone: this.timezone,
+      dbSource: DEFAULT_DB_SOURCE,
+      dimensions: 'date-strategisCampaignId',
+    };
+    // Only include networkId filter if we want a specific network
+    if (!includeAllNetworks && this.networkId) {
+      params.networkId = this.networkId;
+    }
+    const payload = await this.client.get('/api/s1/high-level-report', params);
     return extractRows(payload);
   }
 
@@ -126,17 +148,98 @@ export class StrategisApi {
     return extractRows(payload);
   }
 
-  async fetchStrategisMetrics(date: string): Promise<any[]> {
-    const params = {
+  async fetchStrategisMetrics(date: string, networkName?: string): Promise<any[]> {
+    const params: Record<string, any> = {
       ...this.singleDayRange(date),
       organization: this.organization,
       adSource: this.adSource,
-      networkName: 'facebook',
       dbSource: DEFAULT_DB_SOURCE,
       timezone: this.timezone,
       dimensions: 'date-strategisCampaignId',
     };
+    if (networkName) {
+      params.networkName = networkName;
+    }
     const payload = await this.client.get('/api/strategis-report', params);
+    return extractRows(payload);
+  }
+
+  // Platform-specific spend endpoints
+
+  async fetchTaboolaReport(date: string): Promise<any[]> {
+    const params = {
+      ...this.singleDayRange(date),
+      organization: this.organization,
+      adSource: this.adSource,
+      dimension: 'date-strategisCampaignId',
+    };
+    const payload = await this.client.get('/api/taboola/report', params);
+    return extractRows(payload);
+  }
+
+  async fetchOutbrainHourlyReport(date: string): Promise<any[]> {
+    const params = {
+      ...this.singleDayRange(date),
+      organization: this.organization,
+      adSource: this.adSource,
+    };
+    const payload = await this.client.get('/api/outbrain-hourly-report', params);
+    return extractRows(payload);
+  }
+
+  async fetchNewsbreakReport(date: string): Promise<any[]> {
+    const params = {
+      ...this.singleDayRange(date),
+      organization: this.organization,
+      dimensions: 'date-strategisCampaignId',
+    };
+    const payload = await this.client.get('/api/newsbreak/report', params);
+    return extractRows(payload);
+  }
+
+  async fetchMediaGoReport(date: string): Promise<any[]> {
+    const params = {
+      ...this.singleDayRange(date),
+      organization: this.organization,
+      adSource: this.adSource,
+      timezone: this.timezone,
+      dimensions: 'date-strategisCampaignId',
+    };
+    const payload = await this.client.get('/api/mediago/report', params);
+    return extractRows(payload);
+  }
+
+  async fetchZemantaReconciledReport(date: string): Promise<any[]> {
+    const params = {
+      ...this.singleDayRange(date),
+      organization: this.organization,
+      adSource: this.adSource,
+      dimensions: 'date-strategisCampaignId',
+      dbSource: 'level', // Zemanta uses level DB
+    };
+    const payload = await this.client.get('/api/zemanta/reconciled-report', params);
+    return extractRows(payload);
+  }
+
+  async fetchSmartNewsReport(date: string): Promise<any[]> {
+    const params = {
+      ...this.singleDayRange(date),
+      organization: this.organization,
+      dimensions: 'date-strategisCampaignId',
+    };
+    const payload = await this.client.get('/api/smartnews/report', params);
+    return extractRows(payload);
+  }
+
+  async fetchGoogleAdsReport(date: string): Promise<any[]> {
+    const params = {
+      ...this.singleDayRange(date),
+      organization: this.organization,
+      adSource: this.adSource,
+      timezone: this.timezone,
+      dimensions: 'date-strategisCampaignId',
+    };
+    const payload = await this.client.get('/api/googleads/report', params);
     return extractRows(payload);
   }
 }

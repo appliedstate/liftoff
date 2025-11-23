@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { closeConnection, createMonitoringConnection, initMonitoringSchema, runSql, sqlNumber, sqlString } from '../../lib/monitoringDb';
 import { fetchStrategistSnapshotRows, StrategistSource } from '../../lib/strategistSnapshots';
 import { StrategisApi } from '../../lib/strategisApi';
+import { getPlatformFromNetworkId } from '../../lib/networkIds';
 
 type Level = 'campaign' | 'adset';
 
@@ -315,7 +316,12 @@ class CampaignAggregator {
       const agg = this.ensureAggregate(row, 's1_daily_v3');
       if (!agg) continue;
       // Extract metadata fields that S1 daily includes (buyer, category, networkAccountId, etc.)
-      this.setIfEmpty(agg, 'owner', pick(row, ['buyer', 'owner']));
+      // buyer field is included when dimensions includes 'buyer' - it represents lane/owner
+      const buyer = pick(row, ['buyer', 'owner']);
+      if (buyer) {
+        this.setIfEmpty(agg, 'owner', buyer);
+        this.setIfEmpty(agg, 'lane', buyer); // buyer is the lane field
+      }
       this.setIfEmpty(agg, 'category', pick(row, ['category']));
       this.setIfEmpty(agg, 'accountId', pick(row, ['networkAccountId', 'adAccountId', 'account_id', 'ad_account_id']));
       this.setIfEmpty(agg, 'campaignName', pick(row, ['networkCampaignName', 'campaign_name', 'name']));
@@ -328,15 +334,10 @@ class CampaignAggregator {
           this.setIfEmpty(agg, 's1GoogleAccount', s1GoogleAccount);
         }
       }
-      // Media source: try networkId mapping or source/networkName fields
+      // Media source: map networkId to platform name using complete mapping
       const networkId = pick(row, ['networkId', 'network_id']);
       if (networkId) {
-        // Map networkId to platform name (112 = Facebook, need to add others)
-        const networkMap: Record<string, string> = {
-          '112': 'facebook',
-          // TODO: Add other networkId mappings as we discover them
-        };
-        const mappedSource = networkMap[String(networkId)];
+        const mappedSource = getPlatformFromNetworkId(networkId);
         if (mappedSource) {
           this.setIfEmpty(agg, 'mediaSource', mappedSource);
         }
@@ -383,6 +384,95 @@ class CampaignAggregator {
       this.addNumber(agg, 'strategis_metrics', 'clicks', pickNumber(row, ['clicks']));
       this.addNumber(agg, 'strategis_metrics', 'spendUsd', pickNumber(row, ['spend', 'spend_usd']));
       this.addNumber(agg, 'strategis_metrics', 'revenueUsd', pickNumber(row, ['revenue', 'estimated_revenue']));
+    }
+  }
+
+  mergeS1Reconciled(rows: any[]): void {
+    for (const row of rows) {
+      const agg = this.ensureAggregate(row, 's1_reconciled');
+      if (!agg) continue;
+      // S1 reconciled has buyer field directly
+      this.setIfEmpty(agg, 'owner', pick(row, ['buyer', 'owner']));
+      this.setIfEmpty(agg, 'lane', pick(row, ['buyer', 'lane'])); // buyer is lane
+      this.setIfEmpty(agg, 'category', pick(row, ['category']));
+      this.addNumber(agg, 's1_reconciled', 'revenueUsd', pickNumber(row, ['revenue', 'revenue_usd', 'estimated_revenue']));
+      this.addNumber(agg, 's1_reconciled', 'sessions', pickNumber(row, ['sessions', 'searches', 'visits']));
+      this.addNumber(agg, 's1_reconciled', 'clicks', pickNumber(row, ['clicks']));
+    }
+  }
+
+  mergeTaboolaReport(rows: any[]): void {
+    for (const row of rows) {
+      const agg = this.ensureAggregate(row, 'taboola_report');
+      if (!agg) continue;
+      this.setIfEmpty(agg, 'mediaSource', 'taboola');
+      this.addNumber(agg, 'taboola_report', 'spendUsd', pickNumber(row, ['spent', 'spend', 'spend_usd']));
+      this.addNumber(agg, 'taboola_report', 'clicks', pickNumber(row, ['clicks']));
+      this.addNumber(agg, 'taboola_report', 'conversions', pickNumber(row, ['cpa_actions_num', 'conversions']));
+    }
+  }
+
+  mergeOutbrainReport(rows: any[]): void {
+    for (const row of rows) {
+      const agg = this.ensureAggregate(row, 'outbrain_report');
+      if (!agg) continue;
+      this.setIfEmpty(agg, 'mediaSource', 'outbrain');
+      this.addNumber(agg, 'outbrain_report', 'spendUsd', pickNumber(row, ['spent', 'spend', 'spend_usd']));
+      this.addNumber(agg, 'outbrain_report', 'clicks', pickNumber(row, ['clicks']));
+    }
+  }
+
+  mergeNewsbreakReport(rows: any[]): void {
+    for (const row of rows) {
+      const agg = this.ensureAggregate(row, 'newsbreak_report');
+      if (!agg) continue;
+      this.setIfEmpty(agg, 'mediaSource', 'newsbreak');
+      this.addNumber(agg, 'newsbreak_report', 'spendUsd', pickNumber(row, ['spent', 'spend', 'spend_usd']));
+      this.addNumber(agg, 'newsbreak_report', 'clicks', pickNumber(row, ['clicks']));
+    }
+  }
+
+  mergeMediaGoReport(rows: any[]): void {
+    for (const row of rows) {
+      const agg = this.ensureAggregate(row, 'mediago_report');
+      if (!agg) continue;
+      this.setIfEmpty(agg, 'mediaSource', 'mediago');
+      this.addNumber(agg, 'mediago_report', 'spendUsd', pickNumber(row, ['spend', 'spent', 'spend_usd']));
+      this.addNumber(agg, 'mediago_report', 'clicks', pickNumber(row, ['click', 'clicks']));
+      this.addNumber(agg, 'mediago_report', 'conversions', pickNumber(row, ['conversion', 'conversions']));
+    }
+  }
+
+  mergeZemantaReport(rows: any[]): void {
+    for (const row of rows) {
+      const agg = this.ensureAggregate(row, 'zemanta_report');
+      if (!agg) continue;
+      this.setIfEmpty(agg, 'mediaSource', 'zemanta');
+      this.addNumber(agg, 'zemanta_report', 'spendUsd', pickNumber(row, ['spend', 'spent', 'spend_usd']));
+      this.addNumber(agg, 'zemanta_report', 'clicks', pickNumber(row, ['clicks']));
+      this.addNumber(agg, 'zemanta_report', 'conversions', pickNumber(row, ['conversions']));
+    }
+  }
+
+  mergeSmartNewsReport(rows: any[]): void {
+    for (const row of rows) {
+      const agg = this.ensureAggregate(row, 'smartnews_report');
+      if (!agg) continue;
+      this.setIfEmpty(agg, 'mediaSource', 'smartnews');
+      this.addNumber(agg, 'smartnews_report', 'spendUsd', pickNumber(row, ['spent', 'spend', 'spend_usd']));
+      this.addNumber(agg, 'smartnews_report', 'clicks', pickNumber(row, ['clicks']));
+      this.addNumber(agg, 'smartnews_report', 'conversions', pickNumber(row, ['conversions']));
+    }
+  }
+
+  mergeGoogleAdsReport(rows: any[]): void {
+    for (const row of rows) {
+      const agg = this.ensureAggregate(row, 'googleads_report');
+      if (!agg) continue;
+      this.setIfEmpty(agg, 'mediaSource', 'googleads');
+      this.addNumber(agg, 'googleads_report', 'spendUsd', pickNumber(row, ['spend', 'spent', 'spend_usd', 'cost']));
+      this.addNumber(agg, 'googleads_report', 'clicks', pickNumber(row, ['clicks']));
+      this.addNumber(agg, 'googleads_report', 'conversions', pickNumber(row, ['conversions']));
     }
   }
 
@@ -475,7 +565,7 @@ class CampaignAggregator {
 
   private setIfEmpty(
     agg: CampaignAggregate,
-    field: 'accountId' | 'campaignName' | 'owner' | 'lane' | 'category' | 'mediaSource' | 'adsetId' | 'adsetName',
+    field: 'accountId' | 'campaignName' | 'owner' | 'lane' | 'category' | 'mediaSource' | 'adsetId' | 'adsetName' | 'rsocSite' | 's1GoogleAccount',
     value?: string | null
   ): void {
     if (!value) return;
@@ -520,13 +610,26 @@ async function main(): Promise<void> {
       fetch: () => Promise<any[]>;
       merge: (rows: any[]) => void;
     }> = [
+      // S1 Revenue & Metadata (all platforms)
+      { label: 's1_daily_v3', fetch: () => api.fetchS1Daily(date, true), merge: (rows) => aggregator.mergeS1Daily(rows) },
+      { label: 's1_reconciled', fetch: () => api.fetchS1Reconciled(date, true), merge: (rows) => aggregator.mergeS1Reconciled(rows) },
+      { label: 's1_rpc_average', fetch: () => api.fetchS1RpcAverage(date), merge: (rows) => aggregator.mergeS1Rpc(rows) },
+      
+      // Facebook Data
       { label: 'facebook_report', fetch: () => api.fetchFacebookReport(date), merge: (rows) => aggregator.mergeFacebookReport(rows) },
       { label: 'facebook_campaigns', fetch: () => api.fetchFacebookCampaigns(date), merge: (rows) => aggregator.mergeFacebookCampaigns(rows) },
       { label: 'facebook_adsets', fetch: () => api.fetchFacebookAdsets(date), merge: (rows) => aggregator.mergeFacebookAdsets(rows) },
-      { label: 's1_daily_v3', fetch: () => api.fetchS1Daily(date, true), merge: (rows) => aggregator.mergeS1Daily(rows) },
-      { label: 's1_rpc_average', fetch: () => api.fetchS1RpcAverage(date), merge: (rows) => aggregator.mergeS1Rpc(rows) },
       { label: 'facebook_pixel', fetch: () => api.fetchFacebookPixelReport(date), merge: (rows) => aggregator.mergePixel(rows) },
-      { label: 'strategis_metrics', fetch: () => api.fetchStrategisMetrics(date), merge: (rows) => aggregator.mergeStrategisMetrics(rows) },
+      { label: 'strategis_metrics_fb', fetch: () => api.fetchStrategisMetrics(date, 'facebook'), merge: (rows) => aggregator.mergeStrategisMetrics(rows) },
+      
+      // Platform Spend Data
+      { label: 'taboola_report', fetch: () => api.fetchTaboolaReport(date), merge: (rows) => aggregator.mergeTaboolaReport(rows) },
+      { label: 'outbrain_report', fetch: () => api.fetchOutbrainHourlyReport(date), merge: (rows) => aggregator.mergeOutbrainReport(rows) },
+      { label: 'newsbreak_report', fetch: () => api.fetchNewsbreakReport(date), merge: (rows) => aggregator.mergeNewsbreakReport(rows) },
+      { label: 'mediago_report', fetch: () => api.fetchMediaGoReport(date), merge: (rows) => aggregator.mergeMediaGoReport(rows) },
+      { label: 'zemanta_report', fetch: () => api.fetchZemantaReconciledReport(date), merge: (rows) => aggregator.mergeZemantaReport(rows) },
+      { label: 'smartnews_report', fetch: () => api.fetchSmartNewsReport(date), merge: (rows) => aggregator.mergeSmartNewsReport(rows) },
+      { label: 'googleads_report', fetch: () => api.fetchGoogleAdsReport(date), merge: (rows) => aggregator.mergeGoogleAdsReport(rows) },
     ];
 
     for (const step of steps) {

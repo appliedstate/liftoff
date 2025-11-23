@@ -8,20 +8,20 @@ export function getMonitoringDbPath(): string {
   return DEFAULT_DB_PATH;
 }
 
-export function createMonitoringConnection(): duckdb.Connection {
+export function createMonitoringConnection(): any {
   const dbPath = getMonitoringDbPath();
   ensureDir(path.dirname(dbPath));
   const db = new duckdb.Database(dbPath);
   return db.connect();
 }
 
-export function runSql(conn: duckdb.Connection, sql: string): Promise<void> {
+export function runSql(conn: any, sql: string): Promise<void> {
   return new Promise((resolve, reject) => {
     conn.run(sql, (err: Error | null) => (err ? reject(err) : resolve()));
   });
 }
 
-export function allRows<T = any>(conn: duckdb.Connection, sql: string): Promise<T[]> {
+export function allRows<T = any>(conn: any, sql: string): Promise<T[]> {
   return new Promise((resolve, reject) => {
     (conn as any).all(sql, (err: Error | null, rows: T[]) => {
       if (err) return reject(err);
@@ -30,7 +30,7 @@ export function allRows<T = any>(conn: duckdb.Connection, sql: string): Promise<
   });
 }
 
-export function closeConnection(conn: duckdb.Connection): void {
+export function closeConnection(conn: any): void {
   conn.close(() => {
     // no-op
   });
@@ -46,7 +46,7 @@ export function sqlNumber(value: number | null | undefined): string {
   return String(value);
 }
 
-export async function initMonitoringSchema(conn: duckdb.Connection): Promise<void> {
+export async function initMonitoringSchema(conn: any): Promise<void> {
   const statements = [
     `
     CREATE TABLE IF NOT EXISTS campaign_index (
