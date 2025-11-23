@@ -5,7 +5,11 @@
 We now maintain an automated DuckDB-backed index that links Strategist campaign metadata with Strategis session revenue so we can monitor RPC by campaign, media source, owner, and click hour without manual joins.
 
 - **Campaign metadata ingestion** (`monitor:ingest-campaigns`)
-  - In default `remote` mode pulls Facebook + S1 datasets directly from `https://strategis.lincx.in` (Facebook report/campaigns/adsets, S1 daily/rpc averages, Strategis metrics, pixel data).
+  - In `remote` mode pulls data from **all platforms** directly from `https://strategis.lincx.in`:
+    - **S1 Revenue**: Daily + Reconciled reports (all networks: Facebook, Taboola, Outbrain, NewsBreak, MediaGo, Zemanta, SmartNews, GoogleAds)
+    - **Facebook**: Report, campaigns, adsets, pixel, Strategis metrics
+    - **Platform Spend**: Taboola, Outbrain, NewsBreak, MediaGo, Zemanta, SmartNews, GoogleAds reports
+    - Extracts: owner (buyer), lane, category, media_source (from networkId), rsocSite, s1_google_account, spend, revenue, sessions
   - `snapshot` mode still supports reading historical Strategist exports from `data/snapshots/facebook/<source>/`.
   - Normalizes campaign-level rows (owner, lane, category, media source, spend, revenue, sessions, etc.).
   - Upserts into `data/monitoring.duckdb` → `campaign_index`.
@@ -71,11 +75,34 @@ Tokens are cached in-memory per process and refreshed automatically when expired
 Example cadence (UTC) to keep the index fresh every hour:
 
 ```
-# Campaign metadata at :15 past the hour
-15 * * * * cd /opt/liftoff/backend && /usr/bin/env npm run monitor:ingest-campaigns -- --date=$(date -u +\%F) >> /var/log/monitor-campaigns.log 2>&1
+# Campaign metadata at :15 past the hour (fetches all platforms: Facebook, Taboola, Outbrain, NewsBreak, MediaGo, Zemanta, SmartNews, GoogleAds)
+15 * * * * cd /opt/liftoff/backend && \
+  IX_ID_EMAIL="roach@interlincx.com" \
+  IX_ID_PASSWORD="pitdyd-vazsi1-Jinrow" \
+  STRATEGIS_API_BASE_URL="https://strategis.lincx.in" \
+  STRATEGIS_ALLOW_SELF_SIGNED=1 \
+  STRATEGIS_ORGANIZATION="Interlincx" \
+  STRATEGIS_AD_SOURCE="rsoc" \
+  STRATEGIS_NETWORK_ID="112" \
+  STRATEGIS_TIMEZONE="UTC" \
+  STRATEGIS_RPC_DAYS="3" \
+  MONITORING_DB_PATH="/opt/liftoff/data/monitoring.duckdb" \
+  npm run monitor:ingest-campaigns -- --date=$(date -u +\%F) --mode=remote \
+  >> /var/log/monitor-campaigns.log 2>&1
 
-# Session RPC snapshot at :20 (restrict to clicks logged so far)
-20 * * * * cd /opt/liftoff/backend && /usr/bin/env npm run monitor:ingest-sessions -- --date=$(date -u +\%F) --max-hour=$(date -u +\%H) >> /var/log/monitor-sessions.log 2>&1
+# Session RPC snapshot at :20 (restrict to clicks logged so far, fetches all platforms)
+20 * * * * cd /opt/liftoff/backend && \
+  IX_ID_EMAIL="roach@interlincx.com" \
+  IX_ID_PASSWORD="pitdyd-vazsi1-Jinrow" \
+  STRATEGIS_API_BASE_URL="https://strategis.lincx.in" \
+  STRATEGIS_ALLOW_SELF_SIGNED=1 \
+  STRATEGIS_ORGANIZATION="Interlincx" \
+  STRATEGIS_AD_SOURCE="rsoc" \
+  STRATEGIS_NETWORK_ID="112" \
+  STRATEGIS_TIMEZONE="UTC" \
+  MONITORING_DB_PATH="/opt/liftoff/data/monitoring.duckdb" \
+  npm run monitor:ingest-sessions -- --date=$(date -u +\%F) --max-hour=$(date -u +\%H) \
+  >> /var/log/monitor-sessions.log 2>&1
 ```
 
 The second job should lag the first by a few minutes to ensure the latest Strategist snapshot is ingested before we attribute sessions.
