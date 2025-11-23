@@ -226,6 +226,56 @@ async function main() {
       console.log(`  Unique S1 Google Accounts: ${Number(stats.unique_accounts || 0)}`);
     }
     
+    // Comprehensive Summary Table
+    console.log('\n📊 COMPREHENSIVE SUMMARY TABLE:\n');
+    const summary = await allRows(
+      conn,
+      `SELECT 
+        COALESCE(s1_google_account, 'UNMAPPED') as account,
+        rsoc_site,
+        COUNT(DISTINCT campaign_id) as campaigns,
+        SUM(revenue_usd) as revenue,
+        SUM(sessions) as sessions,
+        SUM(spend_usd) as spend,
+        CASE 
+          WHEN SUM(spend_usd) > 0 THEN SUM(revenue_usd) / SUM(spend_usd)
+          ELSE NULL
+        END as roas,
+        CASE 
+          WHEN SUM(sessions) > 0 THEN SUM(revenue_usd) / SUM(sessions)
+          ELSE NULL
+        END as rpc
+      FROM campaign_index
+      WHERE ${whereClause}
+        AND (rsoc_site IS NOT NULL OR s1_google_account IS NOT NULL)
+      GROUP BY s1_google_account, rsoc_site
+      ORDER BY revenue DESC`
+    );
+    
+    if (summary.length > 0) {
+      console.log('┌─────────────────────┬─────────────────────┬────────────┬──────────────┬──────────────┬──────────────┬──────────────┬──────────────┐');
+      console.log('│ S1 Google Account  │ RSOC Site           │ Campaigns  │ Revenue      │ Sessions     │ Spend        │ ROAS         │ RPC          │');
+      console.log('├─────────────────────┼─────────────────────┼────────────┼──────────────┼──────────────┼──────────────┼──────────────┼──────────────┤');
+      
+      for (const row of summary) {
+        const account = String(row.account || 'UNMAPPED').substring(0, 19).padEnd(19);
+        const site = String(row.rsoc_site || 'N/A').substring(0, 19).padEnd(19);
+        const campaigns = Number(row.campaigns || 0);
+        const revenue = Number(row.revenue || 0);
+        const sessions = Number(row.sessions || 0);
+        const spend = Number(row.spend || 0);
+        const roas = Number(row.roas || 0);
+        const rpc = Number(row.rpc || 0);
+        
+        const roasStr = spend > 0 ? `${roas.toFixed(2)}x` : 'N/A';
+        const rpcStr = sessions > 0 ? `$${rpc.toFixed(2)}` : 'N/A';
+        
+        console.log(`│ ${account} │ ${site} │ ${campaigns.toString().padStart(10)} │ $${revenue.toFixed(2).padStart(12)} │ ${sessions.toFixed(0).padStart(12)} │ $${spend.toFixed(2).padStart(12)} │ ${roasStr.padStart(12)} │ ${rpcStr.padStart(12)} │`);
+      }
+      
+      console.log('└─────────────────────┴─────────────────────┴────────────┴──────────────┴──────────────┴──────────────┴──────────────┴──────────────┘');
+    }
+    
     console.log('\n');
   } catch (err: any) {
     console.error('Error:', err?.message || err);
