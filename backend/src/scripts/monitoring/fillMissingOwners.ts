@@ -47,39 +47,37 @@ async function main() {
       console.log(`Processing batch ${Math.floor(i / batchSize) + 1} (${processed}/${campaignsWithUnknownOwner.length})...`);
       
       for (const campaign of batch) {
-      const campaignId = campaign.campaign_id;
-      
-      // Look for this campaign in campaign_index with owner info
-      const withOwner = await allRows(
-        conn,
-        `SELECT DISTINCT owner, date
-        FROM campaign_index
-        WHERE campaign_id = ${sqlString(campaignId)}
-          AND owner IS NOT NULL
-          AND owner != ''
-          AND owner != 'UNKNOWN'
-        ORDER BY date DESC
-        LIMIT 1`
-      );
-      
-      if (withOwner.length > 0) {
-        const owner = withOwner[0].owner;
-        const foundDate = withOwner[0].date;
-        found++;
+        const campaignId = campaign.campaign_id;
         
-        console.log(`Found owner for ${campaignId.substring(0, 12)}: ${owner} (from ${foundDate})`);
-        
-        // Update campaign_launches
-        await runSql(
+        // Look for this campaign in campaign_index with owner info
+        const withOwner = await allRows(
           conn,
-          `UPDATE campaign_launches
-          SET owner = ${sqlString(owner)}
-          WHERE campaign_id = ${sqlString(campaignId)}`
+          `SELECT DISTINCT owner, date
+          FROM campaign_index
+          WHERE campaign_id = ${sqlString(campaignId)}
+            AND owner IS NOT NULL
+            AND owner != ''
+            AND owner != 'UNKNOWN'
+          ORDER BY date DESC
+          LIMIT 1`
         );
-        updated++;
-      }
-    }
-    
+        
+        if (withOwner.length > 0) {
+          const owner = withOwner[0].owner;
+          const foundDate = withOwner[0].date;
+          found++;
+          
+          console.log(`Found owner for ${campaignId.substring(0, 12)}: ${owner} (from ${foundDate})`);
+          
+          // Update campaign_launches
+          await runSql(
+            conn,
+            `UPDATE campaign_launches
+            SET owner = ${sqlString(owner)}
+            WHERE campaign_id = ${sqlString(campaignId)}`
+          );
+          updated++;
+        }
       }
     }
     
