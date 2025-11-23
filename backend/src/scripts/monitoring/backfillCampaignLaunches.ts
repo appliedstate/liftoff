@@ -182,6 +182,11 @@ async function main() {
       return;
     }
     
+    // Debug: show first few dates and their types
+    if (availableDates.length > 0) {
+      console.log(`[DEBUG] Sample date format: ${JSON.stringify(availableDates[0])} (type: ${typeof availableDates[0].date})`);
+    }
+    
     const todayPST = getTodayPST();
     const startDate = getDaysAgoPST(startDaysAgo);
     // If endDaysAgo is 0, use today; otherwise use the calculated end date
@@ -198,10 +203,44 @@ async function main() {
     
     // Get actual dates that have data and fall within the requested range (Nov 1+)
     // Normalize dates to YYYY-MM-DD format for comparison
+    // DuckDB may return dates as Date objects, ISO strings, or formatted strings
     const normalizedAvailableDates = availableDates.map((r: any) => {
-      const dateStr = String(r.date);
-      // Handle both Date objects and date strings
-      return dateStr.includes('T') ? dateStr.slice(0, 10) : dateStr.slice(0, 10);
+      const dateValue = r.date;
+      
+      // If it's already a string in YYYY-MM-DD format, use it
+      if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+        return dateValue;
+      }
+      
+      // If it's a Date object or ISO string, extract YYYY-MM-DD
+      if (dateValue instanceof Date) {
+        return dateValue.toISOString().slice(0, 10);
+      }
+      
+      // Try to parse as ISO string
+      const dateStr = String(dateValue);
+      if (dateStr.includes('T')) {
+        return dateStr.slice(0, 10);
+      }
+      
+      // Try to extract YYYY-MM-DD from formatted string (e.g., "2025-11-23" from "Sun Nov 23")
+      const isoMatch = dateStr.match(/\d{4}-\d{2}-\d{2}/);
+      if (isoMatch) {
+        return isoMatch[0];
+      }
+      
+      // Fallback: try to parse and reformat
+      try {
+        const parsed = new Date(dateStr);
+        if (!isNaN(parsed.getTime())) {
+          return parsed.toISOString().slice(0, 10);
+        }
+      } catch (e) {
+        // Ignore parse errors
+      }
+      
+      // Last resort: return as-is and hope string comparison works
+      return dateStr.slice(0, 10);
     });
     
     const datesWithData = normalizedAvailableDates
