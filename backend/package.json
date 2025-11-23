@@ -59,6 +59,7 @@
     "monitor:reset-launches": "ts-node src/scripts/monitoring/resetCampaignLaunches.ts",
     "monitor:check-dates": "ts-node src/scripts/monitoring/checkAvailableDates.ts",
     "monitor:fill-owners": "ts-node src/scripts/monitoring/fillMissingOwners.ts",
+    "monitor:bulk-ingest": "ts-node src/scripts/monitoring/bulkIngestHistorical.ts",
     "monitor:fix-null-source": "ts-node src/scripts/monitoring/fixNullMediaSource.ts",
     "index:now": "ts-node src/scripts/indexNow.ts",
     "system1:analyze": "ts-node src/scripts/analyzeSystem1.ts",

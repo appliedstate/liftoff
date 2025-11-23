@@ -17,14 +17,13 @@ async function main() {
     
     console.log('\n# Filling Missing Owner Information\n');
     
-    // Find campaigns in campaign_launches with UNKNOWN or NULL owner
+    // Find ALL campaigns in campaign_launches with UNKNOWN or NULL owner
     const campaignsWithUnknownOwner = await allRows(
       conn,
       `SELECT campaign_id, first_seen_date, owner
       FROM campaign_launches
       WHERE owner IS NULL OR owner = 'UNKNOWN' OR owner = ''
-      ORDER BY first_seen_date DESC
-      LIMIT 100`
+      ORDER BY first_seen_date DESC`
     );
     
     console.log(`Found ${campaignsWithUnknownOwner.length} campaigns with missing owner info\n`);
@@ -34,11 +33,20 @@ async function main() {
       return;
     }
     
-    // Check campaign_index for these campaigns across all dates to find owner info
+    // Check campaign_index for these campaigns across ALL dates to find owner info
+    // Process in batches to avoid memory issues
+    const batchSize = 100;
     let updated = 0;
     let found = 0;
+    let processed = 0;
     
-    for (const campaign of campaignsWithUnknownOwner.slice(0, 50)) { // Process first 50
+    for (let i = 0; i < campaignsWithUnknownOwner.length; i += batchSize) {
+      const batch = campaignsWithUnknownOwner.slice(i, i + batchSize);
+      processed += batch.length;
+      
+      console.log(`Processing batch ${Math.floor(i / batchSize) + 1} (${processed}/${campaignsWithUnknownOwner.length})...`);
+      
+      for (const campaign of batch) {
       const campaignId = campaign.campaign_id;
       
       // Look for this campaign in campaign_index with owner info
@@ -72,8 +80,11 @@ async function main() {
       }
     }
     
+      }
+    }
+    
     console.log(`\nUpdated ${updated} campaigns with owner information`);
-    console.log(`Found owner info for ${found} out of ${Math.min(50, campaignsWithUnknownOwner.length)} checked\n`);
+    console.log(`Found owner info for ${found} out of ${campaignsWithUnknownOwner.length} checked\n`);
     
     // Show summary
     const summary = await allRows(
