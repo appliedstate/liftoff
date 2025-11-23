@@ -27,21 +27,38 @@ function getDaysAgoPST(days: number): string {
 async function main() {
   const buyerArg = process.argv[2];
   const networkArg = process.argv[3];
-  const siteArg = process.argv[4];
-  const daysBack = parseInt(process.argv[5] || '2', 10);
+  const arg3 = process.argv[4];
+  const arg4 = process.argv[5];
   const debug = process.argv.includes('--debug');
   
   if (!buyerArg || !networkArg) {
     console.log('Usage: npm run monitor:buyer-activity -- <buyer> <network> [site] [days_back] [--debug]');
-    console.log('Example (all sites): npm run monitor:buyer-activity -- Cook taboola 2');
-    console.log('Example (specific site): npm run monitor:buyer-activity -- Cook taboola wesoughtit.com 2');
+    console.log('Example (all sites, 2 days): npm run monitor:buyer-activity -- Cook taboola 2');
+    console.log('Example (specific site, 2 days): npm run monitor:buyer-activity -- Cook taboola wesoughtit.com 2');
     console.log('Example (with debug): npm run monitor:buyer-activity -- Cook taboola wesoughtit.com 2 --debug');
     return;
   }
   
+  // Smart argument parsing: if arg3 is a number, it's days_back, not a site
+  let site: string | undefined;
+  let daysBack: number;
+  
+  if (arg3 && !isNaN(parseInt(arg3))) {
+    // arg3 is a number, so it's days_back (no site specified)
+    daysBack = parseInt(arg3, 10);
+    site = undefined;
+  } else if (arg3) {
+    // arg3 is a string, so it's a site name
+    site = arg3;
+    daysBack = arg4 && !isNaN(parseInt(arg4)) ? parseInt(arg4, 10) : 2;
+  } else {
+    // No arg3, default to 2 days, all sites
+    daysBack = 2;
+    site = undefined;
+  }
+  
   const buyer = buyerArg;
   const network = networkArg;
-  const site = siteArg; // Optional - if not provided, show all sites
   const endDate = getTodayPST();
   const startDate = getDaysAgoPST(daysBack - 1);
   
