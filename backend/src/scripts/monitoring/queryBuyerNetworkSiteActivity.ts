@@ -29,10 +29,12 @@ async function main() {
   const networkArg = process.argv[3];
   const siteArg = process.argv[4];
   const daysBack = parseInt(process.argv[5] || '2', 10);
+  const debug = process.argv.includes('--debug');
   
   if (!buyerArg || !networkArg || !siteArg) {
-    console.log('Usage: npm run monitor:buyer-activity -- <buyer> <network> <site> [days_back]');
+    console.log('Usage: npm run monitor:buyer-activity -- <buyer> <network> <site> [days_back] [--debug]');
     console.log('Example: npm run monitor:buyer-activity -- Cook taboola wesoughtit.com 2');
+    console.log('Example (with debug): npm run monitor:buyer-activity -- Cook taboola wesoughtit.com 2 --debug');
     return;
   }
   
@@ -83,7 +85,42 @@ async function main() {
     
     if (launches.length === 0) {
       console.log(`No campaigns found for ${buyer} + ${network} + ${site} in this date range.`);
+      console.log(`\nChecking what data exists...`);
+      
+      // Debug: show what buyer-network-site combinations exist
+      const availableCombos = await allRows(
+        conn,
+        `SELECT DISTINCT
+          cl.owner,
+          cl.media_source,
+          ci.rsoc_site,
+          COUNT(*) as count
+        FROM campaign_launches cl
+        LEFT JOIN campaign_index ci 
+          ON cl.campaign_id = ci.campaign_id 
+          AND ci.date = cl.first_seen_date
+        WHERE cl.first_seen_date >= '${startDate}'
+          AND cl.first_seen_date <= '${endDate}'
+        GROUP BY cl.owner, cl.media_source, ci.rsoc_site
+        ORDER BY count DESC
+        LIMIT 20`
+      );
+      
+      if (availableCombos.length > 0) {
+        console.log('\nAvailable buyer-network-site combinations in this date range:');
+        console.log('| Buyer | Network | Site | Count |');
+        console.log('|-------|---------|------|-------|');
+        for (const combo of availableCombos) {
+          console.log(`| ${String(combo.owner || 'NULL').padEnd(5)} | ${String(combo.media_source || 'NULL').padEnd(7)} | ${String(combo.rsoc_site || 'NULL').padEnd(4)} | ${String(combo.count).padStart(5)} |`);
+        }
+      }
       return;
+    }
+    
+    if (debug) {
+      console.log('\n[DEBUG] Raw launch data:');
+      console.log(JSON.stringify(launches, null, 2));
+      console.log('');
     }
     
     // Group by date
@@ -124,8 +161,8 @@ async function main() {
         console.log('');
       }
       
-      console.log('| Campaign ID | Campaign Name | Category | Lane | Spend | Revenue | ROAS | Sessions | Clicks |');
-      console.log('|-------------|---------------|----------|------|-------|---------|------|----------|--------|');
+      console.log('| Campaign ID | Campaign Name | Category | Lane | Spend | Revenue | ROAS | Sessions | Clicks | Conversions |');
+      console.log('|-------------|---------------|----------|------|-------|---------|------|----------|--------|-------------|');
       
       for (const campaign of campaigns) {
         const campaignId = String(campaign.campaign_id || '').substring(0, 11);
@@ -137,8 +174,18 @@ async function main() {
         const roas = campaign.roas ? (Number(campaign.roas) * 100).toFixed(1) + '%' : 'N/A';
         const sessions = Number(campaign.sessions || 0).toLocaleString();
         const clicks = Number(campaign.clicks || 0).toLocaleString();
+        const conversions = Number(campaign.conversions || 0).toLocaleString();
         
-        console.log(`| ${campaignId} | ${campaignName} | ${category} | ${lane} | $${spend} | $${revenue} | ${roas} | ${sessions} | ${clicks} |`);
+        console.log(`| ${campaignId} | ${campaignName} | ${category} | ${lane} | $${spend} | $${revenue} | ${roas} | ${sessions} | ${clicks} | ${conversions} |`);
+      }
+      
+      // Show if any campaigns are missing performance data
+      const missingData = campaigns.filter(c => 
+        !c.spend_usd && !c.revenue_usd && !c.sessions && !c.clicks
+      );
+      if (missingData.length > 0) {
+        console.log(`\n⚠️  Note: ${missingData.length} campaign(s) have no performance data in campaign_index for ${date}`);
+        console.log(`   This may mean the campaign hasn't spent yet or data hasn't been ingested.`);
       }
       
       console.log('');
