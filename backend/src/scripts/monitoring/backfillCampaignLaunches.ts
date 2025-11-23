@@ -30,20 +30,23 @@ async function processDate(conn: any, date: string, dryRun: boolean = false): Pr
   console.log(`\n[backfillCampaignLaunches] Processing ${date}...`);
   
   // Get all campaigns from campaign_index for this date
+  // Use GROUP BY to handle cases where same campaign appears multiple times (different levels/sources)
+  // Take non-null values, preferring the most recent updated_at
   const campaigns = await allRows(
     conn,
-    `SELECT DISTINCT
+    `SELECT 
       campaign_id,
-      owner,
-      lane,
-      category,
-      media_source,
-      campaign_name,
-      account_id
+      MAX(owner) as owner,
+      MAX(lane) as lane,
+      MAX(category) as category,
+      MAX(media_source) as media_source,
+      MAX(campaign_name) as campaign_name,
+      MAX(account_id) as account_id
     FROM campaign_index
     WHERE date = '${date}'
       AND campaign_id IS NOT NULL
       AND campaign_id != ''
+    GROUP BY campaign_id
     ORDER BY campaign_id`
   );
   
