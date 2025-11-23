@@ -86,6 +86,7 @@ async function main() {
     );
     
     console.log(`[trackCampaignLaunches] Found ${currentCampaigns.length} campaigns in campaign_index for ${date}`);
+    console.log(`[trackCampaignLaunches] Note: Campaigns with UNKNOWN owner may have launched before November 1, 2025`);
     
     if (currentCampaigns.length === 0) {
       console.log('[trackCampaignLaunches] No campaigns found. Make sure campaign_index has been populated for this date.');

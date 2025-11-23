@@ -36,7 +36,8 @@ async function main() {
     const startDate = getDaysAgoPST(days - 1);
     
     console.log(`\n# Campaign Launch Velocity Report (Last ${days} Days)\n`);
-    console.log(`Date Range: ${startDate} to ${today}\n`);
+    console.log(`Date Range: ${startDate} to ${today}`);
+    console.log(`Note: Only tracking campaigns launched November 1, 2025 onwards\n`);
     
     // Get launch velocity by owner and date
     const velocityByDate = await allRows(
