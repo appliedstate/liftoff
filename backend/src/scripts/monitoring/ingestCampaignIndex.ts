@@ -278,7 +278,26 @@ class CampaignAggregator {
     for (const row of rows) {
       const agg = this.ensureAggregate(row, 's1_daily_v3');
       if (!agg) continue;
+      // Extract metadata fields that S1 daily includes (buyer, category, networkAccountId, etc.)
+      this.setIfEmpty(agg, 'owner', pick(row, ['buyer', 'owner']));
+      this.setIfEmpty(agg, 'category', pick(row, ['category']));
+      this.setIfEmpty(agg, 'accountId', pick(row, ['networkAccountId', 'adAccountId', 'account_id', 'ad_account_id']));
+      this.setIfEmpty(agg, 'campaignName', pick(row, ['networkCampaignName', 'campaign_name', 'name']));
+      // Media source: try networkId mapping or source/networkName fields
+      const networkId = pick(row, ['networkId', 'network_id']);
+      if (networkId) {
+        // Map networkId to platform name (112 = Facebook, need to add others)
+        const networkMap: Record<string, string> = {
+          '112': 'facebook',
+          // TODO: Add other networkId mappings as we discover them
+        };
+        const mappedSource = networkMap[String(networkId)];
+        if (mappedSource) {
+          this.setIfEmpty(agg, 'mediaSource', mappedSource);
+        }
+      }
       this.setIfEmpty(agg, 'mediaSource', pick(row, ['source', 'networkName', 'adSource']));
+      // Revenue and metrics
       this.addNumber(agg, 's1_daily_v3', 'revenueUsd', pickNumber(row, ['revenue', 'revenue_usd', 'estimated_revenue']));
       this.addNumber(agg, 's1_daily_v3', 'sessions', pickNumber(row, ['sessions', 'searches', 'visits']));
       this.addNumber(agg, 's1_daily_v3', 'clicks', pickNumber(row, ['clicks']));
@@ -457,7 +476,7 @@ async function main(): Promise<void> {
       { label: 'facebook_report', fetch: () => api.fetchFacebookReport(date), merge: (rows) => aggregator.mergeFacebookReport(rows) },
       { label: 'facebook_campaigns', fetch: () => api.fetchFacebookCampaigns(date), merge: (rows) => aggregator.mergeFacebookCampaigns(rows) },
       { label: 'facebook_adsets', fetch: () => api.fetchFacebookAdsets(date), merge: (rows) => aggregator.mergeFacebookAdsets(rows) },
-      { label: 's1_daily_v3', fetch: () => api.fetchS1Daily(date), merge: (rows) => aggregator.mergeS1Daily(rows) },
+      { label: 's1_daily_v3', fetch: () => api.fetchS1Daily(date, true), merge: (rows) => aggregator.mergeS1Daily(rows) },
       { label: 's1_rpc_average', fetch: () => api.fetchS1RpcAverage(date), merge: (rows) => aggregator.mergeS1Rpc(rows) },
       { label: 'facebook_pixel', fetch: () => api.fetchFacebookPixelReport(date), merge: (rows) => aggregator.mergePixel(rows) },
       { label: 'strategis_metrics', fetch: () => api.fetchStrategisMetrics(date), merge: (rows) => aggregator.mergeStrategisMetrics(rows) },

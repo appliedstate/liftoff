@@ -63,30 +63,38 @@ export class StrategisApi {
     return extractRows(payload);
   }
 
-  async fetchS1Daily(date: string): Promise<any[]> {
-    const params = {
+  async fetchS1Daily(date: string, includeAllNetworks: boolean = false): Promise<any[]> {
+    const params: Record<string, any> = {
       ...this.singleDayRange(date),
       organization: this.organization,
       adSource: this.adSource,
-      networkId: this.networkId,
       timezone: this.timezone,
       dbSource: DEFAULT_DB_SOURCE,
       dimensions: 'date-strategisCampaignId',
     };
+    // Only include networkId filter if we want a specific network (default behavior)
+    // If includeAllNetworks=true, omit networkId to get all platforms
+    if (!includeAllNetworks && this.networkId) {
+      params.networkId = this.networkId;
+    }
     const payload = await this.client.get('/api/s1/report/daily-v3', params);
     return extractRows(payload);
   }
 
-  async fetchS1Hourly(date: string): Promise<any[]> {
-    const params = {
+  async fetchS1Hourly(date: string, includeAllNetworks: boolean = false): Promise<any[]> {
+    const params: Record<string, any> = {
       ...this.singleDayRange(date),
       organization: this.organization,
       adSource: this.adSource,
-      networkId: this.networkId,
       timezone: this.timezone,
       dbSource: DEFAULT_DB_SOURCE,
       dimensions: 'date-hour-strategisCampaignId',
     };
+    // Only include networkId filter if we want a specific network (default behavior)
+    // If includeAllNetworks=true, omit networkId to get all platforms
+    if (!includeAllNetworks && this.networkId) {
+      params.networkId = this.networkId;
+    }
     const payload = await this.client.get('/api/s1/report/hourly-v3', params);
     return extractRows(payload);
   }

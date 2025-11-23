@@ -199,7 +199,8 @@ async function recordRun(
 
 async function fetchHourlyRows(date: string): Promise<any[]> {
   const api = new StrategisApi();
-  return api.fetchS1Hourly(date);
+  // Query all networks to get revenue from all platforms (Taboola, Outbrain, NewsBreak, MediaGo, Facebook, etc.)
+  return api.fetchS1Hourly(date, true);
 }
 
 async function main(): Promise<void> {
