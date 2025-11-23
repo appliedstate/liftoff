@@ -19,7 +19,7 @@ async function main() {
     );
     console.log('Campaign Index - Media Sources:');
     campaignSources.forEach((row: any) => {
-      console.log(`  ${row.media_source || '(NULL)'}: ${row.count} campaigns`);
+      console.log(`  ${row.media_source || '(NULL)'}: ${Number(row.count)} campaigns`);
     });
     
     // Check what media sources we have in session data
@@ -35,7 +35,7 @@ async function main() {
     );
     console.log('\nSession Metrics - Media Sources:');
     sessionSources.forEach((row: any) => {
-      console.log(`  ${row.media_source || '(NULL)'}: ${row.count} records, ${row.sessions} sessions, $${row.revenue.toFixed(2)} revenue`);
+      console.log(`  ${row.media_source || '(NULL)'}: ${Number(row.count)} records, ${Number(row.sessions)} sessions, $${Number(row.revenue).toFixed(2)} revenue`);
     });
     
     // Check NULL media_source counts
@@ -47,7 +47,7 @@ async function main() {
       conn,
       `SELECT COUNT(*) as count FROM session_hourly_metrics WHERE media_source IS NULL`
     );
-    console.log(`\nNULL media_source: ${nullCampaigns[0].count} campaigns, ${nullSessions[0].count} session records`);
+    console.log(`\nNULL media_source: ${Number(nullCampaigns[0].count)} campaigns, ${Number(nullSessions[0].count)} session records`);
     
     // Check owner/lane coverage
     console.log('\n=== Buyer Attribution Coverage ===\n');
@@ -62,7 +62,7 @@ async function main() {
     );
     console.log('Campaigns by Owner:');
     owners.forEach((row: any) => {
-      console.log(`  ${row.owner}: ${row.campaigns} campaigns, $${(row.revenue || 0).toFixed(2)} revenue`);
+      console.log(`  ${row.owner}: ${Number(row.campaigns)} campaigns, $${(Number(row.revenue) || 0).toFixed(2)} revenue`);
     });
     
     // Revenue by media source (from sessions)
@@ -81,10 +81,10 @@ async function main() {
     );
     revenueBySource.forEach((row: any) => {
       console.log(`  ${row.source}:`);
-      console.log(`    Campaigns: ${row.campaigns}`);
-      console.log(`    Sessions: ${row.sessions}`);
-      console.log(`    Revenue: $${row.revenue.toFixed(2)}`);
-      console.log(`    RPC: $${row.rpc ? row.rpc.toFixed(4) : 'N/A'}`);
+      console.log(`    Campaigns: ${Number(row.campaigns)}`);
+      console.log(`    Sessions: ${Number(row.sessions)}`);
+      console.log(`    Revenue: $${Number(row.revenue).toFixed(2)}`);
+      console.log(`    RPC: $${row.rpc ? Number(row.rpc).toFixed(4) : 'N/A'}`);
       console.log('');
     });
     
@@ -100,10 +100,13 @@ async function main() {
        LEFT JOIN campaign_index c ON s.campaign_id = c.campaign_id`
     );
     const stats = joinable[0];
-    console.log(`Session campaigns: ${stats.session_campaigns}`);
-    console.log(`Indexed campaigns: ${stats.indexed_campaigns}`);
-    console.log(`Matched (joinable): ${stats.matched_campaigns}`);
-    console.log(`Match rate: ${((stats.matched_campaigns / stats.session_campaigns) * 100).toFixed(1)}%`);
+    const sessionCampaigns = Number(stats.session_campaigns);
+    const indexedCampaigns = Number(stats.indexed_campaigns);
+    const matchedCampaigns = Number(stats.matched_campaigns);
+    console.log(`Session campaigns: ${sessionCampaigns}`);
+    console.log(`Indexed campaigns: ${indexedCampaigns}`);
+    console.log(`Matched (joinable): ${matchedCampaigns}`);
+    console.log(`Match rate: ${sessionCampaigns > 0 ? ((matchedCampaigns / sessionCampaigns) * 100).toFixed(1) : '0.0'}%`);
     
     // Sample raw payload to see what fields S1 returns
     console.log('\n=== Sample Campaign Raw Payload ===\n');
