@@ -5,12 +5,13 @@
 We now maintain an automated DuckDB-backed index that links Strategist campaign metadata with Strategis session revenue so we can monitor RPC by campaign, media source, owner, and click hour without manual joins.
 
 - **Campaign metadata ingestion** (`monitor:ingest-campaigns`)
-  - Reads Strategist day/reconciled snapshots directly from `data/snapshots/facebook/<source>/`.
+  - In default `remote` mode pulls Facebook + S1 datasets directly from `https://strategis.lincx.in` (Facebook report/campaigns/adsets, S1 daily/rpc averages, Strategis metrics, pixel data).
+  - `snapshot` mode still supports reading historical Strategist exports from `data/snapshots/facebook/<source>/`.
   - Normalizes campaign-level rows (owner, lane, category, media source, spend, revenue, sessions, etc.).
   - Upserts into `data/monitoring.duckdb` → `campaign_index`.
 - **Session aggregation** (`monitor:ingest-sessions`)
-  - Pulls the Strategis session CSV API for a date, optionally capped at a max click hour.
-  - Aggregates sessions/revenue per (campaign_id, click_hour) and joins against `campaign_index` metadata.
+  - Calls `GET /api/s1/report/hourly-v3` on Strategis to fetch hourly S1 sessions/revenue (ClickHouse backend).
+  - Aggregates sessions/revenue per (strategis_campaign_id, click_hour) and joins against `campaign_index` metadata.
   - Stores into `session_hourly_metrics`, logging each ingest run.
 
 Both scripts write run metadata (`campaign_index_runs`, `session_ingest_runs`) for auditing.
@@ -30,32 +31,37 @@ Flags:
 | Script | Flag | Description |
 | --- | --- | --- |
 | ingest-campaigns | `--date=YYYY-MM-DD` | Snapshot date to read |
-|  | `--source=day|reconciled` | Snapshot group (default day) |
+|  | `--source=day|reconciled` | Snapshot group metadata (default day) |
 |  | `--level=campaign|adset` | Snapshot level (default campaign) |
-|  | `--mode=snapshot|remote` | `snapshot` reads local files, `remote` hits Strategist API |
+|  | `--mode=snapshot|remote` | `remote` hits Strategis API, `snapshot` reads local files |
 | ingest-sessions | `--date=YYYY-MM-DD` | Session date to fetch |
 |  | `--max-hour=H` | Upper bound on click_hour (0-23) |
-|  | `--limit=N` | Strategis API limit (default -1) |
-|  | `--mode=direct|remote` | `direct` hits Strategis staging endpoint, `remote` proxies via Strategist API |
+|  | `--mode=strategis` | Present for backwards-compatibility; always uses Strategis hourly report |
 
 `MONITORING_DB_PATH` can override the default `data/monitoring.duckdb` location.
 
-### Remote API mode
+### Strategis API configuration
 
-When the repo runs on infrastructure that has access to the Strategist API, set the following environment variables so the ingestion scripts can authenticate automatically:
+Both scripts rely on a single authenticated client that logs into Authentic (IX ID) and issues signed requests to `https://strategis.lincx.in`. Make sure these env vars are set before running the jobs (export in your shell profile or add to the systemd unit):
 
-| Variable | Description |
-| --- | --- |
-| `IX_ID_EMAIL` | IX ID login email (e.g., `roach@interlincx.com`) |
-| `IX_ID_PASSWORD` | IX ID password (store securely) |
-| `STRATEGIST_API_BASE_URL` | Strategist API origin (default `https://strategist.lincx.la`) |
-| `IX_ID_BASE_URL` | IX ID auth origin (default `https://ix-id.lincx.la`) |
+| Variable | Description | Default |
+| --- | --- | --- |
+| `IX_ID_EMAIL` | IX ID login email | _required_ |
+| `IX_ID_PASSWORD` | IX ID password | _required_ |
+| `IX_ID_BASE_URL` or `STRATEGIS_AUTH_BASE_URL` | Authentic host | `https://ix-id.lincx.la` |
+| `STRATEGIS_API_BASE_URL` | Strategis API origin | `https://strategis.lincx.in` |
+| `STRATEGIS_ALLOW_SELF_SIGNED` | Set `1` to bypass self-signed certs (Hetzner) | `0` |
+| `STRATEGIS_ORGANIZATION` | Organization query param | `Interlincx` |
+| `STRATEGIS_AD_SOURCE` | `adSource` query param | `rsoc` |
+| `STRATEGIS_NETWORK_ID` | Network ID for S1 endpoints | `112` |
+| `STRATEGIS_TIMEZONE` | Timezone for S1/strategis queries | `UTC` |
+| `STRATEGIS_RPC_DAYS` | Lookback window for RPC averages | `3` |
 
-Then run:
+Example manual run (UTC):
 
 ```bash
 npm run monitor:ingest-campaigns -- --date=$(date -u +%F) --mode=remote
-npm run monitor:ingest-sessions -- --date=$(date -u +%F) --mode=remote --max-hour=$(date -u +%H)
+npm run monitor:ingest-sessions -- --date=$(date -u +%F) --max-hour=$(date -u +%H)
 ```
 
 Tokens are cached in-memory per process and refreshed automatically when expired.

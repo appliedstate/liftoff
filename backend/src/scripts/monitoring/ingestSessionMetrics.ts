@@ -1,8 +1,6 @@
 import 'dotenv/config';
-import axios from 'axios';
-import https from 'https';
 import { allRows, closeConnection, createMonitoringConnection, initMonitoringSchema, runSql, sqlNumber, sqlString } from '../../lib/monitoringDb';
-import { createStrategistClient } from '../../lib/strategistClient';
+import { StrategisApi } from '../../lib/strategisApi';
 
 type SessionAggregate = {
   campaignId: string;
@@ -31,68 +29,80 @@ function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function parseCsvLine(line: string): string[] {
-  const out: string[] = [];
-  let field = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (inQuotes) {
-      if (ch === '"') {
-        if (i + 1 < line.length && line[i + 1] === '"') {
-          field += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        field += ch;
-      }
-    } else if (ch === ',') {
-      out.push(field);
-      field = '';
-    } else if (ch === '"') {
-      inQuotes = true;
-    } else {
-      field += ch;
-    }
-  }
-  out.push(field);
-  return out;
-}
-
-function parseCsv(input: string): { header: string[]; rows: Record<string, string>[] } {
-  const text = input.trim();
-  if (!text) return { header: [], rows: [] };
-  const lines = text.split(/\r?\n/);
-  const header = parseCsvLine(lines[0]).map((h) => h.trim());
-  const rows: Record<string, string>[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const values = parseCsvLine(lines[i]);
-    if (values.length === 0) continue;
-    const row: Record<string, string> = {};
-    for (let j = 0; j < header.length; j++) {
-      row[header[j]] = values[j] ?? '';
-    }
-    rows.push(row);
-  }
-  return { header, rows };
-}
-
-function toNumber(val: string | undefined): number | null {
-  if (val === undefined || val === null) return null;
-  const trimmed = val.trim();
-  if (!trimmed) return null;
-  const num = Number(trimmed);
-  return Number.isFinite(num) ? num : null;
-}
-
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < arr.length; i += size) {
     out.push(arr.slice(i, i + size));
   }
   return out;
+}
+
+function valueToNumber(value: any): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const num = Number(trimmed);
+    return Number.isFinite(num) ? num : null;
+  }
+  if (typeof value === 'boolean') {
+    return value ? 1 : 0;
+  }
+  return valueToNumber(String(value));
+}
+
+function getNumber(row: Record<string, any>, keys: string[]): number | null {
+  for (const key of keys) {
+    const val = valueToNumber(row[key]);
+    if (val !== null && val !== undefined) return val;
+  }
+  return null;
+}
+
+function getString(row: Record<string, any>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = row[key];
+    if (value === null || value === undefined) continue;
+    const str = String(value).trim();
+    if (str) return str;
+  }
+  return null;
+}
+
+function normalizeId(value: any): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : null;
+  }
+  if (typeof value === 'number' || typeof value === 'bigint') {
+    return value.toString();
+  }
+  return String(value);
+}
+
+function getHourFromRow(row: Record<string, any>): number | null {
+  const direct = getNumber(row, ['hour', 'click_hour', 'hour_of_day', 'hour_of_click']);
+  if (direct !== null && direct >= 0 && direct <= 23) return Math.floor(direct);
+  const composite = getString(row, ['date_hour', 'dateHour']);
+  if (composite) {
+    const match = composite.match(/(\d{1,2})$/);
+    if (match) {
+      const h = Number(match[1]);
+      if (Number.isFinite(h)) return Math.min(Math.max(h, 0), 23);
+    }
+  }
+  const timestamp = getString(row, ['timestamp', 'click_time']);
+  if (timestamp) {
+    const date = new Date(timestamp);
+    if (!Number.isNaN(date.getTime())) {
+      return date.getUTCHours();
+    }
+  }
+  return null;
 }
 
 async function loadCampaignMeta(
@@ -187,60 +197,41 @@ async function recordRun(
   await runSql(conn, sql);
 }
 
-async function fetchSessionCsv(date: string, limitParam: string, mode: string): Promise<string> {
-  const query = {
-    date,
-    filterZero: '1',
-    incremental: '1',
-    limit: limitParam || '-1',
-    offset: '0',
-    output: 'csv',
-  };
-  if (mode === 'remote') {
-    const client = createStrategistClient();
-    const data = await client.get('/api/system1/session-revenue', query, 'text');
-    if (typeof data !== 'string') {
-      throw new Error('Strategist session-revenue API did not return CSV text');
-    }
-    return data;
-  }
-
-  const baseUrl = 'https://staging-dot-strategis-273115.appspot.com/api/s1/report/get-session-rev';
-  const params = new URLSearchParams(query);
-  const agent = new https.Agent({ rejectUnauthorized: false });
-  const response = await axios.get(`${baseUrl}?${params.toString()}`, {
-    responseType: 'text',
-    timeout: 120000,
-    httpsAgent: agent,
-  });
-  return String(response.data || '');
+async function fetchHourlyRows(date: string): Promise<any[]> {
+  const api = new StrategisApi();
+  return api.fetchS1Hourly(date);
 }
 
 async function main(): Promise<void> {
   const date = getFlag('date', todayUtc());
   const maxHour = Number(getFlag('max-hour', '23'));
   const maxClickHour = Number.isFinite(maxHour) ? Math.max(0, Math.min(maxHour, 23)) : 23;
-  const limitParam = getFlag('limit', '-1');
-  const mode = getFlag('mode', 'direct').toLowerCase();
+  const mode = getFlag('mode', 'strategis').toLowerCase();
+  if (mode !== 'strategis' && mode !== 'remote') {
+    console.warn(`[ingestSessionMetrics] Unknown mode "${mode}", defaulting to strategis API`);
+  }
 
-  console.log(`[ingestSessionMetrics] Fetching session CSV for ${date} (<= hour ${maxClickHour}) via ${mode} mode...`);
-  const csv = await fetchSessionCsv(date, limitParam, mode);
-  const parsed = parseCsv(csv);
-  console.log(`[ingestSessionMetrics] Received ${parsed.rows.length} rows`);
+  console.log(`[ingestSessionMetrics] Fetching Strategis hourly data for ${date} (<= hour ${maxClickHour}) ...`);
+  const hourlyRows = await fetchHourlyRows(date);
+  console.log(`[ingestSessionMetrics] Received ${hourlyRows.length} rows`);
 
   const aggregatesMap = new Map<string, SessionAggregate>();
   let totalSessions = 0;
 
-  for (const row of parsed.rows) {
-    const campaignId = row['campaign_id']?.trim();
+  for (const row of hourlyRows) {
+    const campaignId =
+      normalizeId(row['strategisCampaignId']) ??
+      normalizeId(row['strategiscampaignid']) ??
+      normalizeId(row['campaign_id']) ??
+      normalizeId(row['campaignId']);
     if (!campaignId) continue;
-    const ch = toNumber(row['click_hour']);
+
+    const ch = getHourFromRow(row);
     if (ch === null || ch > maxClickHour) continue;
-    const revenue =
-      toNumber(row['total_revenue']) ??
-      toNumber(row['revenue']) ??
-      toNumber(row['revenue_usd']) ??
-      0;
+
+    const sessionsVal = getNumber(row, ['sessions', 'searches', 'visits', 'clicks']) ?? 0;
+    const revenueVal =
+      getNumber(row, ['estimated_revenue', 'revenue', 'revenue_usd', 'total_revenue']) ?? 0;
     const key = `${campaignId}|${ch}`;
     const agg = aggregatesMap.get(key) || {
       campaignId,
@@ -249,10 +240,10 @@ async function main(): Promise<void> {
       revenue: 0,
       rpc: 0,
     };
-    agg.sessions += 1;
-    agg.revenue += revenue || 0;
+    agg.sessions += sessionsVal;
+    agg.revenue += revenueVal;
     aggregatesMap.set(key, agg);
-    totalSessions += 1;
+    totalSessions += sessionsVal;
   }
 
   const aggregates: SessionAggregate[] = [];
@@ -261,7 +252,7 @@ async function main(): Promise<void> {
     aggregates.push(agg);
   }
   aggregates.sort((a, b) => (a.campaignId === b.campaignId ? a.clickHour - b.clickHour : a.campaignId.localeCompare(b.campaignId)));
-  console.log(`[ingestSessionMetrics] Aggregated ${aggregates.length} (campaign, hour) rows across ${aggregatesMap.size} keys`);
+  console.log(`[ingestSessionMetrics] Aggregated ${aggregates.length} (campaign, hour) rows`);
 
   const campaignIds = Array.from(new Set(aggregates.map((a) => a.campaignId)));
   const campaignCount = campaignIds.length;
@@ -273,7 +264,7 @@ async function main(): Promise<void> {
     await recordRun(conn, {
       date,
       maxClickHour,
-      sessionCount: totalSessions,
+      sessionCount: Math.round(totalSessions),
       campaignCount,
       status: 'success',
     });
@@ -282,7 +273,7 @@ async function main(): Promise<void> {
     await recordRun(conn, {
       date,
       maxClickHour,
-      sessionCount: totalSessions,
+      sessionCount: Math.round(totalSessions),
       campaignCount,
       status: 'failed',
       message: err?.message || String(err),

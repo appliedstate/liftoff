@@ -1,10 +1,12 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import https from 'https';
 
 type StrategistClientOptions = {
   apiBaseUrl?: string;
   ixIdBaseUrl?: string;
   email?: string;
   password?: string;
+  allowSelfSigned?: boolean;
 };
 
 function decodeJwtExpiration(token: string): number | null {
@@ -38,13 +40,14 @@ export class StrategistClient {
     if (!this.email || !this.password) {
       throw new Error('IX_ID_EMAIL and IX_ID_PASSWORD must be set (env or options) to use StrategistClient');
     }
+    const allowSelfSigned =
+      typeof opts.allowSelfSigned === 'boolean'
+        ? opts.allowSelfSigned
+        : process.env.STRATEGIST_ALLOW_SELF_SIGNED === '1';
     this.http = axios.create({
       baseURL: this.apiBaseUrl,
       timeout: 120000,
-      httpsAgent:
-        process.env.STRATEGIST_ALLOW_SELF_SIGNED === '1'
-          ? new (require('https').Agent)({ rejectUnauthorized: false })
-          : undefined,
+      httpsAgent: allowSelfSigned ? new https.Agent({ rejectUnauthorized: false }) : undefined,
     });
   }
 
@@ -92,5 +95,15 @@ export class StrategistClient {
 
 export function createStrategistClient(): StrategistClient {
   return new StrategistClient();
+}
+
+export function createStrategisApiClient(): StrategistClient {
+  return new StrategistClient({
+    apiBaseUrl: process.env.STRATEGIS_API_BASE_URL || 'https://strategis.lincx.in',
+    ixIdBaseUrl: process.env.STRATEGIS_AUTH_BASE_URL || process.env.IX_ID_BASE_URL || 'https://ix-id.lincx.la',
+    allowSelfSigned:
+      process.env.STRATEGIS_ALLOW_SELF_SIGNED === '1' ||
+      process.env.STRATEGIST_ALLOW_SELF_SIGNED === '1',
+  });
 }
 
