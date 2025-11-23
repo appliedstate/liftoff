@@ -105,24 +105,24 @@ async function main() {
     
     if (campaigns.length > 0) {
       console.log('Top 20 MediaGo Campaigns by Revenue:\n');
-      console.log('┌──────────────┬──────────────────────────────────────────┬─────────────┬───────────┬─────────────┬─────────────┬─────────────┬─────────────┐');
-      console.log('│ Campaign ID  │ Campaign Name                             │ Buyer       │ Revenue   │ Sessions    │ Clicks      │ Spend       │ ROAS        │');
-      console.log('├──────────────┼──────────────────────────────────────────┼─────────────┼───────────┼─────────────┼─────────────┼─────────────┼─────────────┤');
+      console.log('┌──────────────┬──────────────────────────────────────────┬──────────────┬──────────────┬─────────────┬─────────────┬──────────────┬─────────────┐');
+      console.log('│ Campaign ID  │ Campaign Name                             │ Buyer        │ Revenue      │ Sessions    │ Clicks      │ Spend        │ ROAS        │');
+      console.log('├──────────────┼──────────────────────────────────────────┼──────────────┼──────────────┼─────────────┼─────────────┼──────────────┼─────────────┤');
       
       for (const row of campaigns) {
         const campaignId = String(row.campaign_id || '').substring(0, 12).padEnd(12);
         const campaignName = String(row.campaign_name || 'N/A').substring(0, 40).padEnd(40);
-        const buyer = String(row.owner || 'UNKNOWN').substring(0, 11).padEnd(11);
+        const buyer = String(row.owner || 'UNKNOWN').substring(0, 12).padEnd(12);
         const revenue = Number(row.revenue_usd || 0);
         const sessions = Number(row.sessions || 0);
         const clicks = Number(row.clicks || 0);
         const spend = Number(row.spend_usd || 0);
         const roas = row.roas ? Number(row.roas).toFixed(2) : 'N/A';
         
-        console.log(`│ ${campaignId} │ ${campaignName} │ ${buyer} │ $${revenue.toFixed(2).padStart(8)} │ ${sessions.toFixed(0).padStart(11)} │ ${clicks.toFixed(0).padStart(11)} │ $${spend.toFixed(2).padStart(8)} │ ${roas.padStart(11)} │`);
+        console.log(`│ ${campaignId} │ ${campaignName} │ ${buyer} │ $${revenue.toFixed(2).padStart(11)} │ ${sessions.toFixed(0).padStart(11)} │ ${clicks.toFixed(0).padStart(11)} │ $${spend.toFixed(2).padStart(11)} │ ${roas.padStart(11)} │`);
       }
       
-      console.log('└──────────────┴──────────────────────────────────────────┴─────────────┴───────────┴─────────────┴─────────────┴─────────────┴─────────────┘');
+      console.log('└──────────────┴──────────────────────────────────────────┴──────────────┴──────────────┴─────────────┴─────────────┴──────────────┴─────────────┘');
       
       if (campaigns.length === 20) {
         const totalCampaigns = await allRows(
