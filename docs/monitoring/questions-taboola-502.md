@@ -76,9 +76,49 @@ async fetchTaboolaReport(date: string): Promise<any[]> {
 - **Data Completeness**: ⚠️ Taboola spend data missing (revenue still captured via S1)
 - **ROAS Calculation**: ⚠️ Incomplete for Taboola campaigns (missing spend, have revenue)
 
+## Devin's Answers & Analysis
+
+### Most Likely Root Cause
+Based on Devin's investigation, the 502 is most likely caused by:
+1. **Taboola upstream API issue** (down, rate-limited, or timing out)
+2. **Strategis application error** specific to Taboola endpoint
+3. **Database query timeout** when fetching Taboola data
+
+### Key Insights
+- **Parameter mismatch unlikely**: 502 indicates gateway/application failure, not parameter validation (which would return 400/422)
+- **Authentication likely fine**: Other endpoints work with same JWT token
+- **Not a data availability issue**: 502 suggests processing failure, not missing data (which would return 200 with empty array)
+
+### Recommended Actions (Priority Order)
+
+1. **Check Strategis logs** (HIGHEST PRIORITY)
+   - Look for errors around time of 502 requests
+   - Will reveal if it's upstream Taboola or internal Strategis issue
+
+2. **Test with historical date** (7-14 days ago)
+   ```bash
+   npm run monitor:test-taboola -- 2025-11-16
+   ```
+
+3. **Test without adSource parameter**
+   - Remove `adSource: 'rsoc'` to see if it's RSOC-specific
+
+4. **Test parameter variations**
+   - Try `dimensions` (plural) instead of `dimension` (singular)
+   - Try with `dbSource: 'ch'` or `dbSource: 'level'`
+   - Try minimal parameters (date + org only)
+
+5. **Contact Strategis/Taboola support**
+   - If logs show upstream 502 → escalate to Taboola
+   - If logs show internal error → escalate to Strategis team
+
+### Test Script Available
+Run `npm run monitor:test-taboola -- <date>` to test all parameter variations automatically.
+
 ## Next Steps
 
-1. **Immediate**: Get answers from Devin about endpoint status and parameters
-2. **Short-term**: Fix parameter names or endpoint URL if needed
-3. **Long-term**: Implement backfill once endpoint is fixed
+1. **Immediate**: Run test script with historical date to rule out data availability
+2. **Short-term**: Check Strategis logs for detailed error messages
+3. **If parameter fix works**: Update `ingestCampaignIndex.ts` with working combination
+4. **Long-term**: Implement backfill once endpoint is fixed
 

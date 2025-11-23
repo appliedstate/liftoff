@@ -46,6 +46,7 @@
     "monitor:explore": "ts-node src/scripts/monitoring/exploreData.ts",
     "monitor:inspect-api": "ts-node src/scripts/monitoring/inspectApiResponses.ts",
     "monitor:test-endpoints": "ts-node src/scripts/monitoring/testAllEndpoints.ts",
+    "monitor:test-taboola": "ts-node src/scripts/monitoring/testTaboolaVariations.ts",
     "index:now": "ts-node src/scripts/indexNow.ts",
     "system1:analyze": "ts-node src/scripts/analyzeSystem1.ts",
     "s1:intake": "ts-node src/scripts/s1Intake.ts",
