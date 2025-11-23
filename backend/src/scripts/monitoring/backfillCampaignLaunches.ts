@@ -184,7 +184,8 @@ async function main() {
     
     const todayPST = getTodayPST();
     const startDate = getDaysAgoPST(startDaysAgo);
-    const endDate = getDaysAgoPST(endDaysAgo);
+    // If endDaysAgo is 0, use today; otherwise use the calculated end date
+    const endDate = endDaysAgo === 0 ? todayPST : getDaysAgoPST(endDaysAgo);
     
     // Ensure we start from baseline date or later
     const actualStartDate = startDate < baselineDate ? baselineDate : startDate;
@@ -196,13 +197,19 @@ async function main() {
     console.log(`Actual Date Range: ${actualStartDate} to ${endDate} (adjusted for baseline)\n`);
     
     // Get actual dates that have data and fall within the requested range (Nov 1+)
-    const datesWithData = availableDates
-      .map((r: any) => String(r.date).slice(0, 10))
+    // Normalize dates to YYYY-MM-DD format for comparison
+    const normalizedAvailableDates = availableDates.map((r: any) => {
+      const dateStr = String(r.date);
+      // Handle both Date objects and date strings
+      return dateStr.includes('T') ? dateStr.slice(0, 10) : dateStr.slice(0, 10);
+    });
+    
+    const datesWithData = normalizedAvailableDates
       .filter((d: string) => d >= actualStartDate && d <= endDate);
     
     if (datesWithData.length === 0) {
       console.log(`\n⚠️  No data found in campaign_index for dates ${actualStartDate} to ${endDate}`);
-      console.log(`Available dates: ${availableDates.map((r: any) => String(r.date).slice(0, 10)).join(', ')}`);
+      console.log(`Available dates: ${normalizedAvailableDates.join(', ')}`);
       console.log('\nTo backfill available dates, use:');
       console.log(`  npm run monitor:backfill-launches -- <days_back> <days_forward>`);
       console.log(`  Or track specific date: npm run monitor:track-launches -- <date>\n`);
