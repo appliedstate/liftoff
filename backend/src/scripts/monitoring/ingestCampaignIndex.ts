@@ -632,6 +632,9 @@ async function main(): Promise<void> {
       { label: 'googleads_report', fetch: () => api.fetchGoogleAdsReport(date), merge: (rows) => aggregator.mergeGoogleAdsReport(rows) },
     ];
 
+    const criticalSteps = ['s1_daily_v3', 's1_reconciled']; // These are required for revenue/metadata
+    const optionalSteps = ['taboola_report', 'outbrain_report', 'newsbreak_report', 'mediago_report', 'zemanta_report', 'smartnews_report', 'googleads_report']; // Spend data - continue if these fail
+    
     for (const step of steps) {
       console.log(`[ingestCampaignIndex] -> ${step.label} ...`);
       try {
@@ -639,8 +642,21 @@ async function main(): Promise<void> {
         console.log(`[ingestCampaignIndex] <- ${step.label}: ${payload.length} rows`);
         step.merge(payload);
       } catch (err: any) {
-        console.error(`[ingestCampaignIndex] ${step.label} failed:`, err?.message || err);
-        throw err;
+        const isCritical = criticalSteps.includes(step.label);
+        const isOptional = optionalSteps.includes(step.label);
+        
+        if (isCritical) {
+          // Critical steps (S1 revenue) - fail the whole ingestion
+          console.error(`[ingestCampaignIndex] ${step.label} failed (CRITICAL):`, err?.message || err);
+          throw err;
+        } else if (isOptional) {
+          // Optional steps (platform spend) - log but continue
+          console.warn(`[ingestCampaignIndex] ${step.label} failed (OPTIONAL, continuing):`, err?.message || String(err).substring(0, 200));
+          // Continue to next step
+        } else {
+          // Other steps (Facebook, etc.) - log but continue (they're important but not critical for multi-platform)
+          console.warn(`[ingestCampaignIndex] ${step.label} failed (non-critical, continuing):`, err?.message || String(err).substring(0, 200));
+        }
       }
     }
     records = aggregator.toRecords(source);
