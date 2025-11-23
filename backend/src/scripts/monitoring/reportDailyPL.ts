@@ -8,31 +8,34 @@
 import 'dotenv/config';
 import { allRows, createMonitoringConnection, closeConnection } from '../../lib/monitoringDb';
 import { initMonitoringSchema } from '../../lib/monitoringDb';
+import { getYesterdayPST, pstToUtcDate } from '../../lib/dateUtils';
 
-function getPSTDate(date: Date): string {
-  const pstDate = new Date(date.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
-  return pstDate.toISOString().slice(0, 10);
-}
-
-function getTodayPST(): string {
-  return getPSTDate(new Date());
-}
-
-function getYesterdayPST(): string {
-  const date = new Date();
-  date.setDate(date.getDate() - 1);
-  return getPSTDate(date);
+/**
+ * Convert PST date to UTC date for querying
+ * Since Strategis API uses UTC and data is stored with UTC dates,
+ * we need to convert PST input dates to UTC dates for queries
+ */
+function pstDateToUtcForQuery(pstDate: string): string {
+  // Parse PST date and convert to UTC
+  // PST is UTC-8, so Nov 22 PST 00:00 = Nov 22 UTC 08:00
+  // Most data will be in the UTC date that corresponds to the PST date
+  const [year, month, day] = pstDate.split('-').map(Number);
+  const pstMidnight = new Date(Date.UTC(year, month - 1, day, 8, 0, 0)); // PST midnight = 8am UTC
+  return pstMidnight.toISOString().slice(0, 10);
 }
 
 async function main() {
   const dateArg = process.argv[2];
-  const date = dateArg || getYesterdayPST();
+  const pstDate = dateArg || getYesterdayPST();
+  // Convert PST date to UTC for querying (data is stored in UTC)
+  const utcDate = pstDateToUtcForQuery(pstDate);
   const conn = createMonitoringConnection();
   
   try {
     await initMonitoringSchema(conn);
     
-    console.log(`\n# Daily P&L Report for ${date}\n`);
+    console.log(`\n# Daily P&L Report for ${pstDate} (PST)`);
+    console.log(`Querying UTC date: ${utcDate} (data is stored in UTC)\n`);
     
     // Get overall totals
     const overall = await allRows(
@@ -44,7 +47,7 @@ async function main() {
         SUM(ci.clicks) as total_clicks,
         SUM(ci.conversions) as total_conversions
       FROM campaign_index ci
-      WHERE ci.date = '${date}'
+      WHERE ci.date = '${utcDate}'
         AND ci.spend_usd IS NOT NULL
         AND ci.revenue_usd IS NOT NULL`
     );
@@ -82,7 +85,7 @@ async function main() {
         SUM(ci.conversions) as conversions,
         COUNT(DISTINCT ci.campaign_id) as campaign_count
       FROM campaign_index ci
-      WHERE ci.date = '${date}'
+      WHERE ci.date = '${utcDate}'
         AND ci.spend_usd IS NOT NULL
         AND ci.revenue_usd IS NOT NULL
       GROUP BY ci.media_source
@@ -122,7 +125,7 @@ async function main() {
         SUM(ci.conversions) as conversions,
         COUNT(DISTINCT ci.campaign_id) as campaign_count
       FROM campaign_index ci
-      WHERE ci.date = '${date}'
+      WHERE ci.date = '${utcDate}'
         AND ci.spend_usd IS NOT NULL
         AND ci.revenue_usd IS NOT NULL
       GROUP BY ci.owner
@@ -163,7 +166,7 @@ async function main() {
         SUM(ci.conversions) as conversions,
         COUNT(DISTINCT ci.campaign_id) as campaign_count
       FROM campaign_index ci
-      WHERE ci.date = '${date}'
+      WHERE ci.date = '${utcDate}'
         AND ci.spend_usd IS NOT NULL
         AND ci.revenue_usd IS NOT NULL
       GROUP BY ci.owner, ci.media_source
@@ -218,7 +221,7 @@ async function main() {
         SUM(ci.revenue_usd) as revenue,
         COUNT(DISTINCT ci.campaign_id) as campaign_count
       FROM campaign_index ci
-      WHERE ci.date = '${date}'
+      WHERE ci.date = '${utcDate}'
         AND ci.spend_usd IS NOT NULL
         AND ci.revenue_usd IS NOT NULL
       GROUP BY ci.rsoc_site, ci.s1_google_account

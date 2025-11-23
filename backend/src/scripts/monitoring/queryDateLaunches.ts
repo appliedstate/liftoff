@@ -7,29 +7,35 @@
 import 'dotenv/config';
 import { allRows, createMonitoringConnection, closeConnection } from '../../lib/monitoringDb';
 import { initMonitoringSchema } from '../../lib/monitoringDb';
+import { getTodayPST } from '../../lib/dateUtils';
 
-function getPSTDate(date: Date): string {
-  const pstDate = new Date(date.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
-  return pstDate.toISOString().slice(0, 10);
-}
-
-function getTodayPST(): string {
-  return getPSTDate(new Date());
+/**
+ * Convert PST date to UTC date for querying
+ * Since Strategis API uses UTC and data is stored with UTC dates,
+ * we need to convert PST input dates to UTC dates for queries
+ */
+function pstDateToUtcForQuery(pstDate: string): string {
+  const [year, month, day] = pstDate.split('-').map(Number);
+  const pstMidnight = new Date(Date.UTC(year, month - 1, day, 8, 0, 0)); // PST midnight = 8am UTC
+  return pstMidnight.toISOString().slice(0, 10);
 }
 
 async function main() {
   const dateArg = process.argv[2];
-  const date = dateArg || getTodayPST();
+  const pstDate = dateArg || getTodayPST();
+  // Convert PST date to UTC for querying (data is stored in UTC)
+  const utcDate = pstDateToUtcForQuery(pstDate);
   const conn = createMonitoringConnection();
   
   try {
     await initMonitoringSchema(conn);
     
-    console.log(`\n# Campaign Launches for ${date}\n`);
-    console.log(`⚠️  **Important Note**: "Launched" here means "first seen in our data" on ${date}.`);
+    console.log(`\n# Campaign Launches for ${pstDate} (PST)`);
+    console.log(`Querying UTC date: ${utcDate} (data is stored in UTC)\n`);
+    console.log(`⚠️  **Important Note**: "Launched" here means "first seen in our data" on ${pstDate} PST.`);
     console.log(`   This could mean:`);
-    console.log(`   1. Campaign was actually launched on ${date}`);
-    console.log(`   2. Campaign was launched earlier but first showed activity/stats on ${date}`);
+    console.log(`   1. Campaign was actually launched on ${pstDate} PST`);
+    console.log(`   2. Campaign was launched earlier but first showed activity/stats on ${pstDate} PST`);
     console.log(`   3. Campaign was launched earlier but this is the first time we ingested data for it`);
     console.log(`\n   For campaigns with $0.00 spend and 0 sessions, they may have been launched earlier\n   but are just now appearing in our data.\n`);
     
@@ -50,8 +56,8 @@ async function main() {
       FROM campaign_launches cl
       LEFT JOIN campaign_index ci 
         ON cl.campaign_id = ci.campaign_id 
-        AND ci.date = '${date}'
-      WHERE cl.first_seen_date = '${date}'
+        AND ci.date = '${utcDate}'
+      WHERE cl.first_seen_date = '${utcDate}'
       GROUP BY cl.owner, cl.media_source, ci.rsoc_site, ci.s1_google_account
       ORDER BY campaign_count DESC, cl.owner, cl.media_source, ci.rsoc_site`
     );
@@ -82,8 +88,8 @@ async function main() {
         AND ci.date = '${date}'
       LEFT JOIN campaign_index ci_hist
         ON cl.campaign_id = ci_hist.campaign_id
-        AND ci_hist.date < '${date}'
-      WHERE cl.first_seen_date = '${date}'
+        AND ci_hist.date < '${utcDate}'
+      WHERE cl.first_seen_date = '${utcDate}'
         AND (ci.spend_usd IS NULL OR ci.spend_usd = 0)
         AND (ci.sessions IS NULL OR ci.sessions = 0)
       GROUP BY cl.campaign_id, cl.campaign_name, cl.owner, cl.media_source, ci.rsoc_site
@@ -138,7 +144,7 @@ async function main() {
         COALESCE(cl.media_source, 'UNKNOWN') as media_source,
         COUNT(*) as campaign_count
       FROM campaign_launches cl
-      WHERE cl.first_seen_date = '${date}'
+      WHERE cl.first_seen_date = '${utcDate}'
       GROUP BY cl.media_source
       ORDER BY campaign_count DESC`
     );
@@ -163,8 +169,8 @@ async function main() {
       FROM campaign_launches cl
       LEFT JOIN campaign_index ci 
         ON cl.campaign_id = ci.campaign_id 
-        AND ci.date = '${date}'
-      WHERE cl.first_seen_date = '${date}'
+        AND ci.date = '${utcDate}'
+      WHERE cl.first_seen_date = '${utcDate}'
       GROUP BY ci.rsoc_site, ci.s1_google_account
       ORDER BY campaign_count DESC`
     );
