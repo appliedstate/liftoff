@@ -53,6 +53,7 @@
     "monitor:visualize-sites": "ts-node src/scripts/monitoring/visualizeCampaignSites.ts",
     "monitor:track-launches": "ts-node src/scripts/monitoring/trackCampaignLaunches.ts",
     "monitor:launch-velocity": "ts-node src/scripts/monitoring/reportLaunchVelocity.ts",
+    "monitor:today-launches": "ts-node src/scripts/monitoring/queryTodayLaunches.ts",
     "monitor:fix-null-source": "ts-node src/scripts/monitoring/fixNullMediaSource.ts",
     "index:now": "ts-node src/scripts/indexNow.ts",
     "system1:analyze": "ts-node src/scripts/analyzeSystem1.ts",
