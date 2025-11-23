@@ -31,16 +31,17 @@ async function main() {
   const daysBack = parseInt(process.argv[5] || '2', 10);
   const debug = process.argv.includes('--debug');
   
-  if (!buyerArg || !networkArg || !siteArg) {
-    console.log('Usage: npm run monitor:buyer-activity -- <buyer> <network> <site> [days_back] [--debug]');
-    console.log('Example: npm run monitor:buyer-activity -- Cook taboola wesoughtit.com 2');
+  if (!buyerArg || !networkArg) {
+    console.log('Usage: npm run monitor:buyer-activity -- <buyer> <network> [site] [days_back] [--debug]');
+    console.log('Example (all sites): npm run monitor:buyer-activity -- Cook taboola 2');
+    console.log('Example (specific site): npm run monitor:buyer-activity -- Cook taboola wesoughtit.com 2');
     console.log('Example (with debug): npm run monitor:buyer-activity -- Cook taboola wesoughtit.com 2 --debug');
     return;
   }
   
   const buyer = buyerArg;
   const network = networkArg;
-  const site = siteArg;
+  const site = siteArg; // Optional - if not provided, show all sites
   const endDate = getTodayPST();
   const startDate = getDaysAgoPST(daysBack - 1);
   
@@ -49,10 +50,14 @@ async function main() {
   try {
     await initMonitoringSchema(conn);
     
-    console.log(`\n# ${buyer} Activity: ${network} → ${site}`);
+    const siteFilter = site ? ` → ${site}` : ' (All Sites)';
+    console.log(`\n# ${buyer} Activity: ${network}${siteFilter}`);
     console.log(`Date Range: ${startDate} to ${endDate} (Last ${daysBack} days)\n`);
     
-    // Get campaign launches for this buyer-network-site combination
+    // Build query with optional site filter
+    const siteCondition = site ? `AND ci.rsoc_site = '${site}'` : '';
+    
+    // Get campaign launches for this buyer-network combination (optionally filtered by site)
     const launches = await allRows(
       conn,
       `SELECT 
@@ -79,12 +84,13 @@ async function main() {
         AND cl.first_seen_date <= '${endDate}'
         AND cl.owner = '${buyer}'
         AND cl.media_source = '${network}'
-        AND ci.rsoc_site = '${site}'
-      ORDER BY cl.first_seen_date DESC, cl.campaign_name`
+        ${siteCondition}
+      ORDER BY ci.rsoc_site, cl.first_seen_date DESC, cl.campaign_name`
     );
     
     if (launches.length === 0) {
-      console.log(`No campaigns found for ${buyer} + ${network} + ${site} in this date range.`);
+      const siteText = site ? ` + ${site}` : '';
+      console.log(`No campaigns found for ${buyer} + ${network}${siteText} in this date range.`);
       console.log(`\nChecking what data exists...`);
       
       // Debug: show what buyer-network-site combinations exist
@@ -117,13 +123,69 @@ async function main() {
       return;
     }
     
+    // If no site filter, show breakdown by site first
+    if (!site) {
+      const bySite = await allRows(
+        conn,
+        `SELECT 
+          COALESCE(ci.rsoc_site, 'N/A') as site,
+          COALESCE(ci.s1_google_account, 'N/A') as s1_account,
+          COUNT(*) as campaign_count,
+          SUM(ci.spend_usd) as total_spend,
+          SUM(ci.revenue_usd) as total_revenue,
+          SUM(ci.sessions) as total_sessions,
+          SUM(ci.clicks) as total_clicks
+        FROM campaign_launches cl
+        LEFT JOIN campaign_index ci 
+          ON cl.campaign_id = ci.campaign_id 
+          AND ci.date = cl.first_seen_date
+        WHERE cl.first_seen_date >= '${startDate}'
+          AND cl.first_seen_date <= '${endDate}'
+          AND cl.owner = '${buyer}'
+          AND cl.media_source = '${network}'
+        GROUP BY ci.rsoc_site, ci.s1_google_account
+        ORDER BY campaign_count DESC`
+      );
+      
+      if (bySite.length > 0) {
+        console.log('## 📊 Breakdown by Site\n');
+        console.log('| Site | S1 Google Account | Campaigns | Spend | Revenue | Sessions | Clicks |');
+        console.log('|------|-------------------|-----------|-------|---------|----------|--------|');
+        for (const row of bySite) {
+          const siteName = String(row.site || 'N/A').padEnd(20);
+          const s1Account = String(row.s1_account || 'N/A').substring(0, 17).padEnd(17);
+          const count = String(row.campaign_count).padStart(9);
+          const spend = `$${Number(row.total_spend || 0).toFixed(2)}`.padStart(5);
+          const revenue = `$${Number(row.total_revenue || 0).toFixed(2)}`.padStart(7);
+          const sessions = Number(row.total_sessions || 0).toLocaleString().padStart(8);
+          const clicks = Number(row.total_clicks || 0).toLocaleString().padStart(6);
+          console.log(`| ${siteName} | ${s1Account} | ${count} | ${spend} | ${revenue} | ${sessions} | ${clicks} |`);
+        }
+        console.log('');
+      }
+    }
+    
     if (debug) {
       console.log('\n[DEBUG] Raw launch data:');
       console.log(JSON.stringify(launches, null, 2));
       console.log('');
     }
     
-    // Group by date
+    // Group by site and date
+    const bySiteAndDate: Record<string, Record<string, any[]>> = {};
+    for (const launch of launches) {
+      const site = String(launch.rsoc_site || 'N/A');
+      const date = String(launch.first_seen_date);
+      if (!bySiteAndDate[site]) {
+        bySiteAndDate[site] = {};
+      }
+      if (!bySiteAndDate[site][date]) {
+        bySiteAndDate[site][date] = [];
+      }
+      bySiteAndDate[site][date].push(launch);
+    }
+    
+    // Group by date (for overall summary)
     const byDate: Record<string, any[]> = {};
     for (const launch of launches) {
       const date = String(launch.first_seen_date);
@@ -136,9 +198,11 @@ async function main() {
     const totalCampaigns = launches.length;
     console.log(`📊 **Total Campaigns Launched: ${totalCampaigns}**\n`);
     
-    // Show breakdown by date
-    for (const [date, campaigns] of Object.entries(byDate).sort().reverse()) {
-      console.log(`## ${date} (${campaigns.length} campaigns)\n`);
+    // Helper function to show date breakdown
+    function showDateBreakdown(date: string, campaigns: any[], siteLabel: string) {
+      // Extract just the date part (YYYY-MM-DD) from the date string
+      const dateOnly = date.includes('T') ? date.split('T')[0] : date.slice(0, 10);
+      console.log(`## ${dateOnly} (${campaigns.length} campaigns)\n`);
       
       // Aggregate metrics for this date
       const totalSpend = campaigns.reduce((sum, c) => sum + (Number(c.spend_usd) || 0), 0);
@@ -184,11 +248,28 @@ async function main() {
         !c.spend_usd && !c.revenue_usd && !c.sessions && !c.clicks
       );
       if (missingData.length > 0) {
-        console.log(`\n⚠️  Note: ${missingData.length} campaign(s) have no performance data in campaign_index for ${date}`);
+        console.log(`\n⚠️  Note: ${missingData.length} campaign(s) have no performance data in campaign_index for ${dateOnly}`);
         console.log(`   This may mean the campaign hasn't spent yet or data hasn't been ingested.`);
       }
       
       console.log('');
+    }
+    
+    // Show breakdown by site and date (if multiple sites or no site filter)
+    if (!site && Object.keys(bySiteAndDate).length > 0) {
+      for (const [siteName, dates] of Object.entries(bySiteAndDate).sort()) {
+        const siteCampaigns = Object.values(dates).flat();
+        console.log(`\n## 🌍 Site: ${siteName} (${siteCampaigns.length} campaigns)\n`);
+        
+        for (const [date, campaigns] of Object.entries(dates).sort().reverse()) {
+          showDateBreakdown(date, campaigns, siteName);
+        }
+      }
+    } else {
+      // Show breakdown by date (single site specified)
+      for (const [date, campaigns] of Object.entries(byDate).sort().reverse()) {
+        showDateBreakdown(date, campaigns, site || 'All Sites');
+      }
     }
     
     // Overall summary
