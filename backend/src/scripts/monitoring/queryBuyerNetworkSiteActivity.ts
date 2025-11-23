@@ -1,8 +1,8 @@
 #!/usr/bin/env ts-node
 
 /**
- * Query specific buyer-network-site activity over a date range
- * Shows detailed campaign information and performance metrics
+ * Query specific buyer-network-site activity for a date range
+ * Shows campaign launches and performance metrics
  */
 
 import 'dotenv/config';
@@ -28,25 +28,27 @@ async function main() {
   const buyerArg = process.argv[2];
   const networkArg = process.argv[3];
   const siteArg = process.argv[4];
-  const daysArg = process.argv[5] || '2';
+  const daysBack = parseInt(process.argv[5] || '2', 10);
   
   if (!buyerArg || !networkArg || !siteArg) {
-    console.log('Usage: npm run monitor:buyer-activity -- <buyer> <network> <site> [days]');
+    console.log('Usage: npm run monitor:buyer-activity -- <buyer> <network> <site> [days_back]');
     console.log('Example: npm run monitor:buyer-activity -- Cook taboola wesoughtit.com 2');
     return;
   }
   
-  const days = parseInt(daysArg, 10);
+  const buyer = buyerArg;
+  const network = networkArg;
+  const site = siteArg;
   const endDate = getTodayPST();
-  const startDate = getDaysAgoPST(days - 1);
+  const startDate = getDaysAgoPST(daysBack - 1);
   
   const conn = createMonitoringConnection();
   
   try {
     await initMonitoringSchema(conn);
     
-    console.log(`\n# ${buyerArg} Activity: ${networkArg} → ${siteArg}`);
-    console.log(`Date Range: ${startDate} to ${endDate} (${days} days)\n`);
+    console.log(`\n# ${buyer} Activity: ${network} → ${site}`);
+    console.log(`Date Range: ${startDate} to ${endDate} (Last ${daysBack} days)\n`);
     
     // Get campaign launches for this buyer-network-site combination
     const launches = await allRows(
@@ -73,15 +75,14 @@ async function main() {
         AND ci.date = cl.first_seen_date
       WHERE cl.first_seen_date >= '${startDate}'
         AND cl.first_seen_date <= '${endDate}'
-        AND cl.owner = '${buyerArg}'
-        AND cl.media_source = '${networkArg}'
-        AND (ci.rsoc_site = '${siteArg}' OR ci.rsoc_site IS NULL)
+        AND cl.owner = '${buyer}'
+        AND cl.media_source = '${network}'
+        AND ci.rsoc_site = '${site}'
       ORDER BY cl.first_seen_date DESC, cl.campaign_name`
     );
     
     if (launches.length === 0) {
-      console.log(`No campaigns found for ${buyerArg} on ${networkArg} → ${siteArg} in this date range.`);
-      console.log(`\nNote: Make sure campaign launches have been tracked for these dates.`);
+      console.log(`No campaigns found for ${buyer} + ${network} + ${site} in this date range.`);
       return;
     }
     
@@ -95,100 +96,88 @@ async function main() {
       byDate[date].push(launch);
     }
     
-    // Summary stats
     const totalCampaigns = launches.length;
-    const totalSpend = launches.reduce((sum, l) => sum + (Number(l.spend_usd) || 0), 0);
-    const totalRevenue = launches.reduce((sum, l) => sum + (Number(l.revenue_usd) || 0), 0);
-    const totalSessions = launches.reduce((sum, l) => sum + (Number(l.sessions) || 0), 0);
-    const totalClicks = launches.reduce((sum, l) => sum + (Number(l.clicks) || 0), 0);
-    const avgROAS = totalSpend > 0 ? (totalRevenue / totalSpend) : 0;
+    console.log(`📊 **Total Campaigns Launched: ${totalCampaigns}**\n`);
     
-    console.log(`## Summary\n`);
-    console.log(`- **Total Campaigns**: ${totalCampaigns}`);
-    console.log(`- **Total Spend**: $${totalSpend.toFixed(2)}`);
-    console.log(`- **Total Revenue**: $${totalRevenue.toFixed(2)}`);
-    console.log(`- **Total Sessions**: ${totalSessions.toLocaleString()}`);
-    console.log(`- **Total Clicks**: ${totalClicks.toLocaleString()}`);
-    console.log(`- **Average ROAS**: ${avgROAS.toFixed(2)}x`);
-    console.log(`- **S1 Google Account**: ${launches[0]?.s1_google_account || 'N/A'}\n`);
-    
-    // Breakdown by date
-    console.log(`## Breakdown by Date\n`);
-    const sortedDates = Object.keys(byDate).sort().reverse();
-    
-    for (const date of sortedDates) {
-      const dateCampaigns = byDate[date];
-      const dateSpend = dateCampaigns.reduce((sum, l) => sum + (Number(l.spend_usd) || 0), 0);
-      const dateRevenue = dateCampaigns.reduce((sum, l) => sum + (Number(l.revenue_usd) || 0), 0);
-      const dateROAS = dateSpend > 0 ? (dateRevenue / dateSpend) : 0;
+    // Show breakdown by date
+    for (const [date, campaigns] of Object.entries(byDate).sort().reverse()) {
+      console.log(`## ${date} (${campaigns.length} campaigns)\n`);
       
-      console.log(`### ${date} (${dateCampaigns.length} campaigns)`);
-      console.log(`- Spend: $${dateSpend.toFixed(2)} | Revenue: $${dateRevenue.toFixed(2)} | ROAS: ${dateROAS.toFixed(2)}x\n`);
+      // Aggregate metrics for this date
+      const totalSpend = campaigns.reduce((sum, c) => sum + (Number(c.spend_usd) || 0), 0);
+      const totalRevenue = campaigns.reduce((sum, c) => sum + (Number(c.revenue_usd) || 0), 0);
+      const totalSessions = campaigns.reduce((sum, c) => sum + (Number(c.sessions) || 0), 0);
+      const totalClicks = campaigns.reduce((sum, c) => sum + (Number(c.clicks) || 0), 0);
+      const totalConversions = campaigns.reduce((sum, c) => sum + (Number(c.conversions) || 0), 0);
+      const avgROAS = totalSpend > 0 ? (totalRevenue / totalSpend) : 0;
+      const rpc = totalClicks > 0 ? (totalRevenue / totalClicks) : 0;
       
-      // Show campaign details
-      console.log('| Campaign ID | Campaign Name | Category | Spend | Revenue | Sessions | Clicks | ROAS |');
-      console.log('|-------------|---------------|----------|-------|---------|----------|--------|------|');
+      if (totalSpend > 0 || totalRevenue > 0) {
+        console.log(`**Performance Summary:**`);
+        console.log(`- Spend: $${totalSpend.toFixed(2)}`);
+        console.log(`- Revenue: $${totalRevenue.toFixed(2)}`);
+        console.log(`- ROAS: ${(avgROAS * 100).toFixed(1)}%`);
+        console.log(`- Sessions: ${totalSessions.toLocaleString()}`);
+        console.log(`- Clicks: ${totalClicks.toLocaleString()}`);
+        console.log(`- Conversions: ${totalConversions.toLocaleString()}`);
+        console.log(`- RPC: $${rpc.toFixed(4)}`);
+        console.log('');
+      }
       
-      for (const campaign of dateCampaigns) {
+      console.log('| Campaign ID | Campaign Name | Category | Lane | Spend | Revenue | ROAS | Sessions | Clicks |');
+      console.log('|-------------|---------------|----------|------|-------|---------|------|----------|--------|');
+      
+      for (const campaign of campaigns) {
         const campaignId = String(campaign.campaign_id || '').substring(0, 11);
         const campaignName = String(campaign.campaign_name || 'N/A').substring(0, 13);
         const category = String(campaign.category || 'N/A').substring(0, 7);
-        const spend = (Number(campaign.spend_usd) || 0).toFixed(2);
-        const revenue = (Number(campaign.revenue_usd) || 0).toFixed(2);
+        const lane = String(campaign.lane || 'N/A').substring(0, 4);
+        const spend = Number(campaign.spend_usd || 0).toFixed(2);
+        const revenue = Number(campaign.revenue_usd || 0).toFixed(2);
+        const roas = campaign.roas ? (Number(campaign.roas) * 100).toFixed(1) + '%' : 'N/A';
         const sessions = Number(campaign.sessions || 0).toLocaleString();
         const clicks = Number(campaign.clicks || 0).toLocaleString();
-        const roas = campaign.roas ? Number(campaign.roas).toFixed(2) : 'N/A';
         
-        console.log(`| ${campaignId} | ${campaignName} | ${category} | $${spend} | $${revenue} | ${sessions} | ${clicks} | ${roas} |`);
+        console.log(`| ${campaignId} | ${campaignName} | ${category} | ${lane} | $${spend} | $${revenue} | ${roas} | ${sessions} | ${clicks} |`);
       }
+      
       console.log('');
     }
     
-    // Performance insights
-    console.log(`## Performance Insights\n`);
+    // Overall summary
+    const overallSpend = launches.reduce((sum, c) => sum + (Number(c.spend_usd) || 0), 0);
+    const overallRevenue = launches.reduce((sum, c) => sum + (Number(c.revenue_usd) || 0), 0);
+    const overallSessions = launches.reduce((sum, c) => sum + (Number(c.sessions) || 0), 0);
+    const overallClicks = launches.reduce((sum, c) => sum + (Number(c.clicks) || 0), 0);
+    const overallConversions = launches.reduce((sum, c) => sum + (Number(c.conversions) || 0), 0);
+    const overallROAS = overallSpend > 0 ? (overallRevenue / overallSpend) : 0;
+    const overallRPC = overallClicks > 0 ? (overallRevenue / overallClicks) : 0;
     
-    const campaignsWithData = launches.filter(l => Number(l.spend_usd || 0) > 0 || Number(l.revenue_usd || 0) > 0);
-    const campaignsWithoutData = launches.filter(l => Number(l.spend_usd || 0) === 0 && Number(l.revenue_usd || 0) === 0);
-    
-    if (campaignsWithData.length > 0) {
-      const topPerformers = launches
-        .filter(l => Number(l.revenue_usd || 0) > 0)
-        .sort((a, b) => Number(b.revenue_usd || 0) - Number(a.revenue_usd || 0))
-        .slice(0, 5);
-      
-      if (topPerformers.length > 0) {
-        console.log('**Top Performing Campaigns by Revenue:**');
-        for (const campaign of topPerformers) {
-          const name = String(campaign.campaign_name || campaign.campaign_id).substring(0, 40);
-          const revenue = Number(campaign.revenue_usd || 0).toFixed(2);
-          const spend = Number(campaign.spend_usd || 0).toFixed(2);
-          const roas = campaign.roas ? Number(campaign.roas).toFixed(2) : 'N/A';
-          console.log(`- ${name}: $${revenue} revenue, $${spend} spend, ${roas}x ROAS`);
-        }
-        console.log('');
-      }
-    }
-    
-    if (campaignsWithoutData.length > 0) {
-      console.log(`⚠️  **Note**: ${campaignsWithoutData.length} campaigns have no spend/revenue data yet.`);
-      console.log(`   This is normal for newly launched campaigns - data may take time to populate.\n`);
-    }
+    console.log('## Overall Summary (All Dates)\n');
+    console.log(`- **Total Campaigns**: ${totalCampaigns}`);
+    console.log(`- **Total Spend**: $${overallSpend.toFixed(2)}`);
+    console.log(`- **Total Revenue**: $${overallRevenue.toFixed(2)}`);
+    console.log(`- **Overall ROAS**: ${(overallROAS * 100).toFixed(1)}%`);
+    console.log(`- **Total Sessions**: ${overallSessions.toLocaleString()}`);
+    console.log(`- **Total Clicks**: ${overallClicks.toLocaleString()}`);
+    console.log(`- **Total Conversions**: ${overallConversions.toLocaleString()}`);
+    console.log(`- **Overall RPC**: $${overallRPC.toFixed(4)}`);
     
     // Category breakdown
     const byCategory: Record<string, number> = {};
     for (const launch of launches) {
-      const category = String(launch.category || 'N/A');
-      byCategory[category] = (byCategory[category] || 0) + 1;
+      const cat = String(launch.category || 'N/A');
+      byCategory[cat] = (byCategory[cat] || 0) + 1;
     }
     
     if (Object.keys(byCategory).length > 0) {
-      console.log(`## Category Breakdown\n`);
+      console.log('\n## Category Breakdown\n');
       for (const [category, count] of Object.entries(byCategory).sort((a, b) => b[1] - a[1])) {
         console.log(`- **${category}**: ${count} campaigns`);
       }
-      console.log('');
     }
     
+    console.log('\n');
   } catch (err: any) {
     console.error('Error:', err?.message || err);
     process.exit(1);
@@ -201,4 +190,3 @@ main().catch((err) => {
   console.error('Fatal error:', err);
   process.exit(1);
 });
-
