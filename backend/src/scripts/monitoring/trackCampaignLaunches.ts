@@ -33,22 +33,56 @@ async function main() {
     
     // Get all unique campaigns from campaign_index for this date
     // Use GROUP BY to handle cases where same campaign appears multiple times (different levels/sources)
+    // Also look at historical dates to fill in missing owner/lane/category info
     const currentCampaigns = await allRows(
       conn,
       `SELECT 
-        campaign_id,
-        MAX(owner) as owner,
-        MAX(lane) as lane,
-        MAX(category) as category,
-        MAX(media_source) as media_source,
-        MAX(campaign_name) as campaign_name,
-        MAX(account_id) as account_id
-      FROM campaign_index
-      WHERE date = '${date}'
-        AND campaign_id IS NOT NULL
-        AND campaign_id != ''
-      GROUP BY campaign_id
-      ORDER BY campaign_id`
+        ci_date.campaign_id,
+        -- Prefer owner from current date, fallback to historical
+        COALESCE(
+          NULLIF(MAX(ci_date.owner), ''),
+          NULLIF(MAX(ci_date.owner), 'UNKNOWN'),
+          (SELECT MAX(ci_hist.owner) 
+           FROM campaign_index ci_hist 
+           WHERE ci_hist.campaign_id = ci_date.campaign_id 
+             AND ci_hist.owner IS NOT NULL 
+             AND ci_hist.owner != '' 
+             AND ci_hist.owner != 'UNKNOWN'
+           LIMIT 1)
+        ) as owner,
+        -- Same for lane
+        COALESCE(
+          NULLIF(MAX(ci_date.lane), ''),
+          NULLIF(MAX(ci_date.lane), 'UNKNOWN'),
+          (SELECT MAX(ci_hist.lane) 
+           FROM campaign_index ci_hist 
+           WHERE ci_hist.campaign_id = ci_date.campaign_id 
+             AND ci_hist.lane IS NOT NULL 
+             AND ci_hist.lane != '' 
+             AND ci_hist.lane != 'UNKNOWN'
+           LIMIT 1)
+        ) as lane,
+        -- Same for category
+        COALESCE(
+          NULLIF(MAX(ci_date.category), ''),
+          NULLIF(MAX(ci_date.category), 'UNKNOWN'),
+          (SELECT MAX(ci_hist.category) 
+           FROM campaign_index ci_hist 
+           WHERE ci_hist.campaign_id = ci_date.campaign_id 
+             AND ci_hist.category IS NOT NULL 
+             AND ci_hist.category != '' 
+             AND ci_hist.category != 'UNKNOWN'
+           LIMIT 1)
+        ) as category,
+        MAX(ci_date.media_source) as media_source,
+        MAX(ci_date.campaign_name) as campaign_name,
+        MAX(ci_date.account_id) as account_id
+      FROM campaign_index ci_date
+      WHERE ci_date.date = '${date}'
+        AND ci_date.campaign_id IS NOT NULL
+        AND ci_date.campaign_id != ''
+      GROUP BY ci_date.campaign_id
+      ORDER BY ci_date.campaign_id`
     );
     
     console.log(`[trackCampaignLaunches] Found ${currentCampaigns.length} campaigns in campaign_index for ${date}`);
