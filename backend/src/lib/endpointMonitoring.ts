@@ -15,6 +15,7 @@ export interface EndpointResult {
   hasSpend: boolean;
   error?: string;
   httpStatus?: number;
+  retryCount?: number;
 }
 
 export interface RetryOptions {

@@ -673,6 +673,9 @@ async function main(): Promise<void> {
   const mode = getFlag('mode', 'snapshot').toLowerCase();
 
   let records: CampaignRecordInput[] = [];
+  let conn: ReturnType<typeof createMonitoringConnection> | null = null;
+  let schemaReady = false;
+  
   if (mode === 'remote') {
     console.log(`[ingestCampaignIndex] Fetching Strategis datasets for ${date} (${level}) ...`);
     const api = new StrategisApi();
@@ -707,8 +710,7 @@ async function main(): Promise<void> {
     const optionalSteps = ['taboola_report', 'outbrain_report', 'newsbreak_report', 'mediago_report', 'zemanta_report', 'smartnews_report']; // Spend data - continue if these fail
     
     // Initialize DB connection early for completeness tracking
-    const conn = createMonitoringConnection();
-    let schemaReady = false;
+    conn = createMonitoringConnection();
     try {
       await initMonitoringSchema(conn);
       schemaReady = true;
@@ -751,6 +753,7 @@ async function main(): Promise<void> {
           rows: payload,
           rowCount: payload.length,
           ...extractFinancialIndicators(payload),
+          retryCount: 0,
         };
         
         // Data quality checks
@@ -774,6 +777,7 @@ async function main(): Promise<void> {
           hasSpend: false,
           error: errorMsg,
           httpStatus,
+          retryCount: 0,
         };
         
         if (isCritical) {
@@ -781,7 +785,7 @@ async function main(): Promise<void> {
           console.error(`[ingestCampaignIndex] ${step.label} failed (CRITICAL):`, errorMsg);
           
           // Record completeness before throwing
-          if (schemaReady) {
+          if (schemaReady && conn) {
             const status = determineStatus(result, true);
             await recordEndpointCompleteness(conn, {
               date,
@@ -806,7 +810,7 @@ async function main(): Promise<void> {
         }
       } finally {
         // Record completeness for all endpoints
-        if (schemaReady) {
+        if (schemaReady && conn) {
           const status = determineStatus(result, isCritical);
           await recordEndpointCompleteness(conn, {
             date,
@@ -834,8 +838,7 @@ async function main(): Promise<void> {
       .filter((r): r is CampaignRecordInput => Boolean(r));
     
     // Initialize DB connection for snapshot mode
-    const conn = createMonitoringConnection();
-    let schemaReady = false;
+    conn = createMonitoringConnection();
     try {
       await initMonitoringSchema(conn);
       schemaReady = true;
@@ -874,8 +877,12 @@ async function main(): Promise<void> {
     return; // Exit early for snapshot mode
   }
   
-  // Continue with remote mode: upsert records using existing conn
+  // Upsert records using conn (from either remote or snapshot mode)
   console.log(`[ingestCampaignIndex] Processing ${records.length} records`);
+  
+  if (!conn) {
+    throw new Error('Database connection not initialized');
+  }
   
   try {
     let inserted = 0;
@@ -893,7 +900,7 @@ async function main(): Promise<void> {
     });
     console.log(`[ingestCampaignIndex] Upserted ${inserted} rows into campaign_index`);
   } catch (err: any) {
-    if (schemaReady) {
+    if (schemaReady && conn) {
       await recordRun(conn, {
         date,
         snapshotSource: source,
@@ -907,7 +914,9 @@ async function main(): Promise<void> {
     }
     throw err;
   } finally {
-    closeConnection(conn);
+    if (conn) {
+      closeConnection(conn);
+    }
   }
 }
 
