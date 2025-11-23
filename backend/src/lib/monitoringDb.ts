@@ -138,6 +138,20 @@ export async function initMonitoringSchema(conn: any): Promise<void> {
       PRIMARY KEY (date, endpoint)
     )
     `,
+    `
+    CREATE TABLE IF NOT EXISTS campaign_launches (
+      campaign_id TEXT NOT NULL,
+      first_seen_date DATE NOT NULL,
+      owner TEXT,
+      lane TEXT,
+      category TEXT,
+      media_source TEXT,
+      campaign_name TEXT,
+      account_id TEXT,
+      detected_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (campaign_id)
+    )
+    `,
   ];
 
   for (const stmt of statements) {
