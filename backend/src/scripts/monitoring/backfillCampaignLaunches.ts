@@ -26,6 +26,22 @@ function getDaysAgoPST(days: number): string {
   return getPSTDate(date);
 }
 
+function getPSTDate(date: Date): string {
+  // Convert to PST (UTC-8) and return YYYY-MM-DD
+  const pstDate = new Date(date.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+  return pstDate.toISOString().slice(0, 10);
+}
+
+function getTodayPST(): string {
+  return getPSTDate(new Date());
+}
+
+function getDaysAgoPST(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return getPSTDate(date);
+}
+
 async function processDate(conn: any, date: string, dryRun: boolean = false): Promise<number> {
   console.log(`\n[backfillCampaignLaunches] Processing ${date}...`);
   
