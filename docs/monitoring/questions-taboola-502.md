@@ -115,10 +115,27 @@ Based on Devin's investigation, the 502 is most likely caused by:
 ### Test Script Available
 Run `npm run monitor:test-taboola -- <date>` to test all parameter variations automatically.
 
+## Test Results
+
+**Date Tested**: 2025-11-16 (historical date)
+
+**Result**: All 6 parameter variations failed with HTTP 502: Bad Gateway
+
+This confirms: **This is NOT a parameter issue** - it's an upstream Taboola API issue or Strategis application error.
+
+See `docs/monitoring/taboola-502-test-results.md` for full test results.
+
 ## Next Steps
 
-1. **Immediate**: Run test script with historical date to rule out data availability
-2. **Short-term**: Check Strategis logs for detailed error messages
-3. **If parameter fix works**: Update `ingestCampaignIndex.ts` with working combination
-4. **Long-term**: Implement backfill once endpoint is fixed
+1. **Immediate**: Check Strategis application logs (HIGHEST PRIORITY)
+   - Look for errors around `/api/taboola/report` requests
+   - Will reveal if it's Strategis internal error or Taboola upstream issue
+
+2. **Short-term**: Escalate to Strategis support with test results
+   - All parameter variations fail identically
+   - Not date-specific (fails for both current and historical dates)
+   - Other platform endpoints work fine
+
+3. **Long-term**: Implement backfill once endpoint is fixed
+   - See `docs/monitoring/taboola-backfill-strategy.md`
 
