@@ -9,6 +9,22 @@ import 'dotenv/config';
 import { allRows, createMonitoringConnection, closeConnection } from '../../lib/monitoringDb';
 import { initMonitoringSchema } from '../../lib/monitoringDb';
 
+function getPSTDate(date: Date): string {
+  // Convert to PST (UTC-8) and return YYYY-MM-DD
+  const pstDate = new Date(date.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+  return pstDate.toISOString().slice(0, 10);
+}
+
+function getTodayPST(): string {
+  return getPSTDate(new Date());
+}
+
+function getDaysAgoPST(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return getPSTDate(date);
+}
+
 async function main() {
   const days = parseInt(process.argv[2] || '7', 10);
   const conn = createMonitoringConnection();
@@ -16,8 +32,8 @@ async function main() {
   try {
     await initMonitoringSchema(conn);
     
-    const today = new Date().toISOString().slice(0, 10);
-    const startDate = new Date(Date.now() - (days - 1) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const today = getTodayPST();
+    const startDate = getDaysAgoPST(days - 1);
     
     console.log(`\n# Campaign Launch Velocity Report (Last ${days} Days)\n`);
     console.log(`Date Range: ${startDate} to ${today}\n`);

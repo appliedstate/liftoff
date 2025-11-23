@@ -8,8 +8,19 @@ import 'dotenv/config';
 import { allRows, createMonitoringConnection, closeConnection } from '../../lib/monitoringDb';
 import { initMonitoringSchema } from '../../lib/monitoringDb';
 
+function getPSTDate(date: Date): string {
+  // Convert to PST (UTC-8) and return YYYY-MM-DD
+  const pstDate = new Date(date.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+  return pstDate.toISOString().slice(0, 10);
+}
+
+function getTodayPST(): string {
+  return getPSTDate(new Date());
+}
+
 async function main() {
-  const date = process.argv[2] || new Date().toISOString().slice(0, 10);
+  const dateArg = process.argv[2];
+  const date = dateArg || getTodayPST();
   const conn = createMonitoringConnection();
   
   try {

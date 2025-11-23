@@ -10,8 +10,19 @@ import 'dotenv/config';
 import { allRows, createMonitoringConnection, closeConnection, runSql, sqlString, sqlNumber } from '../../lib/monitoringDb';
 import { initMonitoringSchema } from '../../lib/monitoringDb';
 
+function getPSTDate(date: Date): string {
+  // Convert to PST (UTC-8) and return YYYY-MM-DD
+  const pstDate = new Date(date.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+  return pstDate.toISOString().slice(0, 10);
+}
+
+function getTodayPST(): string {
+  return getPSTDate(new Date());
+}
+
 async function main() {
-  const date = process.argv[2] || new Date().toISOString().slice(0, 10);
+  const dateArg = process.argv[2];
+  const date = dateArg || getTodayPST();
   const conn = createMonitoringConnection();
   
   try {
@@ -54,10 +65,33 @@ async function main() {
     const existingCampaignIds = new Set(existingLaunches.map((r: any) => r.campaign_id));
     console.log(`[trackCampaignLaunches] Found ${existingCampaignIds.size} campaigns already tracked`);
     
-    // Find new campaigns
-    const newCampaigns = currentCampaigns.filter((c: any) => !existingCampaignIds.has(c.campaign_id));
+    // Find new campaigns (campaigns not in campaign_launches)
+    // Also check if existing campaigns should have earlier first_seen_date
+    const newCampaigns: any[] = [];
+    const existingCampaigns = await allRows(
+      conn,
+      `SELECT campaign_id, first_seen_date FROM campaign_launches`
+    );
     
-    console.log(`[trackCampaignLaunches] Detected ${newCampaigns.length} new campaigns\n`);
+    const existingFirstSeenMap = new Map<string, string>();
+    for (const row of existingCampaigns) {
+      existingFirstSeenMap.set(row.campaign_id, row.first_seen_date);
+    }
+    
+    for (const campaign of currentCampaigns) {
+      const existingFirstSeen = existingFirstSeenMap.get(campaign.campaign_id);
+      if (!existingFirstSeen) {
+        // Truly new campaign
+        newCampaigns.push(campaign);
+      } else if (existingFirstSeen > date) {
+        // Campaign exists but this date is earlier - we'll update it
+        newCampaigns.push(campaign);
+        console.log(`  Updating ${campaign.campaign_id}: ${existingFirstSeen} -> ${date} (earlier date found)`);
+      }
+      // If existingFirstSeen <= date, keep existing (earlier) date
+    }
+    
+    console.log(`[trackCampaignLaunches] Detected ${newCampaigns.length} new/updated campaigns\n`);
     
     if (newCampaigns.length === 0) {
       console.log('[trackCampaignLaunches] No new campaigns detected.');
@@ -77,43 +111,62 @@ async function main() {
     }
     console.log('');
     
-    // Insert new campaigns into campaign_launches
-    // DuckDB doesn't support INSERT OR REPLACE, so we use DELETE then INSERT
+    // Insert/update campaigns into campaign_launches
+    // If campaign exists with later first_seen_date, update it to this (earlier) date
     let inserted = 0;
+    let updated = 0;
+    
     for (const campaign of newCampaigns) {
       try {
-        // Delete if exists (shouldn't happen, but handle edge cases)
-        await runSql(
-          conn,
-          `DELETE FROM campaign_launches WHERE campaign_id = ${sqlString(campaign.campaign_id)}`
-        );
+        const existingFirstSeen = existingFirstSeenMap.get(campaign.campaign_id);
         
-        // Insert new record
-        await runSql(
-          conn,
-          `INSERT INTO campaign_launches (
-            campaign_id,
-            first_seen_date,
-            owner,
-            lane,
-            category,
-            media_source,
-            campaign_name,
-            account_id,
-            detected_at
-          ) VALUES (
-            ${sqlString(campaign.campaign_id)},
-            '${date}',
-            ${sqlString(campaign.owner)},
-            ${sqlString(campaign.lane)},
-            ${sqlString(campaign.category)},
-            ${sqlString(campaign.media_source)},
-            ${sqlString(campaign.campaign_name)},
-            ${sqlString(campaign.account_id)},
-            CURRENT_TIMESTAMP
-          )`
-        );
-        inserted++;
+        if (existingFirstSeen && existingFirstSeen > date) {
+          // Update existing record with earlier date
+          await runSql(
+            conn,
+            `UPDATE campaign_launches
+            SET first_seen_date = '${date}',
+                owner = ${sqlString(campaign.owner)},
+                lane = ${sqlString(campaign.lane)},
+                category = ${sqlString(campaign.category)},
+                media_source = ${sqlString(campaign.media_source)},
+                campaign_name = ${sqlString(campaign.campaign_name)},
+                account_id = ${sqlString(campaign.account_id)}
+            WHERE campaign_id = ${sqlString(campaign.campaign_id)}`
+          );
+          updated++;
+        } else if (!existingFirstSeen) {
+          // Insert new record
+          await runSql(
+            conn,
+            `DELETE FROM campaign_launches WHERE campaign_id = ${sqlString(campaign.campaign_id)}`
+          );
+          await runSql(
+            conn,
+            `INSERT INTO campaign_launches (
+              campaign_id,
+              first_seen_date,
+              owner,
+              lane,
+              category,
+              media_source,
+              campaign_name,
+              account_id,
+              detected_at
+            ) VALUES (
+              ${sqlString(campaign.campaign_id)},
+              '${date}',
+              ${sqlString(campaign.owner)},
+              ${sqlString(campaign.lane)},
+              ${sqlString(campaign.category)},
+              ${sqlString(campaign.media_source)},
+              ${sqlString(campaign.campaign_name)},
+              ${sqlString(campaign.account_id)},
+              CURRENT_TIMESTAMP
+            )`
+          );
+          inserted++;
+        }
       } catch (err: any) {
         // Handle duplicate key errors
         if (err?.message?.includes('PRIMARY KEY') || err?.message?.includes('UNIQUE')) {
@@ -124,7 +177,7 @@ async function main() {
       }
     }
     
-    console.log(`[trackCampaignLaunches] Successfully tracked ${inserted} new campaigns`);
+    console.log(`[trackCampaignLaunches] Successfully tracked ${inserted} new campaigns, ${updated} updated with earlier dates`);
     
     // Show breakdown by media source
     const byMediaSource: Record<string, number> = {};
