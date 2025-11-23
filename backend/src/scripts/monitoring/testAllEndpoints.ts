@@ -41,7 +41,6 @@ async function main() {
     { name: 'MediaGo Report', fetch: () => api.fetchMediaGoReport(date) },
     { name: 'Zemanta Reconciled', fetch: () => api.fetchZemantaReconciledReport(date) },
     { name: 'SmartNews Report', fetch: () => api.fetchSmartNewsReport(date) },
-    { name: 'GoogleAds Report', fetch: () => api.fetchGoogleAdsReport(date) },
   ];
   
   const results: Array<{ name: string; success: boolean; rows: number; error?: string }> = [];

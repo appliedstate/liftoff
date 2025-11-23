@@ -114,6 +114,23 @@ export async function initMonitoringSchema(conn: any): Promise<void> {
       message TEXT
     )
     `,
+    `
+    CREATE TABLE IF NOT EXISTS endpoint_completeness (
+      date DATE NOT NULL,
+      endpoint TEXT NOT NULL,
+      platform TEXT,
+      status TEXT NOT NULL,
+      row_count INTEGER NOT NULL,
+      expected_min_rows INTEGER,
+      has_revenue BOOLEAN,
+      has_spend BOOLEAN,
+      error_message TEXT,
+      retry_count INTEGER DEFAULT 0,
+      started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      finished_at TIMESTAMP,
+      PRIMARY KEY (date, endpoint)
+    )
+    `,
   ];
 
   for (const stmt of statements) {

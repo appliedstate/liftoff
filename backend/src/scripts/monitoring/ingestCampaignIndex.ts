@@ -1,8 +1,17 @@
 import 'dotenv/config';
-import { closeConnection, createMonitoringConnection, initMonitoringSchema, runSql, sqlNumber, sqlString } from '../../lib/monitoringDb';
+import { closeConnection, createMonitoringConnection, initMonitoringSchema, runSql, sqlNumber, sqlString, allRows } from '../../lib/monitoringDb';
 import { fetchStrategistSnapshotRows, StrategistSource } from '../../lib/strategistSnapshots';
 import { StrategisApi } from '../../lib/strategisApi';
 import { getPlatformFromNetworkId } from '../../lib/networkIds';
+import {
+  withRetry,
+  checkDataQuality,
+  extractFinancialIndicators,
+  determineStatus,
+  getPlatformFromEndpoint,
+  type EndpointResult,
+  type EndpointStatus,
+} from '../../lib/endpointMonitoring';
 
 type Level = 'campaign' | 'adset';
 
@@ -228,6 +237,69 @@ async function recordRun(
     )
   `;
   await runSql(conn, sql);
+}
+
+async function recordEndpointCompleteness(
+  conn: ReturnType<typeof createMonitoringConnection>,
+  info: {
+    date: string;
+    endpoint: string;
+    platform: string | null;
+    status: EndpointStatus;
+    rowCount: number;
+    expectedMinRows?: number;
+    hasRevenue: boolean;
+    hasSpend: boolean;
+    errorMessage?: string;
+    retryCount: number;
+  }
+): Promise<void> {
+  // Use INSERT OR REPLACE pattern for DuckDB (upsert)
+  const sql = `
+    INSERT INTO endpoint_completeness (
+      date, endpoint, platform, status, row_count, expected_min_rows,
+      has_revenue, has_spend, error_message, retry_count, started_at, finished_at
+    )
+    VALUES (
+      ${sqlString(info.date)},
+      ${sqlString(info.endpoint)},
+      ${sqlString(info.platform)},
+      ${sqlString(info.status)},
+      ${info.rowCount},
+      ${sqlNumber(info.expectedMinRows)},
+      ${info.hasRevenue ? 'TRUE' : 'FALSE'},
+      ${info.hasSpend ? 'TRUE' : 'FALSE'},
+      ${sqlString(info.errorMessage || null)},
+      ${info.retryCount},
+      CURRENT_TIMESTAMP,
+      CURRENT_TIMESTAMP
+    )
+  `;
+  await runSql(conn, sql);
+}
+
+async function getExpectedMinRows(
+  conn: ReturnType<typeof createMonitoringConnection>,
+  endpoint: string,
+  date: string
+): Promise<number | undefined> {
+  // Get 7-day average row count for this endpoint
+  const sql = `
+    SELECT AVG(row_count) as avg_rows
+    FROM endpoint_completeness
+    WHERE endpoint = ${sqlString(endpoint)}
+      AND date < ${sqlString(date)}
+      AND date >= DATE_SUB(${sqlString(date)}, INTERVAL 7 DAY)
+      AND status = 'OK'
+      AND row_count > 0
+  `;
+  try {
+    const rows = await allRows<{ avg_rows: number | null }>(conn, sql);
+    const avg = rows[0]?.avg_rows;
+    return avg && avg > 0 ? Math.floor(avg) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 type AggregateMetricKey = 'spendUsd' | 'revenueUsd' | 'sessions' | 'clicks' | 'conversions';
@@ -629,37 +701,130 @@ async function main(): Promise<void> {
       { label: 'mediago_report', fetch: () => api.fetchMediaGoReport(date), merge: (rows) => aggregator.mergeMediaGoReport(rows) },
       { label: 'zemanta_report', fetch: () => api.fetchZemantaReconciledReport(date), merge: (rows) => aggregator.mergeZemantaReport(rows) },
       { label: 'smartnews_report', fetch: () => api.fetchSmartNewsReport(date), merge: (rows) => aggregator.mergeSmartNewsReport(rows) },
-      { label: 'googleads_report', fetch: () => api.fetchGoogleAdsReport(date), merge: (rows) => aggregator.mergeGoogleAdsReport(rows) },
     ];
 
     const criticalSteps = ['s1_daily_v3', 's1_reconciled']; // These are required for revenue/metadata
-    const optionalSteps = ['taboola_report', 'outbrain_report', 'newsbreak_report', 'mediago_report', 'zemanta_report', 'smartnews_report', 'googleads_report']; // Spend data - continue if these fail
+    const optionalSteps = ['taboola_report', 'outbrain_report', 'newsbreak_report', 'mediago_report', 'zemanta_report', 'smartnews_report']; // Spend data - continue if these fail
+    
+    // Initialize DB connection early for completeness tracking
+    const conn = createMonitoringConnection();
+    let schemaReady = false;
+    try {
+      await initMonitoringSchema(conn);
+      schemaReady = true;
+    } catch (err: any) {
+      console.error('[ingestCampaignIndex] Schema initialization failed:', err?.message || err);
+      closeConnection(conn);
+      throw err;
+    }
     
     for (const step of steps) {
       console.log(`[ingestCampaignIndex] -> ${step.label} ...`);
+      const isCritical = criticalSteps.includes(step.label);
+      const isOptional = optionalSteps.includes(step.label);
+      const platform = getPlatformFromEndpoint(step.label);
+      
+      let result: EndpointResult = {
+        success: false,
+        rows: [],
+        rowCount: 0,
+        hasRevenue: false,
+        hasSpend: false,
+        retryCount: 0,
+      };
+      
       try {
-        const payload = await step.fetch();
-        console.log(`[ingestCampaignIndex] <- ${step.label}: ${payload.length} rows`);
+        // Get expected minimum rows for data quality check
+        const expectedMinRows = await getExpectedMinRows(conn, step.label, date);
+        
+        // Fetch with retry logic for transient failures
+        const payload = await withRetry(
+          () => step.fetch(),
+          {
+            maxRetries: isCritical ? 3 : 2, // More retries for critical endpoints
+            retryableStatuses: [502, 503, 504, 408],
+          }
+        );
+        
+        result = {
+          success: true,
+          rows: payload,
+          rowCount: payload.length,
+          ...extractFinancialIndicators(payload),
+        };
+        
+        // Data quality checks
+        const quality = checkDataQuality(payload, step.label, expectedMinRows);
+        if (quality.warnings.length > 0) {
+          quality.warnings.forEach((w) => console.warn(`[ingestCampaignIndex] ${w}`));
+        }
+        
+        console.log(`[ingestCampaignIndex] <- ${step.label}: ${payload.length} rows${result.hasRevenue ? ' (has revenue)' : ''}${result.hasSpend ? ' (has spend)' : ''}`);
         step.merge(payload);
+        
       } catch (err: any) {
-        const isCritical = criticalSteps.includes(step.label);
-        const isOptional = optionalSteps.includes(step.label);
+        const httpStatus = err?.response?.status;
+        const errorMsg = err?.message || String(err).substring(0, 500);
+        
+        result = {
+          success: false,
+          rows: [],
+          rowCount: 0,
+          hasRevenue: false,
+          hasSpend: false,
+          error: errorMsg,
+          httpStatus,
+        };
         
         if (isCritical) {
           // Critical steps (S1 revenue) - fail the whole ingestion
-          console.error(`[ingestCampaignIndex] ${step.label} failed (CRITICAL):`, err?.message || err);
+          console.error(`[ingestCampaignIndex] ${step.label} failed (CRITICAL):`, errorMsg);
+          
+          // Record completeness before throwing
+          if (schemaReady) {
+            const status = determineStatus(result, true);
+            await recordEndpointCompleteness(conn, {
+              date,
+              endpoint: step.label,
+              platform,
+              status,
+              rowCount: 0,
+              hasRevenue: false,
+              hasSpend: false,
+              errorMessage: errorMsg,
+              retryCount: 3, // Max retries exhausted
+            });
+          }
+          
           throw err;
         } else if (isOptional) {
           // Optional steps (platform spend) - log but continue
-          console.warn(`[ingestCampaignIndex] ${step.label} failed (OPTIONAL, continuing):`, err?.message || String(err).substring(0, 200));
-          // Continue to next step
+          console.warn(`[ingestCampaignIndex] ${step.label} failed (OPTIONAL, continuing):`, errorMsg);
         } else {
-          // Other steps (Facebook, etc.) - log but continue (they're important but not critical for multi-platform)
-          console.warn(`[ingestCampaignIndex] ${step.label} failed (non-critical, continuing):`, err?.message || String(err).substring(0, 200));
+          // Other steps (Facebook, etc.) - log but continue
+          console.warn(`[ingestCampaignIndex] ${step.label} failed (non-critical, continuing):`, errorMsg);
+        }
+      } finally {
+        // Record completeness for all endpoints
+        if (schemaReady) {
+          const status = determineStatus(result, isCritical);
+          await recordEndpointCompleteness(conn, {
+            date,
+            endpoint: step.label,
+            platform,
+            status,
+            rowCount: result.rowCount,
+            hasRevenue: result.hasRevenue,
+            hasSpend: result.hasSpend,
+            errorMessage: result.error,
+            retryCount: result.retryCount || 0,
+          });
         }
       }
     }
+    
     records = aggregator.toRecords(source);
+    // Keep conn open for upserting records below
   } else {
     console.log(`[ingestCampaignIndex] Fetching ${source} snapshot for ${date} (${level}) ...`);
     const snapshot = await fetchStrategistSnapshotRows({ date, source, level, limit });
@@ -667,16 +832,53 @@ async function main(): Promise<void> {
     records = snapshot.rows
       .map((row) => buildRecordFromSnapshotRow(row, { date, source, level }))
       .filter((r): r is CampaignRecordInput => Boolean(r));
+    
+    // Initialize DB connection for snapshot mode
+    const conn = createMonitoringConnection();
+    let schemaReady = false;
+    try {
+      await initMonitoringSchema(conn);
+      schemaReady = true;
+      
+      let inserted = 0;
+      for (const record of records) {
+        await upsertRow(record, conn);
+        inserted += 1;
+      }
+
+      await recordRun(conn, {
+        date,
+        snapshotSource: source,
+        level,
+        rowCount: inserted,
+        status: 'success',
+      });
+      console.log(`[ingestCampaignIndex] Upserted ${inserted} rows into campaign_index`);
+    } catch (err: any) {
+      if (schemaReady) {
+        await recordRun(conn, {
+          date,
+          snapshotSource: source,
+          level,
+          rowCount: 0,
+          status: 'failed',
+          message: err?.message || String(err),
+        });
+      } else {
+        console.error('[ingestCampaignIndex] Skipping run log because schema initialization failed');
+      }
+      throw err;
+    } finally {
+      closeConnection(conn);
+    }
+    return; // Exit early for snapshot mode
   }
+  
+  // Continue with remote mode: upsert records using existing conn
   console.log(`[ingestCampaignIndex] Processing ${records.length} records`);
-
-  const conn = createMonitoringConnection();
-  let schemaReady = false;
+  
   try {
-    await initMonitoringSchema(conn);
-    schemaReady = true;
     let inserted = 0;
-
     for (const record of records) {
       await upsertRow(record, conn);
       inserted += 1;
