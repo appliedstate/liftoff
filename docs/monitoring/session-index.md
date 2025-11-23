@@ -109,12 +109,18 @@ The second job should lag the first by a few minutes to ensure the latest Strate
 
 ## Tables
 
-| Table | Purpose |
-| --- | --- |
-| `campaign_index` | One row per campaign/date/source with owner/lane/category/media_source + spend/revenue/sessions |
-| `campaign_index_runs` | Audit log for metadata ingests |
-| `session_hourly_metrics` | Aggregated sessions/revenue/RPC per campaign_id + click_hour |
-| `session_ingest_runs` | Audit log for session ingests |
+| Table | Purpose | Data Source |
+| --- | --- | --- |
+| `campaign_index` | One row per campaign/date/source with owner/lane/category/media_source + spend/revenue/sessions | All platforms (Facebook, Taboola, Outbrain, NewsBreak, MediaGo, Zemanta, SmartNews) |
+| `campaign_index_runs` | Audit log for metadata ingests | Run status, row counts, errors |
+| `session_hourly_metrics` | Aggregated sessions/revenue/RPC per campaign_id + click_hour | S1 hourly reports (all platforms) |
+| `session_ingest_runs` | Audit log for session ingests | Run status, session counts, errors |
+| `endpoint_completeness` | Endpoint health tracking per date/platform | All API endpoints (status, retry counts, errors) |
+
+**Note**: Data is written to **multiple tables**, not a single table:
+- **Campaign metadata** → `campaign_index` (merged from 14 API endpoints)
+- **Session metrics** → `session_hourly_metrics` (from S1 hourly reports)
+- **Health tracking** → `endpoint_completeness` (from all API calls)
 
 This DB can be queried directly via DuckDB CLI or through future API endpoints for dashboards/alerts.
 
