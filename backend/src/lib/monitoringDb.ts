@@ -74,6 +74,13 @@ export async function initMonitoringSchema(conn: any): Promise<void> {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     `,
+    // Add missing columns if they don't exist (for existing databases)
+    `
+    ALTER TABLE campaign_index ADD COLUMN IF NOT EXISTS rsoc_site TEXT
+    `,
+    `
+    ALTER TABLE campaign_index ADD COLUMN IF NOT EXISTS s1_google_account TEXT
+    `,
     `
     CREATE TABLE IF NOT EXISTS campaign_index_runs (
       date DATE NOT NULL,
