@@ -63,9 +63,9 @@ async function main() {
     );
     
     if (launches.length === 0) {
-      console.log(`No campaign launches found for ${date}.`);
+      console.log(`No campaign launches found for ${pstDate} PST (${utcDate} UTC).`);
       console.log(`\nNote: Make sure trackCampaignLaunches has been run for this date.`);
-      console.log(`Run: npm run monitor:track-launches -- ${date}\n`);
+      console.log(`Run: npm run monitor:track-launches -- ${utcDate}\n`);
       return;
     }
     
@@ -85,7 +85,7 @@ async function main() {
       FROM campaign_launches cl
       LEFT JOIN campaign_index ci 
         ON cl.campaign_id = ci.campaign_id 
-        AND ci.date = '${date}'
+        AND ci.date = '${utcDate}'
       LEFT JOIN campaign_index ci_hist
         ON cl.campaign_id = ci_hist.campaign_id
         AND ci_hist.date < '${utcDate}'
@@ -98,7 +98,7 @@ async function main() {
     );
     
     if (suspiciousCampaigns.length > 0) {
-      console.log(`⚠️  **Warning**: Found ${suspiciousCampaigns.length} campaigns marked as "launched" on ${date}`);
+      console.log(`⚠️  **Warning**: Found ${suspiciousCampaigns.length} campaigns marked as "launched" on ${pstDate} PST`);
       console.log(`   but they appear in campaign_index for earlier dates. These were likely launched earlier.\n`);
       console.log('| Campaign ID | Campaign Name | Owner | Network | Site | Earliest Date in Index |');
       console.log('|-------------|---------------|-------|---------|------|------------------------|');
@@ -122,7 +122,7 @@ async function main() {
         COALESCE(cl.owner, 'UNKNOWN') as owner,
         COUNT(*) as campaign_count
       FROM campaign_launches cl
-      WHERE cl.first_seen_date = '${date}'
+      WHERE cl.first_seen_date = '${utcDate}'
       GROUP BY cl.owner
       ORDER BY campaign_count DESC`
     );
