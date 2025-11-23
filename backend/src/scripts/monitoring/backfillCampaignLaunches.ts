@@ -144,23 +144,50 @@ async function main() {
   try {
     await initMonitoringSchema(conn);
     
+    // Check what dates actually have data first
+    const availableDates = await allRows(
+      conn,
+      `SELECT DISTINCT date
+      FROM campaign_index
+      WHERE campaign_id IS NOT NULL
+        AND campaign_id != ''
+      ORDER BY date DESC
+      LIMIT 30`
+    );
+    
+    if (availableDates.length === 0) {
+      console.log('\n[backfillCampaignLaunches] No data found in campaign_index.');
+      console.log('Run ingestCampaignIndex first to populate data.\n');
+      return;
+    }
+    
     const todayPST = getTodayPST();
     const startDate = getDaysAgoPST(startDaysAgo);
     const endDate = getDaysAgoPST(endDaysAgo);
     
     console.log(`\n[backfillCampaignLaunches] Backfilling campaign launches`);
     console.log(`Today (PST): ${todayPST}`);
-    console.log(`Date Range: ${startDate} to ${endDate}`);
+    console.log(`Requested Date Range: ${startDate} to ${endDate}`);
+    
+    // Get actual dates that have data and fall within the requested range
+    const datesWithData = availableDates
+      .map((r: any) => String(r.date).slice(0, 10))
+      .filter((d: string) => d >= startDate && d <= endDate);
+    
+    if (datesWithData.length === 0) {
+      console.log(`\n⚠️  No data found in campaign_index for dates ${startDate} to ${endDate}`);
+      console.log(`Available dates: ${availableDates.map((r: any) => String(r.date).slice(0, 10)).join(', ')}`);
+      console.log('\nTo backfill available dates, use:');
+      console.log(`  npm run monitor:backfill-launches -- <days_back> <days_forward>`);
+      console.log(`  Or track specific date: npm run monitor:track-launches -- <date>\n`);
+      return;
+    }
+    
+    console.log(`Dates with data in range: ${datesWithData.join(', ')}`);
     console.log(`Mode: ${dryRun ? 'DRY RUN (no changes)' : 'LIVE (will update database)'}\n`);
     
     // Process dates in chronological order (oldest first)
-    const dates: string[] = [];
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      dates.push(d.toISOString().slice(0, 10));
-    }
+    const dates = datesWithData.sort();
     
     console.log(`Processing ${dates.length} dates: ${dates.join(', ')}\n`);
     
