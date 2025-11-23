@@ -105,7 +105,7 @@ STRATEGIS_TIMEZONE="UTC" \
 npm run monitor:test-endpoints -- 2025-11-23
 ```
 
-This will test all 15 endpoints and show which ones are working/failing.
+This will test all 14 endpoints and show which ones are working/failing.
 
 ## Common Error Types & Fixes
 
