@@ -96,6 +96,64 @@ async function main() {
       console.log(`  Revenue: $${Number(nullSource[0].revenue || 0).toFixed(2)}`);
       console.log(`  Sessions: ${Number(nullSource[0].sessions || 0).toFixed(0)}`);
       console.log('  These may be MediaGo campaigns that need metadata join');
+      
+      // Show hourly breakdown for NULL media_source
+      const nullHourly = await allRows(
+        conn,
+        `SELECT 
+          click_hour,
+          COUNT(DISTINCT campaign_id) as campaign_count,
+          SUM(sessions) as sessions,
+          SUM(revenue) as revenue,
+          SUM(revenue) / NULLIF(SUM(sessions), 0) as rpc
+        FROM session_hourly_metrics
+        WHERE date = '${date}'
+          AND media_source IS NULL
+        GROUP BY click_hour
+        ORDER BY click_hour`
+      );
+      
+      if (nullHourly.length > 0) {
+        console.log('\n📊 Hourly Breakdown (NULL media_source):');
+        console.log('┌──────┬───────────┬───────────┬───────────┬───────────┐');
+        console.log('│ Hour │ Campaigns │ Sessions  │ Revenue   │ RPC       │');
+        console.log('├──────┼───────────┼───────────┼───────────┼───────────┤');
+        let totalSessions = 0;
+        let totalRevenue = 0;
+        let totalCampaigns = new Set<string>();
+        for (const row of nullHourly) {
+          const hour = Number(row.click_hour);
+          const campaigns = Number(row.campaign_count);
+          const sessions = Number(row.sessions || 0);
+          const revenue = Number(row.revenue || 0);
+          const rpc = row.rpc ? Number(row.rpc).toFixed(4) : 'N/A';
+          totalSessions += sessions;
+          totalRevenue += revenue;
+          console.log(`│ ${hour.toString().padStart(4)} │ ${campaigns.toString().padStart(9)} │ ${sessions.toFixed(0).padStart(9)} │ $${revenue.toFixed(2).padStart(8)} │ $${rpc.padStart(8)} │`);
+        }
+        console.log('├──────┼───────────┼───────────┼───────────┼───────────┤');
+        console.log(`│ Total│           │ ${totalSessions.toFixed(0).padStart(9)} │ $${totalRevenue.toFixed(2).padStart(8)} │           │`);
+        console.log('└──────┴───────────┴───────────┴───────────┴───────────┘');
+        
+        // Check which campaigns have NULL media_source
+        const nullCampaigns = await allRows(
+          conn,
+          `SELECT DISTINCT campaign_id
+          FROM session_hourly_metrics
+          WHERE date = '${date}'
+            AND media_source IS NULL
+          LIMIT 10`
+        );
+        
+        if (nullCampaigns.length > 0) {
+          console.log('\n🔍 Sample Campaign IDs with NULL media_source:');
+          nullCampaigns.forEach((row: any, idx: number) => {
+            console.log(`  ${idx + 1}. ${row.campaign_id}`);
+          });
+          console.log('\n💡 To fix: Re-run campaign ingestion to populate media_source');
+          console.log(`   npm run monitor:ingest-campaigns -- --date=${date} --mode=remote`);
+        }
+      }
     }
     
     // Check session ingestion runs
