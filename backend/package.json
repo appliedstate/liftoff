@@ -48,6 +48,7 @@
     "monitor:test-endpoints": "ts-node src/scripts/monitoring/testAllEndpoints.ts",
     "monitor:test-taboola": "ts-node src/scripts/monitoring/testTaboolaVariations.ts",
     "monitor:query-mediago": "ts-node src/scripts/monitoring/queryMediaGoHourly.ts",
+    "monitor:query-mediago-buyers": "ts-node src/scripts/monitoring/queryMediaGoBuyers.ts",
     "monitor:fix-null-source": "ts-node src/scripts/monitoring/fixNullMediaSource.ts",
     "index:now": "ts-node src/scripts/indexNow.ts",
     "system1:analyze": "ts-node src/scripts/analyzeSystem1.ts",
