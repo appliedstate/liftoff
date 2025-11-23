@@ -5,4 +5,5 @@
 2025-11-22 11:37:31 PST Extended ingestion scripts with remote Strategist API mode via IX ID auth client; updated docs to cover env vars/flags for remote cron usage.
 2025-11-22 12:58:03 PST Reworked monitoring pipeline to bypass Strategist proxy: added Strategis API client, rewrote campaign ingestion to join six Strategis datasets (FB reports/campaigns/adsets, S1 daily/RPC, pixel, Strategis metrics), switched session ingester to Strategis hourly-v3 feed, and refreshed docs/env guidance accordingly.
 2025-11-22 17:54:12 PST Attempted to SSH into Hetzner from sandbox to run monitoring jobs; network access blocked, so provided server-side command checklist instead (export env vars, run monitor ingesters, wire cron once successful).
+2025-11-22 19:22:45 PST Removed PRIMARY KEY/IDENTITY constraints from monitoring DuckDB schema after Hetzner DuckDB build raised "Constraint not implemented"; updated ingestion scripts to proceed when schema init fails and logged guidance for redeploy.
 

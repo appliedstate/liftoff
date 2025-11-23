@@ -69,13 +69,11 @@ export async function initMonitoringSchema(conn: duckdb.Connection): Promise<voi
       conversions DOUBLE,
       roas DOUBLE,
       raw_payload JSON,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      PRIMARY KEY (campaign_id, date, snapshot_source, level)
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     `,
     `
     CREATE TABLE IF NOT EXISTS campaign_index_runs (
-      id BIGINT GENERATED ALWAYS AS IDENTITY,
       date DATE NOT NULL,
       snapshot_source TEXT NOT NULL,
       level TEXT NOT NULL,
@@ -83,8 +81,7 @@ export async function initMonitoringSchema(conn: duckdb.Connection): Promise<voi
       started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       finished_at TIMESTAMP,
       status TEXT NOT NULL,
-      message TEXT,
-      PRIMARY KEY (id)
+      message TEXT
     )
     `,
     `
@@ -100,13 +97,11 @@ export async function initMonitoringSchema(conn: duckdb.Connection): Promise<voi
       lane TEXT,
       category TEXT,
       media_source TEXT,
-      ingested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      PRIMARY KEY (date, campaign_id, click_hour)
+      ingested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     `,
     `
     CREATE TABLE IF NOT EXISTS session_ingest_runs (
-      id BIGINT GENERATED ALWAYS AS IDENTITY,
       date DATE NOT NULL,
       max_click_hour INTEGER,
       session_count INTEGER NOT NULL,
@@ -114,8 +109,7 @@ export async function initMonitoringSchema(conn: duckdb.Connection): Promise<voi
       started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       finished_at TIMESTAMP,
       status TEXT NOT NULL,
-      message TEXT,
-      PRIMARY KEY (id)
+      message TEXT
     )
     `,
   ];
