@@ -42,12 +42,11 @@ function getDaysAgoPST(days: number): string {
   return getPSTDate(date);
 }
 
-async function processDate(conn: any, date: string, dryRun: boolean = false): Promise<number> {
+async function processDate(conn: any, date: string, baselineDate: string, dryRun: boolean = false): Promise<number> {
   console.log(`\n[backfillCampaignLaunches] Processing ${date}...`);
   
   // Get all campaigns from campaign_index for this date
   // Use GROUP BY to handle cases where same campaign appears multiple times (different levels/sources)
-  // Take non-null values, preferring the most recent updated_at
   const campaigns = await allRows(
     conn,
     `SELECT 
@@ -93,6 +92,8 @@ async function processDate(conn: any, date: string, dryRun: boolean = false): Pr
     
     if (!existingFirstSeen) {
       // New campaign - insert it
+      // For baseline date (Nov 1), all campaigns are marked as launched on that date
+      // For subsequent dates, only NEW campaigns are tracked
       if (!dryRun) {
         await runSql(
           conn,
@@ -124,8 +125,26 @@ async function processDate(conn: any, date: string, dryRun: boolean = false): Pr
         );
       }
       newCampaigns++;
-    } else if (existingFirstSeen > date) {
+    } else if (date === baselineDate) {
+      // If processing baseline date and campaign already exists, update it to baseline date
+      if (!dryRun) {
+        await runSql(
+          conn,
+          `UPDATE campaign_launches
+          SET first_seen_date = '${baselineDate}',
+              owner = ${sqlString(campaign.owner)},
+              lane = ${sqlString(campaign.lane)},
+              category = ${sqlString(campaign.category)},
+              media_source = ${sqlString(campaign.media_source)},
+              campaign_name = ${sqlString(campaign.campaign_name)},
+              account_id = ${sqlString(campaign.account_id)}
+          WHERE campaign_id = ${sqlString(campaignId)}`
+        );
+      }
+      updatedCampaigns++;
+    } else if (existingFirstSeen > date && existingFirstSeen !== baselineDate) {
       // Existing campaign but this date is earlier - update first_seen_date
+      // But don't update if existing date is baseline (baseline takes precedence)
       if (!dryRun) {
         await runSql(
           conn,
@@ -143,7 +162,7 @@ async function processDate(conn: any, date: string, dryRun: boolean = false): Pr
       updatedCampaigns++;
       console.log(`  Updating ${campaignId}: ${existingFirstSeen} -> ${date}`);
     }
-    // If existingFirstSeen <= date, keep the existing (earlier) date
+    // If existingFirstSeen <= date or is baseline date, keep the existing date
   }
   
   console.log(`[backfillCampaignLaunches] ${date}: ${newCampaigns} new, ${updatedCampaigns} updated`);
@@ -154,6 +173,7 @@ async function main() {
   const startDaysAgo = parseInt(process.argv[2] || '7', 10);
   const endDaysAgo = parseInt(process.argv[3] || '0', 10);
   const dryRun = process.argv[4] === '--dry-run';
+  const baselineDate = '2025-11-01';
   
   const conn = createMonitoringConnection();
   
@@ -167,6 +187,7 @@ async function main() {
       FROM campaign_index
       WHERE campaign_id IS NOT NULL
         AND campaign_id != ''
+        AND date >= '${baselineDate}'
       ORDER BY date DESC
       LIMIT 30`
     );
@@ -181,17 +202,22 @@ async function main() {
     const startDate = getDaysAgoPST(startDaysAgo);
     const endDate = getDaysAgoPST(endDaysAgo);
     
+    // Ensure we start from baseline date or later
+    const actualStartDate = startDate < baselineDate ? baselineDate : startDate;
+    
     console.log(`\n[backfillCampaignLaunches] Backfilling campaign launches`);
+    console.log(`Baseline Date: ${baselineDate} (all campaigns on this date are baseline)`);
     console.log(`Today (PST): ${todayPST}`);
     console.log(`Requested Date Range: ${startDate} to ${endDate}`);
+    console.log(`Actual Date Range: ${actualStartDate} to ${endDate} (adjusted for baseline)\n`);
     
-    // Get actual dates that have data and fall within the requested range
+    // Get actual dates that have data and fall within the requested range (Nov 1+)
     const datesWithData = availableDates
       .map((r: any) => String(r.date).slice(0, 10))
-      .filter((d: string) => d >= startDate && d <= endDate);
+      .filter((d: string) => d >= actualStartDate && d <= endDate);
     
     if (datesWithData.length === 0) {
-      console.log(`\n⚠️  No data found in campaign_index for dates ${startDate} to ${endDate}`);
+      console.log(`\n⚠️  No data found in campaign_index for dates ${actualStartDate} to ${endDate}`);
       console.log(`Available dates: ${availableDates.map((r: any) => String(r.date).slice(0, 10)).join(', ')}`);
       console.log('\nTo backfill available dates, use:');
       console.log(`  npm run monitor:backfill-launches -- <days_back> <days_forward>`);
@@ -202,14 +228,29 @@ async function main() {
     console.log(`Dates with data in range: ${datesWithData.join(', ')}`);
     console.log(`Mode: ${dryRun ? 'DRY RUN (no changes)' : 'LIVE (will update database)'}\n`);
     
-    // Process dates in chronological order (oldest first)
-    const dates = datesWithData.sort();
+    // Process dates in chronological order (oldest first), but skip Nov 1 if it's already set as baseline
+    const existingBaseline = await allRows(
+      conn,
+      `SELECT COUNT(*) as count FROM campaign_launches WHERE first_seen_date = '${baselineDate}'`
+    );
+    
+    const hasBaseline = Number(existingBaseline[0]?.count || 0) > 0;
+    
+    if (hasBaseline && datesWithData.includes(baselineDate)) {
+      console.log(`[backfillCampaignLaunches] Baseline (${baselineDate}) already set, skipping...`);
+      const datesToProcess = datesWithData.filter(d => d !== baselineDate).sort();
+      console.log(`[backfillCampaignLaunches] Processing incremental dates: ${datesToProcess.join(', ')}\n`);
+      var dates = datesToProcess;
+    } else {
+      // Process dates in chronological order (oldest first)
+      var dates = datesWithData.sort();
+    }
     
     console.log(`Processing ${dates.length} dates: ${dates.join(', ')}\n`);
     
     let totalProcessed = 0;
     for (const date of dates) {
-      const count = await processDate(conn, date, dryRun);
+      const count = await processDate(conn, date, baselineDate, dryRun);
       totalProcessed += count;
     }
     
