@@ -254,8 +254,15 @@ async function recordEndpointCompleteness(
     retryCount: number;
   }
 ): Promise<void> {
-  // Use INSERT OR REPLACE pattern for DuckDB (upsert)
-  const sql = `
+  // Use DELETE + INSERT pattern for DuckDB upsert (since PRIMARY KEY constraint exists)
+  const deleteSql = `
+    DELETE FROM endpoint_completeness
+    WHERE date = ${sqlString(info.date)}
+      AND endpoint = ${sqlString(info.endpoint)}
+  `;
+  await runSql(conn, deleteSql);
+  
+  const insertSql = `
     INSERT INTO endpoint_completeness (
       date, endpoint, platform, status, row_count, expected_min_rows,
       has_revenue, has_spend, error_message, retry_count, started_at, finished_at
@@ -275,7 +282,7 @@ async function recordEndpointCompleteness(
       CURRENT_TIMESTAMP
     )
   `;
-  await runSql(conn, sql);
+  await runSql(conn, insertSql);
 }
 
 async function getExpectedMinRows(
