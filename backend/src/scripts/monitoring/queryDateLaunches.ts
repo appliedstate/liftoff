@@ -26,6 +26,12 @@ async function main() {
     await initMonitoringSchema(conn);
     
     console.log(`\n# Campaign Launches for ${date}\n`);
+    console.log(`⚠️  **Important Note**: "Launched" here means "first seen in our data" on ${date}.`);
+    console.log(`   This could mean:`);
+    console.log(`   1. Campaign was actually launched on ${date}`);
+    console.log(`   2. Campaign was launched earlier but first showed activity/stats on ${date}`);
+    console.log(`   3. Campaign was launched earlier but this is the first time we ingested data for it`);
+    console.log(`\n   For campaigns with $0.00 spend and 0 sessions, they may have been launched earlier\n   but are just now appearing in our data.\n`);
     
     // Get all launches for this date, grouped by buyer, network, and site
     const launches = await allRows(
@@ -59,6 +65,48 @@ async function main() {
     
     const totalCampaigns = launches.reduce((sum, row) => sum + Number(row.campaign_count || 0), 0);
     console.log(`📊 **Total Campaigns Launched: ${totalCampaigns}**\n`);
+    
+    // Check for campaigns that might have been launched earlier (have $0 spend, 0 sessions)
+    const suspiciousCampaigns = await allRows(
+      conn,
+      `SELECT 
+        cl.campaign_id,
+        cl.campaign_name,
+        cl.owner,
+        cl.media_source,
+        ci.rsoc_site,
+        MIN(ci_hist.date) as earliest_date_in_index
+      FROM campaign_launches cl
+      LEFT JOIN campaign_index ci 
+        ON cl.campaign_id = ci.campaign_id 
+        AND ci.date = '${date}'
+      LEFT JOIN campaign_index ci_hist
+        ON cl.campaign_id = ci_hist.campaign_id
+        AND ci_hist.date < '${date}'
+      WHERE cl.first_seen_date = '${date}'
+        AND (ci.spend_usd IS NULL OR ci.spend_usd = 0)
+        AND (ci.sessions IS NULL OR ci.sessions = 0)
+      GROUP BY cl.campaign_id, cl.campaign_name, cl.owner, cl.media_source, ci.rsoc_site
+      HAVING earliest_date_in_index IS NOT NULL
+      LIMIT 10`
+    );
+    
+    if (suspiciousCampaigns.length > 0) {
+      console.log(`⚠️  **Warning**: Found ${suspiciousCampaigns.length} campaigns marked as "launched" on ${date}`);
+      console.log(`   but they appear in campaign_index for earlier dates. These were likely launched earlier.\n`);
+      console.log('| Campaign ID | Campaign Name | Owner | Network | Site | Earliest Date in Index |');
+      console.log('|-------------|---------------|-------|---------|------|------------------------|');
+      for (const camp of suspiciousCampaigns) {
+        const campaignId = String(camp.campaign_id || '').substring(0, 11);
+        const campaignName = String(camp.campaign_name || 'N/A').substring(0, 13);
+        const owner = String(camp.owner || 'UNKNOWN').substring(0, 5);
+        const network = String(camp.media_source || 'N/A').substring(0, 7);
+        const site = String(camp.rsoc_site || 'N/A').substring(0, 4);
+        const earliestDate = String(camp.earliest_date_in_index || 'N/A').substring(0, 10);
+        console.log(`| ${campaignId} | ${campaignName} | ${owner} | ${network} | ${site} | ${earliestDate} |`);
+      }
+      console.log('');
+    }
     
     // Summary by Buyer
     console.log('## 👥 Summary by Buyer\n');
