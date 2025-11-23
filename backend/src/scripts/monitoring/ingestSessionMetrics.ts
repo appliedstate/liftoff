@@ -257,8 +257,10 @@ async function main(): Promise<void> {
   const campaignIds = Array.from(new Set(aggregates.map((a) => a.campaignId)));
   const campaignCount = campaignIds.length;
   const conn = createMonitoringConnection();
+  let schemaReady = false;
   try {
     await initMonitoringSchema(conn);
+    schemaReady = true;
     const meta = await loadCampaignMeta(conn, campaignIds);
     await insertAggregates(conn, date, aggregates, meta);
     await recordRun(conn, {
@@ -270,14 +272,18 @@ async function main(): Promise<void> {
     });
     console.log(`[ingestSessionMetrics] Stored aggregates for ${campaignIds.length} campaigns (sessions: ${totalSessions})`);
   } catch (err: any) {
-    await recordRun(conn, {
-      date,
-      maxClickHour,
-      sessionCount: Math.round(totalSessions),
-      campaignCount,
-      status: 'failed',
-      message: err?.message || String(err),
-    });
+    if (schemaReady) {
+      await recordRun(conn, {
+        date,
+        maxClickHour,
+        sessionCount: Math.round(totalSessions),
+        campaignCount,
+        status: 'failed',
+        message: err?.message || String(err),
+      });
+    } else {
+      console.error('[ingestSessionMetrics] Skipping run log because schema initialization failed');
+    }
     throw err;
   } finally {
     closeConnection(conn);

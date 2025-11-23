@@ -75,7 +75,7 @@ export async function initMonitoringSchema(conn: duckdb.Connection): Promise<voi
     `,
     `
     CREATE TABLE IF NOT EXISTS campaign_index_runs (
-      id BIGINT AUTO_INCREMENT,
+      id BIGINT GENERATED ALWAYS AS IDENTITY,
       date DATE NOT NULL,
       snapshot_source TEXT NOT NULL,
       level TEXT NOT NULL,
@@ -106,7 +106,7 @@ export async function initMonitoringSchema(conn: duckdb.Connection): Promise<voi
     `,
     `
     CREATE TABLE IF NOT EXISTS session_ingest_runs (
-      id BIGINT AUTO_INCREMENT,
+      id BIGINT GENERATED ALWAYS AS IDENTITY,
       date DATE NOT NULL,
       max_click_hour INTEGER,
       session_count INTEGER NOT NULL,

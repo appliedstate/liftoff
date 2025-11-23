@@ -486,8 +486,10 @@ async function main(): Promise<void> {
   console.log(`[ingestCampaignIndex] Processing ${records.length} records`);
 
   const conn = createMonitoringConnection();
+  let schemaReady = false;
   try {
     await initMonitoringSchema(conn);
+    schemaReady = true;
     let inserted = 0;
 
     for (const record of records) {
@@ -504,14 +506,18 @@ async function main(): Promise<void> {
     });
     console.log(`[ingestCampaignIndex] Upserted ${inserted} rows into campaign_index`);
   } catch (err: any) {
-    await recordRun(conn, {
-      date,
-      snapshotSource: source,
-      level,
-      rowCount: 0,
-      status: 'failed',
-      message: err?.message || String(err),
-    });
+    if (schemaReady) {
+      await recordRun(conn, {
+        date,
+        snapshotSource: source,
+        level,
+        rowCount: 0,
+        status: 'failed',
+        message: err?.message || String(err),
+      });
+    } else {
+      console.error('[ingestCampaignIndex] Skipping run log because schema initialization failed');
+    }
     throw err;
   } finally {
     closeConnection(conn);
