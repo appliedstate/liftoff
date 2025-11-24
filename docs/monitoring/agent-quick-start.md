@@ -13,6 +13,15 @@ The system is **fully operational** and ready to:
 - ✅ Analyze campaign launches
 - ✅ Query buyer-network-site activity
 
+## ⚠️ IMPORTANT: How We Use DuckDB
+
+**We DO NOT use DuckDB CLI** - We use the **DuckDB Node.js library** via npm scripts.
+
+**DO NOT** try to run `duckdb` CLI commands.  
+**DO** use the npm scripts like `npm run monitor:daily-pl`
+
+The DuckDB database is accessed through Node.js scripts, not CLI commands.
+
 ---
 
 ## 🚀 Immediate Actions (5 Minutes)
@@ -43,7 +52,27 @@ git pull origin main
 npm install  # If new dependencies added
 ```
 
-### 3. Test API Connection
+### 3. Verify DuckDB Setup
+
+**IMPORTANT**: We use DuckDB via Node.js library, NOT CLI.
+
+```bash
+# Check if DuckDB npm package is installed
+cd /opt/liftoff/backend
+npm list duckdb
+
+# Should show: duckdb@1.4.1 (or similar)
+
+# If missing, install:
+npm install
+
+# Verify database file exists
+ls -lh /opt/liftoff/data/monitoring.duckdb
+
+# Should show the database file
+```
+
+### 4. Test API Connection
 
 ```bash
 # Test all endpoints
@@ -52,7 +81,7 @@ npm run monitor:test-endpoints
 # Should show success/failure for each endpoint
 ```
 
-### 4. Check Existing Data
+### 5. Check Existing Data
 
 ```bash
 # See what dates have data
@@ -60,6 +89,23 @@ npm run monitor:check-dates
 
 # Check recent launches
 npm run monitor:launch-velocity -- 7
+```
+
+### ❌ DO NOT Use DuckDB CLI
+
+**Wrong approach** (don't do this):
+```bash
+# ❌ DON'T DO THIS - DuckDB CLI not needed
+apt-get install duckdb
+duckdb /opt/liftoff/data/monitoring.duckdb "SELECT ..."
+```
+
+**Correct approach** (use npm scripts):
+```bash
+# ✅ DO THIS - Use npm scripts
+npm run monitor:daily-pl
+npm run monitor:check-dates
+npm run monitor:date-launches -- 2025-11-22
 ```
 
 ---

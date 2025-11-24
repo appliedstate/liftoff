@@ -66,17 +66,19 @@ This monitoring system provides:
                      │ (Authenticated API Calls)
                      │
 ┌────────────────────▼──────────────────────────────────────┐
-│              Ingestion Scripts                              │
+│              Ingestion Scripts (Node.js)                    │
 │  - ingestCampaignIndex.ts (campaign metadata)              │
 │  - ingestSessionMetrics.ts (session-level data)             │
 │  - trackCampaignLaunches.ts (launch detection)            │
+│  Uses: DuckDB Node.js library (duckdb npm package)          │
 └────────────────────┬──────────────────────────────────────┘
                      │
-                     │ (Store data)
+                     │ (Store data via Node.js DuckDB library)
                      │
 ┌────────────────────▼──────────────────────────────────────┐
-│              DuckDB Database                                │
+│              DuckDB Database File                           │
 │  /opt/liftoff/data/monitoring.duckdb                      │
+│  (Accessed via Node.js library, NOT CLI)                   │
 │                                                             │
 │  Tables:                                                    │
 │  - campaign_index (campaign metadata & performance)        │
@@ -87,24 +89,31 @@ This monitoring system provides:
 │  - session_ingest_runs (session ingestion audit log)      │
 └────────────────────┬──────────────────────────────────────┘
                      │
-                     │ (Query)
+                     │ (Query via Node.js scripts)
                      │
 ┌────────────────────▼──────────────────────────────────────┐
-│              Query & Reporting Scripts                      │
+│              Query & Reporting Scripts (Node.js)            │
 │  - reportDailyPL.ts (P&L by network/buyer)                │
 │  - queryDateLaunches.ts (launches by date)                 │
 │  - queryBuyerNetworkSiteActivity.ts (buyer activity)       │
 │  - reportLaunchVelocity.ts (launch velocity)               │
 │  - summarizeLaunches.ts (launch summaries)                  │
+│  Uses: DuckDB Node.js library (duckdb npm package)          │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+**⚠️ CRITICAL**: We use **DuckDB Node.js library** (`duckdb` npm package), NOT the DuckDB CLI.  
+All database access is through Node.js scripts via `npm run` commands.
 
 ### Deployment Architecture
 
 - **Server**: Hetzner server at `root@5.78.105.235`
 - **Database**: DuckDB file at `/opt/liftoff/data/monitoring.duckdb`
+- **Database Access**: Via DuckDB Node.js library (`duckdb` npm package), NOT CLI
 - **Cron Jobs**: Hourly ingestion at :20 past the hour
 - **Authentication**: IX ID service (`https://ix-id.lincx.la`) for Strategis API access
+
+**⚠️ IMPORTANT**: Do NOT install DuckDB CLI. We use the Node.js library only.
 
 ---
 
@@ -641,18 +650,21 @@ PST is UTC-8, so:
 
 ### 1. DuckDB vs PostgreSQL/ClickHouse
 
-**Decision**: Use DuckDB for local file-based storage.
+**Decision**: Use DuckDB Node.js library for local file-based storage.
 
 **Rationale**:
-- Simple deployment (single file)
+- Simple deployment (single file, no server)
 - No database server needed
 - Fast for analytical queries
 - Good for single-server deployment
+- Access via Node.js (no CLI installation needed)
 
 **Trade-offs**:
 - Not suitable for multi-user concurrent access
 - File-based (backup = copy file)
 - Limited compared to PostgreSQL/ClickHouse for scale
+
+**Implementation**: Uses `duckdb` npm package (v1.4.1), NOT DuckDB CLI. All access is through Node.js scripts.
 
 ### 2. Single `campaign_index` Table
 
@@ -1034,6 +1046,8 @@ docs/
 - [ ] Check endpoint health (`endpoint_completeness` table)
 - [ ] Verify API credentials
 - [ ] Check DuckDB file permissions
+- [ ] Verify DuckDB npm package installed (`npm list duckdb`)
+- [ ] **DO NOT** try to use DuckDB CLI - use npm scripts only
 - [ ] Review error logs
 - [ ] Test individual endpoints (`testAllEndpoints`)
 
