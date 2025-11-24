@@ -13,21 +13,26 @@ All database access is through npm scripts using the Node.js library.
 
 ## Quick Commands
 
-### Check System Status
+### ⚠️ FIRST: Ingest Data (Required!)
 ```bash
 cd /opt/liftoff/backend
+
+# Database starts empty - must ingest before analyzing!
+npm run monitor:ingest-campaigns -- --mode=remote --date=$(date -u +%Y-%m-%d)
+npm run monitor:ingest-sessions -- --date=$(date -u +%Y-%m-%d)
+npm run monitor:track-launches -- $(date -u +%Y-%m-%d)
+
+# For yesterday:
+npm run monitor:ingest-campaigns -- --mode=remote --date=$(date -u -d "yesterday" +%Y-%m-%d)
+```
+
+### Check System Status
+```bash
 npm run monitor:check-dates          # See what dates have data
 npm run monitor:test-endpoints      # Test API health
 ```
 
-### Pull Data
-```bash
-npm run monitor:ingest-campaigns -- --mode=remote --date=$(date -u +%Y-%m-%d)
-npm run monitor:ingest-sessions -- --date=$(date -u +%Y-%m-%d)
-npm run monitor:track-launches -- $(date -u +%Y-%m-%d)
-```
-
-### Analyze Buyers
+### Analyze Buyers (After Ingestion)
 ```bash
 npm run monitor:daily-pl                                    # Yesterday's P&L
 npm run monitor:date-launches -- $(date -u +%Y-%m-%d)      # Launches today

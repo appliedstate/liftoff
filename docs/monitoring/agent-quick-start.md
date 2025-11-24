@@ -112,7 +112,27 @@ npm run monitor:date-launches -- 2025-11-22
 
 ## 📊 Start Analyzing Buyer Activity (Right Now)
 
-### Quick Analysis Commands
+### ⚠️ FIRST: Ingest Data (Required Before Analysis)
+
+**The database starts empty!** You must ingest data before running analysis commands.
+
+```bash
+# 1. Ingest campaign data for today (or specific date)
+npm run monitor:ingest-campaigns -- --mode=remote --date=$(date -u +%Y-%m-%d)
+
+# 2. Ingest session metrics
+npm run monitor:ingest-sessions -- --date=$(date -u +%Y-%m-%d)
+
+# 3. Track campaign launches
+npm run monitor:track-launches -- $(date -u +%Y-%m-%d)
+
+# For yesterday's data:
+npm run monitor:ingest-campaigns -- --mode=remote --date=$(date -u -d "yesterday" +%Y-%m-%d)
+npm run monitor:ingest-sessions -- --date=$(date -u -d "yesterday" +%Y-%m-%d)
+npm run monitor:track-launches -- $(date -u -d "yesterday" +%Y-%m-%d)
+```
+
+**Then** run analysis commands:
 
 ```bash
 # 1. Get yesterday's P&L (all buyers, all networks)
@@ -132,21 +152,36 @@ npm run monitor:launches-summary -- $(date -u +%Y-%m-%d)
 
 **"What did all buyers launch yesterday?"**
 ```bash
-npm run monitor:date-launches -- $(date -u +%Y-%m-%d)
+# First ensure data is ingested for yesterday
+npm run monitor:ingest-campaigns -- --mode=remote --date=$(date -u -d "yesterday" +%Y-%m-%d)
+npm run monitor:track-launches -- $(date -u -d "yesterday" +%Y-%m-%d)
+# Then query
+npm run monitor:date-launches -- $(date -u -d "yesterday" +%Y-%m-%d)
 ```
 
 **"What's our revenue by network?"**
 ```bash
+# First ensure data is ingested for yesterday
+npm run monitor:ingest-campaigns -- --mode=remote --date=$(date -u -d "yesterday" +%Y-%m-%d)
+# Then query
 npm run monitor:daily-pl
 ```
 
 **"What is Cook doing on Taboola?"**
 ```bash
-npm run monitor:buyer-activity -- Cook taboola 7  # Last 7 days
+# First ensure data is ingested for the date range
+npm run monitor:ingest-campaigns -- --mode=remote --date=$(date -u +%Y-%m-%d)
+npm run monitor:ingest-campaigns -- --mode=remote --date=$(date -u -d "1 day ago" +%Y-%m-%d)
+# Then query
+npm run monitor:buyer-activity -- Cook taboola 2
 ```
 
 **"Who launched the most campaigns this week?"**
 ```bash
+# First ensure data is ingested for the week
+npm run monitor:ingest-campaigns -- --mode=remote --date=$(date -u +%Y-%m-%d)
+npm run monitor:track-launches -- $(date -u +%Y-%m-%d)
+# Then query
 npm run monitor:launch-velocity -- 7
 ```
 
@@ -350,7 +385,7 @@ If dates seem wrong, check the UTC date shown in output.
 1. **Always use UTC dates** when manually specifying dates: `$(date -u +%Y-%m-%d)`
 2. **Check endpoint health** before troubleshooting: `npm run monitor:test-endpoints`
 3. **Use `--debug` flag** for detailed output: `npm run monitor:buyer-activity -- Cook taboola 2 --debug`
-4. **Query `campaign_index` directly** for custom analysis: Use DuckDB CLI or create new script
+4. **Need a custom slice of data?** Write a tiny Node.js script that imports `createMonitoringConnection()` and queries DuckDB exactly like the existing npm scripts (skip the CLI entirely).
 5. **Check `endpoint_completeness`** table to see which APIs are failing
 
 ---
