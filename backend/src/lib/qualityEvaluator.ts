@@ -45,6 +45,21 @@ export type PageEvalResult = {
     contentType: string;
   };
   dimensions: DimensionScore[];
+  aiContentDetection?: {
+    aiLikelihood: number;
+    isScaledContentAbuse: boolean;
+    confidence: number;
+    signals: {
+      repetitivePatterns: boolean;
+      genericLanguage: boolean;
+      perfectGrammar: boolean;
+      lacksPersonalVoice: boolean;
+      missingSpecificDetails: boolean;
+      templatedStructure: boolean;
+      lowOriginality: boolean;
+    };
+    evidence: string[];
+  };
 };
 
 const DEFAULT_MODEL = process.env.QUALITY_EVAL_MODEL || 'gpt-4.1-mini';
@@ -197,6 +212,20 @@ async function scoreDimension(
     deception: 'score should be one of: "None", "Mild risk", "High risk".',
   };
 
+  // Detect AI-generated/scaled content abuse
+  let aiContentWarning = '';
+  if (input.fullArticleText) {
+    const { detectScaledContentAbuse } = await import('./aiContentDetector');
+    const wordCount = input.fullArticleText.split(/\s+/).filter(w => w.length > 0).length;
+    const abuseCheck = detectScaledContentAbuse(input.fullArticleText, wordCount);
+    
+    if (abuseCheck.isAbuse) {
+      aiContentWarning = `\n\n⚠️ SCALED CONTENT ABUSE DETECTED (confidence: ${(abuseCheck.confidence * 100).toFixed(0)}%): ${abuseCheck.reasons.join('; ')}. This is a major red flag - Google penalizes scaled/AI-generated content. Score accordingly lower.`;
+    } else if (abuseCheck.confidence > 0.3) {
+      aiContentWarning = `\n\n⚠️ Possible scaled content signals detected: ${abuseCheck.reasons.slice(0, 2).join('; ')}. Review carefully.`;
+    }
+  }
+
   // Build strict evaluation instructions
   const strictnessNote = classification.ymyL
     ? 'CRITICAL: This is YMYL (Your Money or Your Life) content. Apply the HIGHEST standards. Medical/health content requires visible expertise, authoritativeness, and trustworthiness. If author credentials are missing or unclear, if the site lacks reputation, or if content seems thin or AI-generated, score accordingly lower.'
@@ -241,6 +270,7 @@ async function scoreDimension(
     '',
     'PAGE CONTEXT:',
     pageContextParts.join('\n'),
+    aiContentWarning, // Add AI detection warning if present
     'TASK:',
     instructions,
     '',
@@ -341,6 +371,23 @@ export async function evaluatePageWithGuidelines(
     'deception',
   ];
 
+  // Detect AI-generated/scaled content abuse
+  let aiContentDetection: PageEvalResult['aiContentDetection'] | undefined;
+  if (evalInput.fullArticleText) {
+    const { detectAIContentSignals, detectScaledContentAbuse } = await import('./aiContentDetector');
+    const wordCount = evalInput.fullArticleText.split(/\s+/).filter(w => w.length > 0).length;
+    const aiSignals = detectAIContentSignals(evalInput.fullArticleText);
+    const abuseCheck = detectScaledContentAbuse(evalInput.fullArticleText, wordCount);
+    
+    aiContentDetection = {
+      aiLikelihood: aiSignals.aiLikelihood,
+      isScaledContentAbuse: abuseCheck.isAbuse,
+      confidence: abuseCheck.confidence,
+      signals: aiSignals.signals,
+      evidence: [...aiSignals.evidence, ...abuseCheck.reasons],
+    };
+  }
+
   const scores: DimensionScore[] = [];
   for (const dim of dimensions) {
     // Run sequentially for now; could be parallelized later.
@@ -351,6 +398,7 @@ export async function evaluatePageWithGuidelines(
   return {
     classification,
     dimensions: scores,
+    ...(aiContentDetection && { aiContentDetection }),
   };
 }
 
