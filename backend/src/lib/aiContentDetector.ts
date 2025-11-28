@@ -1,6 +1,18 @@
 /**
  * Detects signs of AI-generated or scaled content abuse.
  * Similar to how Google's SpamBrain identifies templated/low-effort content.
+ * 
+ * NOTE: This is CUSTOM detection logic, NOT from the Search Quality Evaluator Guidelines PDF.
+ * The PDF discusses "scaled content abuse" generally but doesn't provide specific detection algorithms.
+ * 
+ * Our detector looks for patterns that indicate AI assistance:
+ * - Repetitive structures (AI often uses templates)
+ * - Generic language (common AI phrases)
+ * - Perfect grammar (unnatural for humans)
+ * - Lack of personal voice (AI avoids "I", opinions)
+ * - Missing specific details (AI tends to be generic)
+ * - Templated structure (uniform paragraphs)
+ * - Low originality (repeated phrases)
  */
 
 export type AIContentSignals = {
@@ -199,6 +211,12 @@ export function detectAIContentSignals(content: string): AIContentSignals {
 /**
  * Check if content shows signs of scaled content abuse.
  * This is a stricter check that combines AI detection with other abuse patterns.
+ * 
+ * IMPORTANT: This detects FULLY AI-generated content well, but may miss PARTIALLY AI-written content
+ * (e.g., 15% AI + 85% human). For partial AI detection, we rely on:
+ * - Lower thresholds (15% AI likelihood is still flagged as "possible")
+ * - Multiple signal detection (even 1-2 signals can indicate partial AI)
+ * - Context clues (thin content + AI signals = higher risk)
  */
 export function detectScaledContentAbuse(content: string, wordCount: number): {
   isAbuse: boolean;
@@ -215,18 +233,31 @@ export function detectScaledContentAbuse(content: string, wordCount: number): {
     confidence += 0.2;
   }
 
-  // High AI likelihood
+  // High AI likelihood (fully AI-generated)
   if (aiSignals.aiLikelihood > 0.5) {
     reasons.push(`High AI content likelihood: ${(aiSignals.aiLikelihood * 100).toFixed(0)}%`);
     confidence += aiSignals.aiLikelihood * 0.4;
     reasons.push(...aiSignals.evidence);
   }
+  // Medium AI likelihood (partially AI-written) - LOWER THRESHOLD for detection
+  else if (aiSignals.aiLikelihood > 0.15) {
+    reasons.push(`Possible AI assistance detected: ${(aiSignals.aiLikelihood * 100).toFixed(0)}% likelihood`);
+    confidence += aiSignals.aiLikelihood * 0.3; // Lower weight but still counts
+    // Include key evidence even for partial AI
+    if (aiSignals.signals.lacksPersonalVoice || aiSignals.signals.genericLanguage) {
+      reasons.push(...aiSignals.evidence.slice(0, 2)); // Top 2 signals
+    }
+  }
 
-  // Multiple AI signals
+  // Multiple AI signals (even if individual scores are low, multiple signals = suspicious)
   const signalCount = Object.values(aiSignals.signals).filter(Boolean).length;
   if (signalCount >= 3) {
     reasons.push(`Multiple AI content signals detected: ${signalCount}`);
     confidence += 0.2;
+  } else if (signalCount >= 2 && aiSignals.aiLikelihood > 0.1) {
+    // Even 2 signals with low likelihood can indicate partial AI
+    reasons.push(`Some AI content signals detected: ${signalCount} signals`);
+    confidence += 0.1;
   }
 
   // Check for templated patterns (common in scaled content)
@@ -235,8 +266,15 @@ export function detectScaledContentAbuse(content: string, wordCount: number): {
     confidence += 0.2;
   }
 
+  // Partial AI detection: If content is thin AND has AI signals, higher confidence
+  if (wordCount < 800 && signalCount >= 1 && aiSignals.aiLikelihood > 0.1) {
+    reasons.push('Thin content with AI signals (possible partial AI assistance)');
+    confidence += 0.15;
+  }
+
   confidence = Math.min(1.0, confidence);
-  const isAbuse = confidence > 0.5;
+  // Lower threshold for "abuse" - flag even partial AI if confidence > 0.3
+  const isAbuse = confidence > 0.3; // Lowered from 0.5 to catch partial AI
 
   return {
     isAbuse,

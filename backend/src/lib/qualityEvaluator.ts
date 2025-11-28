@@ -196,7 +196,7 @@ async function scoreDimension(
     eeat:
       'Assess E-E-A-T (experience, expertise, authoritativeness, trust) and output a bucket like "Very weak", "Weak", "Moderate", "Strong", or "Very strong".',
     ads_ux:
-      'Evaluate how ads, widgets, and layout affect user experience. Consider: widget placement (above/below fold, interrupting content), amount of content before widgets, RSOC widget keywords relevance. Output one of "Problematic", "Borderline", or "Acceptable".',
+      'Evaluate how ads, widgets, and layout affect user experience. The PDF discusses "Supplementary Content (SC)" placement and its impact on user experience. Consider: widget placement (above/below fold, interrupting content), amount of content before widgets, RSOC widget keywords relevance. Output one of "Problematic", "Borderline", or "Acceptable".',
     deception:
       'Assess whether the page shows any signs of deception, misleading claims, or Lowest-quality patterns. Output one of "None", "Mild risk", "High risk".',
   };
@@ -213,6 +213,9 @@ async function scoreDimension(
   };
 
   // Detect AI-generated/scaled content abuse
+  // NOTE: AI detection is CUSTOM - the PDF mentions "scaled content abuse" but doesn't provide
+  // specific detection algorithms. Our detector catches both fully AI-generated (high confidence)
+  // and partially AI-written content (lower thresholds, 15%+ AI likelihood flagged).
   let aiContentWarning = '';
   if (input.fullArticleText) {
     const { detectScaledContentAbuse } = await import('./aiContentDetector');
@@ -221,8 +224,9 @@ async function scoreDimension(
     
     if (abuseCheck.isAbuse) {
       aiContentWarning = `\n\n⚠️ SCALED CONTENT ABUSE DETECTED (confidence: ${(abuseCheck.confidence * 100).toFixed(0)}%): ${abuseCheck.reasons.join('; ')}. This is a major red flag - Google penalizes scaled/AI-generated content. Score accordingly lower.`;
-    } else if (abuseCheck.confidence > 0.3) {
-      aiContentWarning = `\n\n⚠️ Possible scaled content signals detected: ${abuseCheck.reasons.slice(0, 2).join('; ')}. Review carefully.`;
+    } else if (abuseCheck.confidence > 0.15) {
+      // Lower threshold to catch partial AI (15%+ AI content)
+      aiContentWarning = `\n\n⚠️ Possible AI assistance detected (${(abuseCheck.confidence * 100).toFixed(0)}% confidence): ${abuseCheck.reasons.slice(0, 2).join('; ')}. Even partial AI content can be problematic for Google. Review carefully.`;
     }
   }
 

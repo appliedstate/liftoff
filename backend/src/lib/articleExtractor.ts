@@ -201,6 +201,8 @@ export async function extractArticleFromUrl(
       });
 
       // Detect widgets/ads (common patterns)
+      // NOTE: Widget detection is CUSTOM - the PDF discusses "Supplementary Content (SC)" 
+      // generally but doesn't provide specific extraction methods for RSOC widgets.
       const widgetTexts: string[] = [];
       const adIndicators: string[] = [];
       const rsocKeywords: string[] = [];
@@ -210,9 +212,9 @@ export async function extractArticleFromUrl(
         '[class*="sponsor"]',
         '[id*="widget"]',
         '[id*="ad"]',
-        '[class*="rsoc"]',
-        '[class*="related-search"]',
-        '[class*="related-searches"]',
+        '[class*="rsoc"]', // CUSTOM: RSOC-specific selectors
+        '[class*="related-search"]', // CUSTOM: RSOC-specific selectors
+        '[class*="related-searches"]', // CUSTOM: RSOC-specific selectors
       ];
       
       // Track first widget position for placement analysis
@@ -241,6 +243,8 @@ export async function extractArticleFromUrl(
       });
 
       // Extract RSOC widget keywords specifically
+      // CUSTOM: RSOC widget extraction is not in the PDF - this is implementation-specific
+      // The PDF discusses "Supplementary Content" but doesn't mention RSOC widgets or keyword extraction
       // RSOC widgets typically have clickable buttons/links with keywords
       const rsocSelectors = [
         '[class*="rsoc"] a',
@@ -269,6 +273,9 @@ export async function extractArticleFromUrl(
       });
 
       // Analyze widget placement relative to content
+      // CUSTOM: Widget placement analysis (above/below fold, content before widget) is not explicitly
+      // in the PDF. The PDF discusses "Supplementary Content" placement generally but doesn't provide
+      // specific metrics like "content before widget" or "interrupts content" thresholds.
       // @ts-ignore
       const viewportHeight = window.innerHeight;
       const articleTop = articleEl.getBoundingClientRect().top;
