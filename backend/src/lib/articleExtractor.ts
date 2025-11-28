@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { chromium, Browser, Page } from 'playwright';
+import { extractForcekeys } from './forcekeys';
 
 export type ExtractedArticle = {
   url: string;
@@ -443,9 +444,30 @@ export async function extractArticleFromUrl(
 
     await context.close();
 
+    // Extract RSOC keywords from URL parameters (forceKeyA-Z)
+    // CUSTOM: This is implementation-specific - RSOC widgets often pass keywords via URL params
+    // This is more reliable than scraping iframes which may not be accessible
+    const forcekeys = extractForcekeys(url);
+    const urlParamKeywords: string[] = [];
+    forcekeys.forEach((fk) => {
+      const decoded = fk.value.trim();
+      // Filter out empty values and very long values (likely not keywords)
+      if (decoded && decoded.length > 0 && decoded.length <= 100) {
+        urlParamKeywords.push(decoded);
+      }
+    });
+
+    // Combine DOM-extracted keywords with URL param keywords
+    // URL params are more reliable for RSOC widgets in iframes
+    const allRsocKeywords = [
+      ...urlParamKeywords, // Prioritize URL params (more reliable)
+      ...extracted.rsocKeywords,     // Then DOM-extracted keywords
+    ];
+
     return {
       url,
       ...extracted,
+      rsocKeywords: Array.from(new Set(allRsocKeywords)).slice(0, 20), // Dedupe, limit to top 20
     };
   } finally {
     if (browser) {
