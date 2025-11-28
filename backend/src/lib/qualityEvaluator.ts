@@ -60,6 +60,7 @@ export type PageEvalResult = {
     };
     evidence: string[];
   };
+  widgetSummary?: string; // RSOC keywords and widget placement analysis
 };
 
 const DEFAULT_MODEL = process.env.QUALITY_EVAL_MODEL || 'gpt-4.1-mini';
@@ -404,6 +405,7 @@ export async function evaluatePageWithGuidelines(
     classification,
     dimensions: scores,
     ...(aiContentDetection && { aiContentDetection }),
+    ...(evalInput.widgetSummary && { widgetSummary: evalInput.widgetSummary }),
   };
 }
 
