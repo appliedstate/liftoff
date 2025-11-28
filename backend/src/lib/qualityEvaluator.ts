@@ -65,8 +65,8 @@ async function classifyPage(input: PageEvalInput): Promise<ClassificationResult>
   const client = await getOpenAI();
 
   const prompt = [
-    'You are a Google Search Quality rater.',
-    'Classify the page using the Search Quality Evaluator Guidelines.',
+    'You are a Google Search Quality rater following the Search Quality Evaluator Guidelines.',
+    'Classify the page based on the official guidelines.',
     '',
     `User query (force key): ${input.query}`,
     '',
@@ -146,6 +146,8 @@ async function scoreDimension(
   const chunks = await searchGuidelinesChunks({
     query: guidelineQuery,
     k: 6,
+    // Restrict to Search Quality Evaluator Guidelines PDF only
+    pathLike: process.env.GUIDELINES_PATH_LIKE || 'searchqualityevaluatorguidelines%',
   });
 
   const ctx = contextFromChunks(chunks);
