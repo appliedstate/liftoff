@@ -394,13 +394,29 @@ export function articleToEvaluationInput(article: ExtractedArticle, query: strin
 
   const pageSummary = summaryParts.join('. ') + '.';
 
-  // Build widget summary
+  // Build widget summary with RSOC keywords and placement info
   const widgetParts: string[] = [];
+  
+  // RSOC keywords (most important for evaluation)
+  if (article.rsocKeywords && article.rsocKeywords.length > 0) {
+    widgetParts.push(`RSOC widget keywords (${article.rsocKeywords.length}): ${article.rsocKeywords.slice(0, 5).join(', ')}`);
+  }
+  
+  // Widget placement analysis
+  if (article.widgetPlacement && article.widgetPlacement.firstWidgetPosition !== 'not_found') {
+    const placement = article.widgetPlacement;
+    widgetParts.push(
+      `First widget: ${placement.firstWidgetPosition}, ` +
+      `${placement.contentBeforeFirstWidget} words before widget, ` +
+      `${placement.widgetInterruptsContent ? 'INTERRUPTS content' : 'does not interrupt content'}`
+    );
+  }
+  
   if (article.widgetTexts.length > 0) {
-    widgetParts.push(`Widgets/Related sections: ${article.widgetTexts.slice(0, 5).join('; ')}`);
+    widgetParts.push(`Other widgets: ${article.widgetTexts.slice(0, 3).join('; ')}`);
   }
   if (article.adIndicators.length > 0) {
-    widgetParts.push(`Ad indicators: ${article.adIndicators.slice(0, 3).join('; ')}`);
+    widgetParts.push(`Ad indicators: ${article.adIndicators.slice(0, 2).join('; ')}`);
   }
   const widgetSummary = widgetParts.join('. ') || 'No obvious widgets or ads detected.';
 
