@@ -223,10 +223,10 @@ async function scoreDimension(
     const abuseCheck = detectScaledContentAbuse(input.fullArticleText, wordCount);
     
     if (abuseCheck.isAbuse) {
-      aiContentWarning = `\n\n⚠️ SCALED CONTENT ABUSE DETECTED (confidence: ${(abuseCheck.confidence * 100).toFixed(0)}%): ${abuseCheck.reasons.join('; ')}. This is a major red flag - Google penalizes scaled/AI-generated content. Score accordingly lower.`;
+      aiContentWarning = `\n\n⚠️ SCALED CONTENT ABUSE DETECTED (confidence: ${(abuseCheck.confidence * 100).toFixed(0)}%): ${abuseCheck.reasons.join('; ')}. This indicates LOW-VALUE, TEMPLATED AI content - Google's SpamBrain penalizes scaled content abuse. Score accordingly lower.`;
     } else if (abuseCheck.confidence > 0.15) {
-      // Lower threshold to catch partial AI (15%+ AI content)
-      aiContentWarning = `\n\n⚠️ Possible AI assistance detected (${(abuseCheck.confidence * 100).toFixed(0)}% confidence): ${abuseCheck.reasons.slice(0, 2).join('; ')}. Even partial AI content can be problematic for Google. Review carefully.`;
+      // Lower threshold to catch partial AI (15%+ AI content with low-value patterns)
+      aiContentWarning = `\n\n⚠️ Possible low-value AI content detected (${(abuseCheck.confidence * 100).toFixed(0)}% confidence): ${abuseCheck.reasons.slice(0, 2).join('; ')}. Google penalizes AI content that doesn't add unique value or is templated/scaled. Review carefully.`;
     }
   }
 
@@ -297,10 +297,11 @@ async function scoreDimension(
           'Look for red flags:',
           '- Thin or low-value content',
           '- Missing or unclear author credentials (especially for YMYL)',
-          '- Scaled content abuse (AI-generated, templated, low effort)',
+          '- Scaled content abuse (low-value AI content, templated, non-unique, mass-produced)',
           '- Excessive ads/widgets interfering with content',
           '- Deceptive or misleading information',
           '- Lack of E-E-A-T (especially for YMYL topics)',
+          '- Non-unique content (Google penalizes AI content that doesn\'t add unique value)',
           'When in doubt, score LOWER. It is better to be too strict than too lenient.',
           'Base all judgments strictly on the provided guideline excerpts.',
         ].join('\n'),

@@ -35,14 +35,23 @@ export type AIContentSignals = {
 /**
  * Detect AI-generated content patterns similar to SpamBrain.
  * 
- * Key signals Google looks for:
- * - Repetitive sentence structures
- * - Generic, templated language
- * - Overly perfect grammar (no natural errors)
+ * IMPORTANT: Google's official stance (2024):
+ * - AI content is NOT inherently bad
+ * - Google penalizes LOW-VALUE, TEMPLATED, NON-UNIQUE AI content
+ * - Good AI content: Adds value, unique, helpful, demonstrates expertise
+ * - Bad AI content: Scaled, templated, thin, repetitive, low effort
+ * 
+ * SpamBrain specifically targets:
+ * - Scaled content abuse (mass-produced, templated)
+ * - Repetitive sentence structures across pages
+ * - Generic, templated language (no unique value)
+ * - Overly perfect grammar (unnatural, templated)
  * - Lack of personal voice or unique perspective
  * - Missing specific details, citations, or original research
- * - Similar structure across multiple pages
- * - Low semantic diversity
+ * - Similar structure across multiple pages (templated)
+ * - Low semantic diversity (repetitive phrases)
+ * 
+ * Our detector focuses on LOW-VALUE AI patterns, not AI content itself.
  */
 export function detectAIContentSignals(content: string): AIContentSignals {
   const signals = {
@@ -233,19 +242,30 @@ export function detectScaledContentAbuse(content: string, wordCount: number): {
     confidence += 0.2;
   }
 
-  // High AI likelihood (fully AI-generated)
+  // High AI likelihood (fully AI-generated, likely low-value/scaled)
   if (aiSignals.aiLikelihood > 0.5) {
-    reasons.push(`High AI content likelihood: ${(aiSignals.aiLikelihood * 100).toFixed(0)}%`);
+    reasons.push(`High AI content likelihood: ${(aiSignals.aiLikelihood * 100).toFixed(0)}% (likely scaled/low-value)`);
     confidence += aiSignals.aiLikelihood * 0.4;
     reasons.push(...aiSignals.evidence);
   }
   // Medium AI likelihood (partially AI-written) - LOWER THRESHOLD for detection
+  // Focus on LOW-VALUE patterns: generic language, lack of uniqueness, templated structure
   else if (aiSignals.aiLikelihood > 0.15) {
-    reasons.push(`Possible AI assistance detected: ${(aiSignals.aiLikelihood * 100).toFixed(0)}% likelihood`);
-    confidence += aiSignals.aiLikelihood * 0.3; // Lower weight but still counts
-    // Include key evidence even for partial AI
-    if (aiSignals.signals.lacksPersonalVoice || aiSignals.signals.genericLanguage) {
-      reasons.push(...aiSignals.evidence.slice(0, 2)); // Top 2 signals
+    // Only flag if it shows LOW-VALUE patterns (not just "AI-written")
+    const lowValueSignals = [
+      aiSignals.signals.genericLanguage,
+      aiSignals.signals.templatedStructure,
+      aiSignals.signals.lacksPersonalVoice,
+      aiSignals.signals.lowOriginality,
+    ].filter(Boolean).length;
+    
+    if (lowValueSignals >= 2) {
+      reasons.push(`Possible low-value AI content detected: ${(aiSignals.aiLikelihood * 100).toFixed(0)}% likelihood with ${lowValueSignals} low-value signals`);
+      confidence += aiSignals.aiLikelihood * 0.3; // Lower weight but still counts
+      // Include key evidence for low-value patterns
+      if (aiSignals.signals.lacksPersonalVoice || aiSignals.signals.genericLanguage) {
+        reasons.push(...aiSignals.evidence.slice(0, 2)); // Top 2 signals
+      }
     }
   }
 
@@ -267,14 +287,19 @@ export function detectScaledContentAbuse(content: string, wordCount: number): {
   }
 
   // Partial AI detection: If content is thin AND has AI signals, higher confidence
+  // This targets LOW-VALUE AI content (thin + templated = scaled content abuse)
   if (wordCount < 800 && signalCount >= 1 && aiSignals.aiLikelihood > 0.1) {
-    reasons.push('Thin content with AI signals (possible partial AI assistance)');
-    confidence += 0.15;
+    // Check for low-value patterns specifically
+    if (aiSignals.signals.genericLanguage || aiSignals.signals.templatedStructure) {
+      reasons.push('Thin content with low-value AI patterns (scaled content abuse risk)');
+      confidence += 0.15;
+    }
   }
 
   confidence = Math.min(1.0, confidence);
-  // Lower threshold for "abuse" - flag even partial AI if confidence > 0.3
-  const isAbuse = confidence > 0.3; // Lowered from 0.5 to catch partial AI
+  // Lower threshold for "abuse" - flag scaled/low-value AI content
+  // Note: This targets LOW-VALUE AI, not all AI content (Google's actual policy)
+  const isAbuse = confidence > 0.3; // Lowered from 0.5 to catch scaled/low-value AI
 
   return {
     isAbuse,
