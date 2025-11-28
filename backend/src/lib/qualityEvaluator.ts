@@ -196,7 +196,7 @@ async function scoreDimension(
     eeat:
       'Assess E-E-A-T (experience, expertise, authoritativeness, trust) and output a bucket like "Very weak", "Weak", "Moderate", "Strong", or "Very strong".',
     ads_ux:
-      'Evaluate how ads, widgets, and layout affect user experience, and output one of "Problematic", "Borderline", or "Acceptable".',
+      'Evaluate how ads, widgets, and layout affect user experience. Consider: widget placement (above/below fold, interrupting content), amount of content before widgets, RSOC widget keywords relevance. Output one of "Problematic", "Borderline", or "Acceptable".',
     deception:
       'Assess whether the page shows any signs of deception, misleading claims, or Lowest-quality patterns. Output one of "None", "Mild risk", "High risk".',
   };

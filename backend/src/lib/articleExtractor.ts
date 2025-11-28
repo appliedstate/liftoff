@@ -16,6 +16,13 @@ export type ExtractedArticle = {
   // Widget/ad detection
   widgetTexts: string[];
   adIndicators: string[];
+  // RSOC widget specific extraction
+  rsocKeywords: string[]; // Individual keywords/phrases from RSOC widgets
+  widgetPlacement: {
+    firstWidgetPosition: 'above_fold' | 'below_fold' | 'not_found';
+    contentBeforeFirstWidget: number; // Word count before first widget
+    widgetInterruptsContent: boolean; // Widget appears before substantial content
+  };
   // Layout signals
   mainContentAboveFold: boolean;
   adDensity: 'low' | 'medium' | 'high';
@@ -196,13 +203,22 @@ export async function extractArticleFromUrl(
       // Detect widgets/ads (common patterns)
       const widgetTexts: string[] = [];
       const adIndicators: string[] = [];
+      const rsocKeywords: string[] = [];
       const widgetSelectors = [
         '[class*="widget"]',
         '[class*="related"]',
         '[class*="sponsor"]',
         '[id*="widget"]',
         '[id*="ad"]',
+        '[class*="rsoc"]',
+        '[class*="related-search"]',
+        '[class*="related-searches"]',
       ];
+      
+      // Track first widget position for placement analysis
+      let firstWidgetTop = Infinity;
+      let firstWidgetFound = false;
+      
       widgetSelectors.forEach((sel) => {
         const els = doc.querySelectorAll(sel);
         // @ts-ignore
@@ -210,12 +226,80 @@ export async function extractArticleFromUrl(
           const text = el.textContent?.trim();
           if (text && text.length > 5 && text.length < 200) {
             widgetTexts.push(text);
+            
+            // Track position of first widget
+            const rect = el.getBoundingClientRect();
+            if (rect.top < firstWidgetTop) {
+              firstWidgetTop = rect.top;
+              firstWidgetFound = true;
+            }
           }
           if (/ad|sponsor|promo/i.test(sel)) {
             adIndicators.push(text || '');
           }
         });
       });
+
+      // Extract RSOC widget keywords specifically
+      // RSOC widgets typically have clickable buttons/links with keywords
+      const rsocSelectors = [
+        '[class*="rsoc"] a',
+        '[class*="related-search"] a',
+        '[class*="related-searches"] a',
+        '[class*="widget"] a[href]',
+        '[class*="related"] a[href]',
+        '[class*="keyword"]',
+        '[class*="tag"]',
+        '[role="button"]',
+      ];
+      
+      rsocSelectors.forEach((sel) => {
+        const els = doc.querySelectorAll(sel);
+        // @ts-ignore
+        els.forEach((el: Element) => {
+          const text = el.textContent?.trim();
+          // RSOC keywords are typically short phrases (2-50 chars)
+          if (text && text.length >= 2 && text.length <= 50) {
+            // Filter out navigation/common links
+            if (!/^(home|about|contact|privacy|terms|menu|search|login|sign up)$/i.test(text)) {
+              rsocKeywords.push(text);
+            }
+          }
+        });
+      });
+
+      // Analyze widget placement relative to content
+      // @ts-ignore
+      const viewportHeight = window.innerHeight;
+      const articleTop = articleEl.getBoundingClientRect().top;
+      
+      // Calculate word count before first widget
+      let contentBeforeFirstWidget = 0;
+      let widgetInterruptsContent = false;
+      
+      if (firstWidgetFound && firstWidgetTop < Infinity) {
+        // Simple approach: count words in mainContent up to the widget position
+        // Estimate based on scroll position relative to article
+        const articleHeight = articleEl.getBoundingClientRect().height;
+        const widgetPositionRatio = (firstWidgetTop - articleTop) / articleHeight;
+        
+        // Estimate word count before widget based on position ratio
+        const totalWords = mainContent.split(/\s+/).filter(w => w.length > 0).length;
+        contentBeforeFirstWidget = Math.floor(totalWords * Math.max(0, Math.min(1, widgetPositionRatio)));
+        
+        // Widget interrupts content if it appears before substantial content (<300 words) and is above fold
+        widgetInterruptsContent = contentBeforeFirstWidget < 300 && firstWidgetTop < viewportHeight;
+      }
+      
+      const widgetPlacement = {
+        firstWidgetPosition: !firstWidgetFound 
+          ? 'not_found' 
+          : firstWidgetTop < viewportHeight 
+            ? 'above_fold' 
+            : 'below_fold',
+        contentBeforeFirstWidget,
+        widgetInterruptsContent,
+      };
 
       // Check if main content is above the fold
       const rect = articleEl.getBoundingClientRect();
@@ -248,6 +332,8 @@ export async function extractArticleFromUrl(
         wordCount,
         widgetTexts: Array.from(new Set(widgetTexts)).slice(0, 20), // Dedupe, limit
         adIndicators: Array.from(new Set(adIndicators)).filter(Boolean).slice(0, 10),
+        rsocKeywords: Array.from(new Set(rsocKeywords)).slice(0, 20), // Dedupe, limit to top 20
+        widgetPlacement,
         mainContentAboveFold,
         adDensity,
       };
