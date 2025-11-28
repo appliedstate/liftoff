@@ -87,8 +87,11 @@ async function classifyPage(input: PageEvalInput): Promise<ClassificationResult>
     'You are a Google Search Quality rater following the Search Quality Evaluator Guidelines.',
     'Classify the page based on the official guidelines.',
     '',
+    'IMPORTANT: If this is medical, health, financial, or legal content, it is YMYL (Your Money or Your Life) and requires the highest standards.',
+    '',
     ...contextParts,
     'Return JSON with fields: ymyL (boolean), purpose (short phrase), contentType (one of: "article", "landing_page", "tool", "forum", "other").',
+    'For ymyL: Set to true if the content is about health, medical, financial, legal, or safety topics that could impact users\' wellbeing.',
   ].join('\n');
 
   const completion = await client.chat.completions.create({
@@ -107,8 +110,11 @@ async function classifyPage(input: PageEvalInput): Promise<ClassificationResult>
   } catch {
     parsed = {};
   }
+  // If user explicitly hints YMYL, trust that (they know their content)
+  const isYMYL = input.ymyLHint === true ? true : (typeof parsed.ymyL === 'boolean' ? parsed.ymyL : false);
+  
   return {
-    ymyL: typeof parsed.ymyL === 'boolean' ? parsed.ymyL : !!input.ymyLHint,
+    ymyL: isYMYL,
     purpose: typeof parsed.purpose === 'string' ? parsed.purpose : 'unknown',
     contentType:
       typeof parsed.contentType === 'string' ? parsed.contentType : 'article',
@@ -191,10 +197,18 @@ async function scoreDimension(
     deception: 'score should be one of: "None", "Mild risk", "High risk".',
   };
 
+  // Build strict evaluation instructions
+  const strictnessNote = classification.ymyL
+    ? 'CRITICAL: This is YMYL (Your Money or Your Life) content. Apply the HIGHEST standards. Medical/health content requires visible expertise, authoritativeness, and trustworthiness. If author credentials are missing or unclear, if the site lacks reputation, or if content seems thin or AI-generated, score accordingly lower.'
+    : 'Apply strict quality standards. Look for signs of thin content, scaled content abuse, missing E-E-A-T, deceptive practices, or low value.';
+
   const instructions = [
     taskInstructions[dim],
     expectedScoreHint[dim],
-    'Use only the information from the page summary and the guideline excerpts. When in doubt, be conservative.',
+    strictnessNote,
+    'Use only the information from the page summary and the guideline excerpts.',
+    'When evaluating, be STRICT and CONSERVATIVE. If there are ANY red flags (missing author credentials, thin content, unclear expertise, excessive ads, etc.), score lower.',
+    'Remember: Google penalizes pages that fail to meet quality standards. Err on the side of caution.',
   ].join(' ');
 
   // Build comprehensive page context
@@ -242,8 +256,20 @@ async function scoreDimension(
     messages: [
       {
         role: 'system',
-        content:
-          'You are a meticulous Google Search Quality rater. Base all judgments strictly on the provided guideline excerpts.',
+        content: [
+          'You are a strict Google Search Quality rater following the official Search Quality Evaluator Guidelines.',
+          'Apply CONSERVATIVE standards. Google penalizes low-quality, thin, or deceptive content.',
+          'For YMYL content: Require visible expertise, author credentials, and authoritative sources. Missing these is a major red flag.',
+          'Look for red flags:',
+          '- Thin or low-value content',
+          '- Missing or unclear author credentials (especially for YMYL)',
+          '- Scaled content abuse (AI-generated, templated, low effort)',
+          '- Excessive ads/widgets interfering with content',
+          '- Deceptive or misleading information',
+          '- Lack of E-E-A-T (especially for YMYL topics)',
+          'When in doubt, score LOWER. It is better to be too strict than too lenient.',
+          'Base all judgments strictly on the provided guideline excerpts.',
+        ].join('\n'),
       },
       { role: 'user', content: prompt },
     ],
