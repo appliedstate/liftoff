@@ -41,7 +41,9 @@ import campaignFactoryRouter from './routes/campaignFactory';
 import opportunityQueueRouter from './routes/opportunityQueue';
 import workflowRouter from './routes/workflow';
 import analyticsRouter from './routes/analytics';
+import monitoringAgentRouter from './routes/monitoringAgent';
 import docsRouter from './routes/docs';
+import qualityRouter from './routes/quality';
 
 app.use('/api/copilot', copilotRouter);
 app.use('/api/elon', elonRouter);
@@ -56,6 +58,8 @@ app.use('/api/opportunities', opportunityQueueRouter);
 app.use('/api/workflow', workflowRouter);
 app.use('/api/analytics', analyticsRouter);
 app.use('/api/docs', docsRouter);
+app.use('/api/monitoring', monitoringAgentRouter);
+app.use('/api/quality', qualityRouter);
 
 app.get('/api/health', (req, res) => {
   const last = getLastIngestTimestamps();
