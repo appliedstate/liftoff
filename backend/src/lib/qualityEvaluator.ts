@@ -14,17 +14,17 @@ export type PageEvalInput = {
    */
   query: string;
   /**
-   * Concise natural-language summary of the page:
-   * - title, H1
-   * - article body synopsis
-   * - author/bio highlights
-   * - any notable disclaimers
+   * Either provide a URL to extract, OR provide the structured content directly.
+   * If url is provided, the system will extract full article content automatically.
    */
-  pageSummary: string;
+  url?: string;
   /**
-   * Optional description of monetization / widgets / ad layout.
+   * Structured article content (if not providing URL).
+   * If url is provided, these fields will be auto-populated from extraction.
    */
-  widgetSummary?: string;
+  pageSummary?: string; // Title, H1, author, headings summary
+  widgetSummary?: string; // Monetization/widgets description
+  fullArticleText?: string; // Full article body content
   /**
    * Optional hint if you already know the page is YMYL.
    */
@@ -64,16 +64,30 @@ type ClassificationResult = {
 async function classifyPage(input: PageEvalInput): Promise<ClassificationResult> {
   const client = await getOpenAI();
 
+  const contextParts: string[] = [
+    `User query (force key): ${input.query}`,
+    '',
+  ];
+
+  if (input.pageSummary) {
+    contextParts.push('Page metadata:', input.pageSummary, '');
+  }
+
+  if (input.fullArticleText) {
+    // Use first 2000 chars for classification (enough to determine YMYL, purpose)
+    const articlePreview = input.fullArticleText.slice(0, 2000);
+    contextParts.push('Article preview:', articlePreview, '');
+  }
+
+  if (input.widgetSummary) {
+    contextParts.push('Monetization/widgets summary:', input.widgetSummary, '');
+  }
+
   const prompt = [
     'You are a Google Search Quality rater following the Search Quality Evaluator Guidelines.',
     'Classify the page based on the official guidelines.',
     '',
-    `User query (force key): ${input.query}`,
-    '',
-    'Page summary:',
-    input.pageSummary,
-    '',
-    input.widgetSummary ? `Monetization/widgets summary:\n${input.widgetSummary}\n` : '',
+    ...contextParts,
     'Return JSON with fields: ymyL (boolean), purpose (short phrase), contentType (one of: "article", "landing_page", "tool", "forum", "other").',
   ].join('\n');
 
@@ -145,7 +159,7 @@ async function scoreDimension(
   const guidelineQuery = buildGuidelineQuery(dim, classification);
   const chunks = await searchGuidelinesChunks({
     query: guidelineQuery,
-    k: 6,
+    k: parseInt(process.env.QUALITY_EVAL_CHUNKS_PER_DIMENSION || '12', 10), // Increased from 6 for better coverage
     // Restrict to Search Quality Evaluator Guidelines PDF only
     pathLike: process.env.GUIDELINES_PATH_LIKE || 'searchqualityevaluatorguidelines%',
   });
@@ -183,18 +197,36 @@ async function scoreDimension(
     'Use only the information from the page summary and the guideline excerpts. When in doubt, be conservative.',
   ].join(' ');
 
+  // Build comprehensive page context
+  const pageContextParts: string[] = [
+    `User query (force key): ${input.query}`,
+    '',
+  ];
+
+  if (input.pageSummary) {
+    pageContextParts.push('Page metadata:', input.pageSummary, '');
+  }
+
+  if (input.fullArticleText) {
+    pageContextParts.push(
+      'Full article content:',
+      input.fullArticleText.length > 8000
+        ? input.fullArticleText.slice(0, 8000) + ' [truncated for length]'
+        : input.fullArticleText,
+      ''
+    );
+  }
+
+  if (input.widgetSummary) {
+    pageContextParts.push('Monetization/widgets summary:', input.widgetSummary, '');
+  }
+
   const prompt = [
     'GUIDELINE EXCERPTS:',
     ctx,
     '',
     'PAGE CONTEXT:',
-    `User query (force key): ${input.query}`,
-    '',
-    'Page summary:',
-    input.pageSummary,
-    '',
-    input.widgetSummary ? `Monetization/widgets summary:\n${input.widgetSummary}\n` : '',
-    '',
+    pageContextParts.join('\n'),
     'TASK:',
     instructions,
     '',
@@ -248,11 +280,32 @@ async function scoreDimension(
 export async function evaluatePageWithGuidelines(
   input: PageEvalInput
 ): Promise<PageEvalResult> {
-  if (!input.query || !input.pageSummary) {
-    throw new Error('evaluatePageWithGuidelines: query and pageSummary are required');
+  if (!input.query) {
+    throw new Error('evaluatePageWithGuidelines: query is required');
   }
 
-  const classification = await classifyPage(input);
+  // If URL provided, extract full article content
+  let evalInput = input;
+  if (input.url) {
+    const { extractArticleFromUrl, articleToEvaluationInput } = await import('./articleExtractor');
+    const article = await extractArticleFromUrl(input.url);
+    const extracted = articleToEvaluationInput(article, input.query);
+    evalInput = {
+      ...input,
+      pageSummary: extracted.pageSummary,
+      widgetSummary: extracted.widgetSummary,
+      fullArticleText: extracted.fullArticleText,
+    };
+  }
+
+  // Validate we have content to evaluate
+  if (!evalInput.pageSummary && !evalInput.fullArticleText) {
+    throw new Error(
+      'evaluatePageWithGuidelines: either url, pageSummary, or fullArticleText must be provided'
+    );
+  }
+
+  const classification = await classifyPage(evalInput);
 
   const dimensions: QualityDimension[] = [
     'needs_met',
@@ -265,7 +318,7 @@ export async function evaluatePageWithGuidelines(
   const scores: DimensionScore[] = [];
   for (const dim of dimensions) {
     // Run sequentially for now; could be parallelized later.
-    const s = await scoreDimension(dim, classification, input);
+    const s = await scoreDimension(dim, classification, evalInput);
     scores.push(s);
   }
 
