@@ -215,6 +215,9 @@ export async function extractArticleFromUrl(
         '[class*="rsoc"]', // CUSTOM: RSOC-specific selectors
         '[class*="related-search"]', // CUSTOM: RSOC-specific selectors
         '[class*="related-searches"]', // CUSTOM: RSOC-specific selectors
+        '[class*="search-suggestions"]',
+        '[class*="related-queries"]',
+        '[class*="suggestions"]',
       ];
       
       // Track first widget position for placement analysis
@@ -222,24 +225,33 @@ export async function extractArticleFromUrl(
       let firstWidgetFound = false;
       
       widgetSelectors.forEach((sel) => {
-        const els = doc.querySelectorAll(sel);
-        // @ts-ignore
-        els.forEach((el: Element) => {
-          const text = el.textContent?.trim();
-          if (text && text.length > 5 && text.length < 200) {
-            widgetTexts.push(text);
-            
-            // Track position of first widget
-            const rect = el.getBoundingClientRect();
-            if (rect.top < firstWidgetTop) {
-              firstWidgetTop = rect.top;
-              firstWidgetFound = true;
+        try {
+          const els = doc.querySelectorAll(sel);
+          // @ts-ignore
+          els.forEach((el: Element) => {
+            const text = el.textContent?.trim();
+            // More lenient: accept shorter text (widgets can be just keywords)
+            if (text && text.length >= 2 && text.length < 500) {
+              // Skip if it's clearly main content (long paragraphs)
+              const wordCount = text.split(/\s+/).filter(w => w.length > 0).length;
+              if (wordCount < 100) { // Widgets are usually shorter than 100 words
+                widgetTexts.push(text);
+                
+                // Track position of first widget
+                const rect = el.getBoundingClientRect();
+                if (rect.top >= 0 && rect.top < firstWidgetTop) {
+                  firstWidgetTop = rect.top;
+                  firstWidgetFound = true;
+                }
+              }
             }
-          }
-          if (/ad|sponsor|promo/i.test(sel)) {
-            adIndicators.push(text || '');
-          }
-        });
+            if (/ad|sponsor|promo/i.test(sel)) {
+              adIndicators.push(text || '');
+            }
+          });
+        } catch (e) {
+          // Ignore selector errors
+        }
       });
 
       // Extract RSOC widget keywords specifically
@@ -248,28 +260,111 @@ export async function extractArticleFromUrl(
       // RSOC widgets typically have clickable buttons/links with keywords
       const rsocSelectors = [
         '[class*="rsoc"] a',
+        '[class*="rsoc"] button',
+        '[class*="rsoc"] [role="button"]',
         '[class*="related-search"] a',
+        '[class*="related-search"] button',
         '[class*="related-searches"] a',
+        '[class*="related-searches"] button',
         '[class*="widget"] a[href]',
+        '[class*="widget"] button',
         '[class*="related"] a[href]',
         '[class*="keyword"]',
         '[class*="tag"]',
         '[role="button"]',
+        'button[class*="search"]',
+        'button[class*="keyword"]',
+        'a[class*="search"]',
+        // Look for clickable elements with short text that might be RSOC buttons
+        'button:not([class*="nav"]):not([class*="menu"])',
+        'a[href]:not([class*="nav"]):not([class*="menu"])',
       ];
       
-      rsocSelectors.forEach((sel) => {
-        const els = doc.querySelectorAll(sel);
+      // Also look for containers that might hold RSOC widgets
+      const rsocContainerSelectors = [
+        '[class*="rsoc"]',
+        '[class*="related-search"]',
+        '[class*="related-searches"]',
+        '[class*="search-suggestions"]',
+        '[class*="related-queries"]',
+        '[id*="rsoc"]',
+        '[id*="related-search"]',
+      ];
+      
+      // First, try container-based extraction (more reliable)
+      rsocContainerSelectors.forEach((sel) => {
+        const containers = doc.querySelectorAll(sel);
         // @ts-ignore
-        els.forEach((el: Element) => {
-          const text = el.textContent?.trim();
-          // RSOC keywords are typically short phrases (2-50 chars)
-          if (text && text.length >= 2 && text.length <= 50) {
-            // Filter out navigation/common links
-            if (!/^(home|about|contact|privacy|terms|menu|search|login|sign up)$/i.test(text)) {
-              rsocKeywords.push(text);
+        containers.forEach((container: Element) => {
+          // Look for buttons/links inside the container
+          const buttons = container.querySelectorAll('button, a[href], [role="button"]');
+          // @ts-ignore
+          buttons.forEach((btn: Element) => {
+            const text = btn.textContent?.trim();
+            if (text && text.length >= 2 && text.length <= 50) {
+              // Filter out navigation/common links
+              if (!/^(home|about|contact|privacy|terms|menu|search|login|sign up|next|previous|more|less|show|hide)$/i.test(text)) {
+                rsocKeywords.push(text);
+              }
             }
-          }
+          });
         });
+      });
+      
+      // Then, try direct selector-based extraction
+      rsocSelectors.forEach((sel) => {
+        try {
+          const els = doc.querySelectorAll(sel);
+          // @ts-ignore
+          els.forEach((el: Element) => {
+            // Skip if already found in a container
+            const parent = el.closest('[class*="rsoc"], [class*="related-search"], [class*="related-searches"]');
+            if (parent) return; // Already processed via container
+            
+            const text = el.textContent?.trim();
+            // RSOC keywords are typically short phrases (2-50 chars)
+            if (text && text.length >= 2 && text.length <= 50) {
+              // Filter out navigation/common links
+              if (!/^(home|about|contact|privacy|terms|menu|search|login|sign up|next|previous|more|less|show|hide)$/i.test(text)) {
+                // Additional filter: RSOC keywords usually don't contain URLs or email patterns
+                if (!/^(https?:\/\/|www\.|mailto:)/i.test(text)) {
+                  rsocKeywords.push(text);
+                }
+              }
+            }
+          });
+        } catch (e) {
+          // Ignore selector errors
+        }
+      });
+      
+      // Also check for button-like divs/spans (some RSOC widgets use these)
+      const buttonLikeSelectors = [
+        'div[onclick]',
+        'span[onclick]',
+        'div[class*="button"]',
+        'span[class*="button"]',
+        'div[class*="click"]',
+        'span[class*="click"]',
+      ];
+      
+      buttonLikeSelectors.forEach((sel) => {
+        try {
+          const els = doc.querySelectorAll(sel);
+          // @ts-ignore
+          els.forEach((el: Element) => {
+            const text = el.textContent?.trim();
+            if (text && text.length >= 2 && text.length <= 50) {
+              // Only include if it's in a widget-related container
+              const parent = el.closest('[class*="widget"], [class*="related"], [class*="rsoc"], [class*="search"]');
+              if (parent && !/^(home|about|contact|privacy|terms|menu|search|login|sign up)$/i.test(text)) {
+                rsocKeywords.push(text);
+              }
+            }
+          });
+        } catch (e) {
+          // Ignore selector errors
+        }
       });
 
       // Analyze widget placement relative to content
