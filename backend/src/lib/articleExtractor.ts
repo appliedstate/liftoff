@@ -27,6 +27,12 @@ export type ExtractedArticle = {
   // Layout signals
   mainContentAboveFold: boolean;
   adDensity: 'low' | 'medium' | 'high';
+  // RSOC Policy Checks
+  referrerProof: {
+    isArbitrage: boolean; // True if paid/arbitrage signals detected (UTM, forceKey)
+    hasReferrerProof: boolean; // True if referrerAdCreative param is present
+    status: 'ok' | 'missing_proof' | 'not_required';
+  };
 };
 
 /**
@@ -276,6 +282,7 @@ export async function extractArticleFromUrl(
         'button[class*="search"]',
         'button[class*="keyword"]',
         'a[class*="search"]',
+        'button[class*="search"]',
         // Look for clickable elements with short text that might be RSOC buttons
         'button:not([class*="nav"]):not([class*="menu"])',
         'a[href]:not([class*="nav"]):not([class*="menu"])',
@@ -410,9 +417,56 @@ export async function extractArticleFromUrl(
       const mainContentAboveFold = rect.top < window.innerHeight;
 
       // Estimate ad density (simple heuristic)
-      const adLikeElements = doc.querySelectorAll(
+      // Exclude lead generation forms and site functionality from ad count
+      // IMPORTANT: Use word boundaries to avoid false positives (e.g., "badge" contains "ad" but isn't an ad)
+      const allAdLike = doc.querySelectorAll(
         '[class*="ad"], [id*="ad"], [class*="sponsor"], iframe'
       );
+      
+      // Filter out elements that are clearly lead gen forms, site functionality, or false positives
+      const adLikeElements = Array.from(allAdLike).filter((el: any) => {
+        const className = (el.className || '').toLowerCase();
+        const id = (el.id || '').toLowerCase();
+        const text = (el.textContent || '').toLowerCase();
+        const src = (el.src || '').toLowerCase();
+        
+        // Exclude false positives: words that contain "ad" but aren't ads
+        // Match "ad" as a whole word or as part of "ad-" prefix, not embedded in other words
+        const classNameWords = className.split(/[\s_-]+/);
+        const idWords = id.split(/[\s_-]+/);
+        const hasAdWord = 
+          classNameWords.some(w => w === 'ad' || w.startsWith('ad-') || w === 'ads' || w.startsWith('ads-') || w === 'advertisement' || w.startsWith('advertisement-')) ||
+          idWords.some(w => w === 'ad' || w.startsWith('ad-') || w === 'ads' || w.startsWith('ads-') || w === 'advertisement' || w.startsWith('advertisement-')) ||
+          className.includes('adsbygoogle') || // Google AdSense
+          className.includes('google-ads') ||
+          className.includes('advertisement') ||
+          id.includes('advertisement');
+        
+        // If it doesn't have "ad" as a word (not embedded), exclude it (false positive)
+        if (!hasAdWord && !className.includes('sponsor') && el.tagName !== 'IFRAME') {
+          return false; // False positive (e.g., "badge", "heading", "header")
+        }
+        
+        // Exclude if it's clearly a quote/lead gen form or site functionality
+        const isLeadGenForm = 
+          className.includes('quote') || 
+          className.includes('lead') ||
+          (className.includes('form') && (className.includes('quote') || className.includes('lead') || text.includes('get quote') || text.includes('enter zip'))) ||
+          id.includes('quote') ||
+          id.includes('lead') ||
+          (text.includes('get quote') || text.includes('enter zip') || text.includes('competitive quotes')) ||
+          (src && (src.includes('quote') || src.includes('lead')));
+        
+        // Exclude navigation/menu elements
+        const isNavigation = 
+          className.includes('nav') ||
+          className.includes('menu') ||
+          id.includes('nav') ||
+          id.includes('menu');
+        
+        return !isLeadGenForm && !isNavigation;
+      });
+      
       const adDensity =
         adLikeElements.length > 10
           ? 'high'
@@ -464,10 +518,41 @@ export async function extractArticleFromUrl(
       ...extracted.rsocKeywords,     // Then DOM-extracted keywords
     ];
 
+    // --- REFERRER PROOF VERIFICATION (Physics/First Principles) ---
+    // Rule: IF (Paid/Arbitrage Traffic) THEN (Must Have referrerAdCreative)
+    const urlObj = new URL(url);
+    const params = urlObj.searchParams;
+
+    const hasForceKeys = forcekeys.length > 0;
+    const hasPaidUtm = 
+      /cpc|paid|display/i.test(params.get('utm_medium') || '') ||
+      /facebook|taboola|outbrain|google/i.test(params.get('utm_source') || '');
+    const hasAdClickIds = 
+      params.has('fbclid') || 
+      params.has('gclid') || 
+      params.has('tblci') || 
+      params.has('li_fat_id'); // LinkedIn
+
+    // State B: Arbitrage/Paid Traffic Detected
+    const isArbitrage = hasForceKeys || hasPaidUtm || hasAdClickIds;
+    
+    // Check for Proof
+    const hasReferrerProof = params.has('referrerAdCreative') && (params.get('referrerAdCreative') || '').length > 0;
+
+    let referrerStatus: 'ok' | 'missing_proof' | 'not_required' = 'not_required';
+    if (isArbitrage) {
+      referrerStatus = hasReferrerProof ? 'ok' : 'missing_proof';
+    }
+
     return {
       url,
       ...extracted,
       rsocKeywords: Array.from(new Set(allRsocKeywords)).slice(0, 20), // Dedupe, limit to top 20
+      referrerProof: {
+        isArbitrage,
+        hasReferrerProof,
+        status: referrerStatus
+      }
     };
   } finally {
     if (browser) {
@@ -535,6 +620,16 @@ export function articleToEvaluationInput(article: ExtractedArticle, query: strin
   if (article.adIndicators.length > 0) {
     widgetParts.push(`Ad indicators: ${article.adIndicators.slice(0, 2).join('; ')}`);
   }
+  
+  // Add Referrer Proof Status to Summary
+  if (article.referrerProof) {
+    if (article.referrerProof.status === 'missing_proof') {
+      widgetParts.push(`⚠️ CRITICAL POLICY FAILURE: Arbitrage traffic detected but 'referrerAdCreative' parameter is MISSING. This is an instant policy strike.`);
+    } else if (article.referrerProof.status === 'ok') {
+      widgetParts.push(`✅ Referrer proof verified (arbitrage traffic with valid proof).`);
+    }
+  }
+
   const widgetSummary = widgetParts.join('. ') || 'No obvious widgets or ads detected.';
 
   // Full article text (truncated if too long for LLM context)
@@ -552,4 +647,3 @@ export function articleToEvaluationInput(article: ExtractedArticle, query: strin
     fullArticleText,
   };
 }
-
