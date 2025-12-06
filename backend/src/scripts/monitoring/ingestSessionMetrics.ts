@@ -86,14 +86,15 @@ function normalizeId(value: any): string | null {
 
 function getHourFromRow(row: Record<string, any>): number | null {
   const direct = getNumber(row, ['hour', 'click_hour', 'hour_of_day', 'hour_of_click']);
-  if (direct !== null && direct >= 0 && direct <= 23) return Math.floor(direct);
+  // Allow extended click hours up to 27 for late-attributed sessions
+  if (direct !== null && direct >= 0 && direct <= 27) return Math.floor(direct);
   const composite = getString(row, ['date_hour', 'dateHour']);
   if (composite) {
     const match = composite.match(/(\d{1,2})$/);
-    if (match) {
-      const h = Number(match[1]);
-      if (Number.isFinite(h)) return Math.min(Math.max(h, 0), 23);
-    }
+      if (match) {
+        const h = Number(match[1]);
+        if (Number.isFinite(h)) return Math.min(Math.max(h, 0), 27);
+      }
   }
   const timestamp = getString(row, ['timestamp', 'click_time']);
   if (timestamp) {
@@ -205,8 +206,8 @@ async function fetchHourlyRows(date: string): Promise<any[]> {
 
 async function main(): Promise<void> {
   const date = getFlag('date', todayUtc());
-  const maxHour = Number(getFlag('max-hour', '23'));
-  const maxClickHour = Number.isFinite(maxHour) ? Math.max(0, Math.min(maxHour, 23)) : 23;
+  const maxHour = Number(getFlag('max-hour', '27'));
+  const maxClickHour = Number.isFinite(maxHour) ? Math.max(0, Math.min(maxHour, 27)) : 27;
   const mode = getFlag('mode', 'strategis').toLowerCase();
   if (mode !== 'strategis' && mode !== 'remote') {
     console.warn(`[ingestSessionMetrics] Unknown mode "${mode}", defaulting to strategis API`);

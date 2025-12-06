@@ -152,6 +152,70 @@ export async function initMonitoringSchema(conn: any): Promise<void> {
       PRIMARY KEY (campaign_id)
     )
     `,
+    // Snapshot tables for time-aligned hourly RPC reporting
+    `
+    CREATE TABLE IF NOT EXISTS hourly_snapshot_metrics (
+      snapshot_pst TIMESTAMP NOT NULL,
+      day_pst DATE NOT NULL,
+      hour_pst INTEGER NOT NULL,
+      media_source TEXT,
+      rsoc_site TEXT,
+      owner TEXT,
+      lane TEXT,
+      category TEXT,
+      level TEXT,
+      campaign_id TEXT,
+      campaign_name TEXT,
+      adset_id TEXT,
+      adset_name TEXT,
+      sessions DOUBLE,
+      revenue DOUBLE,
+      clicks DOUBLE,
+      conversions DOUBLE,
+      rpc DOUBLE,
+      PRIMARY KEY (
+        snapshot_pst,
+        day_pst,
+        hour_pst,
+        media_source,
+        rsoc_site,
+        owner,
+        category,
+        level,
+        campaign_id,
+        adset_id
+      )
+    )
+    `,
+    `
+    CREATE TABLE IF NOT EXISTS hourly_snapshot_runs (
+      snapshot_pst TIMESTAMP PRIMARY KEY,
+      row_count INTEGER,
+      from_day_pst DATE,
+      to_day_pst DATE,
+      status TEXT,
+      message TEXT
+    )
+    `,
+    // Placeholder for future keyword-level hourly snapshots. Same grain as hourly_snapshot_metrics plus keyword.
+    `
+    CREATE TABLE IF NOT EXISTS hourly_snapshot_keywords (
+      snapshot_pst TIMESTAMP NOT NULL,
+      day_pst DATE NOT NULL,
+      hour_pst INTEGER NOT NULL,
+      media_source TEXT,
+      rsoc_site TEXT,
+      owner TEXT,
+      lane TEXT,
+      category TEXT,
+      keyword TEXT,
+      sessions DOUBLE,
+      revenue DOUBLE,
+      clicks DOUBLE,
+      conversions DOUBLE,
+      rpc DOUBLE
+    )
+    `,
   ];
 
   for (const stmt of statements) {
