@@ -22,61 +22,50 @@ import { initMonitoringSchema } from '../../lib/monitoringDb';
 // Default trailing window in days (inclusive of today_pst)
 const DEFAULT_TRAILING_DAYS = 3;
 
-async function getSnapshotTiming(conn: any, overrideIso?: string): Promise<{
+async function getSnapshotTiming(
+  _conn: any,
+  overrideIso?: string
+): Promise<{
   snapshotPst: string;
   todayPst: string;
   trailingStartPst: string;
   trailingEndPst: string;
 }> {
-  let snapshotExpr: string;
+  const PST_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+  // Snapshot time in PST
+  let snapshotPstDate: Date;
   if (overrideIso) {
-    // Treat override as PST timestamp
-    snapshotExpr = `${sqlString(overrideIso)}::TIMESTAMP`;
+    snapshotPstDate = new Date(overrideIso);
   } else {
-    // Compute snapshot time as "now in PST" by subtracting 8 hours from UTC now
-    snapshotExpr = `now() - INTERVAL 8 HOUR`;
+    const nowUtc = new Date();
+    snapshotPstDate = new Date(nowUtc.getTime() - PST_OFFSET_MS);
   }
 
-  const rows = await allRows<{
-    snapshot_pst: string;
-    today_pst: string;
-    trailing_start_pst: string;
-    trailing_end_pst: string;
-  }>(
-    conn,
-    `
-    WITH params AS (
-      SELECT
-        ${snapshotExpr} AS snapshot_pst,
-        date_trunc('day', ${snapshotExpr}) AS today_pst
-    ),
-    window AS (
-      SELECT
-        snapshot_pst,
-        today_pst,
-        date_trunc('day', today_pst - INTERVAL ${DEFAULT_TRAILING_DAYS} DAY) AS trailing_start_pst,
-        today_pst AS trailing_end_pst
-      FROM params
-    )
-    SELECT
-      snapshot_pst,
-      today_pst,
-      trailing_start_pst,
-      trailing_end_pst
-    FROM window
-  `
+  // Helper: YYYY-MM-DD for PST date
+  const toPstDateOnly = (d: Date): string => {
+    const pst = new Date(d.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+    const y = pst.getFullYear();
+    const m = String(pst.getMonth() + 1).padStart(2, '0');
+    const day = String(pst.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const todayPst = toPstDateOnly(snapshotPstDate);
+
+  const trailingStart = new Date(
+    snapshotPstDate.getTime() - DEFAULT_TRAILING_DAYS * 24 * 60 * 60 * 1000
   );
+  const trailingStartPst = toPstDateOnly(trailingStart);
 
-  if (!rows.length) {
-    throw new Error('Failed to compute snapshot timing');
-  }
+  // Use ISO for the actual timestamp we hand to DuckDB
+  const snapshotPstIso = snapshotPstDate.toISOString();
 
-  const row = rows[0] as any;
   return {
-    snapshotPst: row.snapshot_pst,
-    todayPst: row.today_pst,
-    trailingStartPst: row.trailing_start_pst,
-    trailingEndPst: row.trailing_end_pst,
+    snapshotPst: snapshotPstIso,
+    todayPst,
+    trailingStartPst,
+    trailingEndPst: todayPst,
   };
 }
 
@@ -172,7 +161,7 @@ async function runSnapshot(): Promise<void> {
         SELECT
           ${snapshotLiteral} AS snapshot_pst
       ),
-      window AS (
+      snap_window AS (
         SELECT
           snapshot_pst,
           date_trunc('day', snapshot_pst) - INTERVAL ${DEFAULT_TRAILING_DAYS} DAY AS start_day_pst,
@@ -181,7 +170,7 @@ async function runSnapshot(): Promise<void> {
       ),
       filtered AS (
         SELECT s.*
-        FROM stamped s, window w
+        FROM stamped s, snap_window w
         WHERE s.day_pst BETWEEN w.start_day_pst AND w.end_day_pst
           AND s.ts_pst <= w.snapshot_pst
       )
@@ -207,7 +196,7 @@ async function runSnapshot(): Promise<void> {
           WHEN SUM(f.sessions) > 0 THEN SUM(f.revenue) / SUM(f.sessions)
           ELSE 0
         END AS rpc
-      FROM filtered f, window w
+      FROM filtered f, snap_window w
       GROUP BY
         w.snapshot_pst,
         f.day_pst,
