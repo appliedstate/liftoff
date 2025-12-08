@@ -386,13 +386,18 @@ async function main(): Promise<void> {
       ).sort();
 
       // Get the snapshot day (most recent day) and its maximum hour
+      // This represents the snapshot hour - we'll compare all days up to this hour
       const snapshotDay = uniqueDays[uniqueDays.length - 1]; // Most recent day
       const snapshotDayRows = currentSnapshotRows.filter(
         (r) => String(r.day_pst) === snapshotDay
       );
-      const maxHourPst = Math.max(
-        ...snapshotDayRows.map((r) => Number(r.hour_pst))
-      );
+      const snapshotDayHours = snapshotDayRows.map((r) => Number(r.hour_pst));
+      const maxHourPst = snapshotDayHours.length > 0 
+        ? Math.max(...snapshotDayHours)
+        : 23; // Fallback to 23 if no rows found
+      
+      // Debug: log the snapshot hour for verification
+      console.log(`DEBUG: Snapshot day=${snapshotDay}, maxHourPst=${maxHourPst}, hours present: [${snapshotDayHours.sort((a,b)=>a-b).join(',')}]`);
 
       // For each day, compute cumulative totals up to the snapshot hour
       for (const day of uniqueDays) {
@@ -401,12 +406,16 @@ async function main(): Promise<void> {
           .sort((a, b) => Number(a.hour_pst) - Number(b.hour_pst));
 
         // Only include hours up to the snapshot hour (in PST)
-        const filteredDayRows = dayRows.filter((r) => Number(r.hour_pst) <= maxHourPst);
+        const filteredDayRows = dayRows.filter((r) => {
+          const hour = Number(r.hour_pst);
+          return hour <= maxHourPst;
+        });
 
         // Aggregate by hour first (in case there are multiple rows per hour due to dimensions)
         const hourlyAgg: Record<number, { sessions: number; revenue: number }> = {};
         for (const r of filteredDayRows) {
           const hour = Number(r.hour_pst);
+          if (hour > maxHourPst) continue; // Extra safety check
           if (!hourlyAgg[hour]) {
             hourlyAgg[hour] = { sessions: 0, revenue: 0 };
           }
@@ -414,10 +423,14 @@ async function main(): Promise<void> {
           hourlyAgg[hour].revenue += Number(r.revenue || 0);
         }
 
-        // Sum up the aggregated hourly totals
+        // Sum up the aggregated hourly totals (only up to maxHourPst)
         let cumSessions = 0;
         let cumRevenue = 0;
-        for (const hour of Object.keys(hourlyAgg).map(Number).sort((a, b) => a - b)) {
+        const sortedHours = Object.keys(hourlyAgg)
+          .map(Number)
+          .filter((h) => h <= maxHourPst)
+          .sort((a, b) => a - b);
+        for (const hour of sortedHours) {
           cumSessions += hourlyAgg[hour].sessions;
           cumRevenue += hourlyAgg[hour].revenue;
         }
