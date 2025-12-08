@@ -340,53 +340,68 @@ async function main(): Promise<void> {
     }
 
     // Add day-to-day comparison summary
-    // For each snapshot, find the "snapshot day" (the day the snapshot was taken)
-    // and compute cumulative totals for that day up to the snapshot hour
+    // For each snapshot, compute cumulative totals for each day up to the snapshot hour
     console.log(`\n## Day-to-Day Cumulative Comparison (at snapshot time)`);
-    const snapshotDayTotals: Array<{ day: string; snapshot: string; sessions: number; revenue: number; rpc: number }> = [];
+    const dayTotals: Array<{ day: string; sessions: number; revenue: number; rpc: number }> = [];
     
-    for (const snapshot of snapshots) {
-      const snapshotRows = bySnapshot[snapshot];
-      if (!snapshotRows || snapshotRows.length === 0) continue;
+    // Get the current snapshot (most recent)
+    const currentSnapshotKey = snapshots[0];
+    const currentSnapshotRows = bySnapshot[currentSnapshotKey];
+    
+    if (currentSnapshotRows && currentSnapshotRows.length > 0) {
+      // Get unique days in this snapshot
+      const uniqueDays = Array.from(
+        new Set(currentSnapshotRows.map((r) => String(r.day_pst)))
+      ).sort();
 
-      // Find the snapshot day (the latest day_pst in this snapshot, which should be the day the snapshot was taken)
-      const snapshotDay = snapshotRows
-        .map((r) => String(r.day_pst))
-        .sort()
-        .reverse()[0];
+      // Get the snapshot day (most recent day) and its maximum hour
+      const snapshotDay = uniqueDays[uniqueDays.length - 1]; // Most recent day
+      const snapshotDayRows = currentSnapshotRows.filter(
+        (r) => String(r.day_pst) === snapshotDay
+      );
+      const maxHourPst = Math.max(
+        ...snapshotDayRows.map((r) => Number(r.hour_pst))
+      );
 
-      // Get all rows for this snapshot day, sorted by hour
-      const dayRows = snapshotRows
-        .filter((r) => String(r.day_pst) === snapshotDay)
-        .sort((a, b) => Number(a.hour_pst) - Number(b.hour_pst));
+      // For each day, compute cumulative totals up to the snapshot hour
+      for (const day of uniqueDays) {
+        const dayRows = currentSnapshotRows
+          .filter((r) => String(r.day_pst) === day)
+          .sort((a, b) => Number(a.hour_pst) - Number(b.hour_pst));
 
-      // Compute cumulative totals up to the snapshot hour
-      let cumSessions = 0;
-      let cumRevenue = 0;
-      for (const r of dayRows) {
-        cumSessions += Number(r.sessions || 0);
-        cumRevenue += Number(r.revenue || 0);
+        // Only include hours up to the snapshot hour (in PST)
+        const filteredDayRows = dayRows.filter((r) => Number(r.hour_pst) <= maxHourPst);
+
+        let cumSessions = 0;
+        let cumRevenue = 0;
+        for (const r of filteredDayRows) {
+          cumSessions += Number(r.sessions || 0);
+          cumRevenue += Number(r.revenue || 0);
+        }
+
+        const rpc = cumSessions > 0 ? cumRevenue / cumSessions : 0;
+        dayTotals.push({
+          day,
+          sessions: cumSessions,
+          revenue: cumRevenue,
+          rpc,
+        });
       }
-
-      const rpc = cumSessions > 0 ? cumRevenue / cumSessions : 0;
-      snapshotDayTotals.push({
-        day: snapshotDay,
-        snapshot,
-        sessions: cumSessions,
-        revenue: cumRevenue,
-        rpc,
-      });
     }
 
     // Sort by day descending (most recent first)
-    snapshotDayTotals.sort((a, b) => b.day.localeCompare(a.day));
+    dayTotals.sort((a, b) => b.day.localeCompare(a.day));
 
-    for (const totals of snapshotDayTotals) {
-      console.log(
-        `- ${totals.day} (snapshot: ${totals.snapshot}) | cum_sessions=${totals.sessions.toFixed(
-          0
-        )} | cum_revenue=$${totals.revenue.toFixed(2)} | cum_rpc=$${totals.rpc.toFixed(4)}`
-      );
+    if (dayTotals.length > 0) {
+      for (const totals of dayTotals) {
+        console.log(
+          `- ${totals.day} | cum_sessions=${totals.sessions.toFixed(
+            0
+          )} | cum_revenue=$${totals.revenue.toFixed(2)} | cum_rpc=$${totals.rpc.toFixed(4)}`
+        );
+      }
+    } else {
+      console.log('(No day-to-day comparison data available)');
     }
 
     console.log('\n');
