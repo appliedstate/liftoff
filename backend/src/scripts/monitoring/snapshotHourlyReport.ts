@@ -277,11 +277,14 @@ async function main(): Promise<void> {
     }
 
     // Group rows by snapshot and then by hour for display
+    // Normalize snapshot_pst to ISO strings for consistent key matching
     const bySnapshot: Record<string, any[]> = {};
     for (const row of rows) {
-      const key = row.snapshot_pst;
-      if (!bySnapshot[key]) bySnapshot[key] = [];
-      bySnapshot[key].push(row);
+      // Convert snapshot_pst to ISO string if it's a Date object
+      const snapPst = row.snapshot_pst;
+      const snapKey = snapPst instanceof Date ? snapPst.toISOString() : String(snapPst);
+      if (!bySnapshot[snapKey]) bySnapshot[snapKey] = [];
+      bySnapshot[snapKey].push(row);
     }
 
     // Display by snapshot, showing cumulative totals per day
@@ -345,8 +348,36 @@ async function main(): Promise<void> {
     const dayTotals: Array<{ day: string; sessions: number; revenue: number; rpc: number }> = [];
     
     // Get the current snapshot (most recent)
-    const currentSnapshotKey = snapshots[0];
-    const currentSnapshotRows = bySnapshot[currentSnapshotKey];
+    // Try to find matching snapshot rows by comparing ISO strings
+    let currentSnapshotRows: any[] | undefined = undefined;
+    for (const snapshotKey of snapshots) {
+      // Try exact match first
+      if (bySnapshot[snapshotKey]) {
+        currentSnapshotRows = bySnapshot[snapshotKey];
+        break;
+      }
+      // Try to find by comparing ISO strings (handle Date object conversion)
+      for (const key in bySnapshot) {
+        const keyDate = new Date(key);
+        const snapshotDate = new Date(snapshotKey);
+        if (!isNaN(keyDate.getTime()) && !isNaN(snapshotDate.getTime())) {
+          // Compare timestamps (within 1 second tolerance)
+          if (Math.abs(keyDate.getTime() - snapshotDate.getTime()) < 1000) {
+            currentSnapshotRows = bySnapshot[key];
+            break;
+          }
+        }
+      }
+      if (currentSnapshotRows) break;
+    }
+    
+    // Fallback: use the first snapshot in bySnapshot if no match found
+    if (!currentSnapshotRows || currentSnapshotRows.length === 0) {
+      const firstKey = Object.keys(bySnapshot)[0];
+      if (firstKey) {
+        currentSnapshotRows = bySnapshot[firstKey];
+      }
+    }
     
     if (currentSnapshotRows && currentSnapshotRows.length > 0) {
       // Get unique days in this snapshot
