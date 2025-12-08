@@ -432,8 +432,7 @@ async function main(): Promise<void> {
         ? Math.max(...snapshotDayHours)
         : 23; // Fallback to 23 if no rows found
       
-      // Debug: log the snapshot hour for verification
-      console.log(`DEBUG: Snapshot timestamp=${snapshots[0]}, snapshotDayStr=${snapshotDayStr}, snapshotDay=${snapshotDay}, maxHourPst=${maxHourPst}, hours present: [${snapshotDayHours.sort((a,b)=>a-b).join(',')}]`);
+      // Note: snapshotDay is the day the snapshot was taken, maxHourPst is the hour (0-23)
 
       // For each day, compute cumulative totals up to the snapshot hour
       for (const day of uniqueDays) {
