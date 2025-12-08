@@ -71,7 +71,10 @@ async function getCurrentSnapshot(conn: any, asOfIso?: string): Promise<string |
   );
 
   const snap = rows[0]?.current_snapshot;
-  return snap || null;
+  // Convert DuckDB timestamp to ISO string if it's a Date object
+  if (!snap) return null;
+  const snapDate = new Date(snap);
+  return snapDate.toISOString();
 }
 
 async function getMatchingSnapshots(
@@ -99,7 +102,7 @@ async function getMatchingSnapshots(
     ),
     days AS (
       SELECT
-        today_pst - d * INTERVAL 1 DAY AS day_pst,
+        today_pst - d.generate_series * INTERVAL 1 DAY AS day_pst,
         snap_hour,
         snap_minute
       FROM current_parts,
@@ -145,7 +148,12 @@ async function getMatchingSnapshots(
   `
   );
 
-  return rows.map((r) => r.snapshot_pst);
+  return rows.map((r) => {
+    const snap = r.snapshot_pst;
+    if (!snap) return null;
+    const snapDate = new Date(snap);
+    return snapDate.toISOString();
+  }).filter((s): s is string => s !== null);
 }
 
 async function main(): Promise<void> {
