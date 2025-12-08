@@ -6,10 +6,28 @@
  * Compares today vs prior N days at the same snapshot time, by hour,
  * using pre-materialized hourly_snapshot_metrics.
  *
- * Initial version:
- * - Hard-codes rsoc_site = 'wesoughtit.com'
- * - media_source IN ('mediago', 'facebook')
- * - Compares today vs prior 3 days
+ * Usage:
+ *   npm run monitor:snapshot-report
+ *   npm run monitor:snapshot-report -- --site=wesoughtit.com --days=3
+ *   npm run monitor:snapshot-report -- --campaign-id=123456789
+ *   npm run monitor:snapshot-report -- --adset-id=987654321
+ *   npm run monitor:snapshot-report -- --owner=John --category=beauty
+ *   npm run monitor:snapshot-report -- --media-source=mediago,facebook
+ *   npm run monitor:snapshot-report -- --as-of=2025-12-08T12:00:00Z
+ *
+ * Filters:
+ *   --site=<site>              Filter by rsoc_site (default: wesoughtit.com)
+ *   --days=<n>                 Number of days to compare (default: 3)
+ *   --media-source=<sources>   Comma-separated media sources (default: mediago,facebook)
+ *   --campaign-id=<id>         Filter by campaign_id
+ *   --campaign-name=<name>     Filter by campaign_name
+ *   --adset-id=<id>            Filter by adset_id
+ *   --adset-name=<name>        Filter by adset_name
+ *   --owner=<owner>            Filter by owner
+ *   --category=<category>      Filter by category
+ *   --lane=<lane>              Filter by lane
+ *   --level=<level>            Filter by level (campaign/adset)
+ *   --as-of=<iso-timestamp>     Use snapshot as of specific time (default: latest)
  */
 
 import 'dotenv/config';
@@ -24,6 +42,19 @@ import { initMonitoringSchema } from '../../lib/monitoringDb';
 const DEFAULT_SITE = 'wesoughtit.com';
 const DEFAULT_DAYS = 3;
 const DEFAULT_MEDIA_SOURCES = ['mediago', 'facebook'];
+
+function getFlag(name: string): string | undefined {
+  const key = `--${name}=`;
+  const arg = process.argv.find((a) => a.startsWith(key));
+  if (!arg) return undefined;
+  return arg.slice(key.length);
+}
+
+function getFlagList(name: string): string[] | undefined {
+  const value = getFlag(name);
+  if (!value) return undefined;
+  return value.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+}
 
 async function getCurrentSnapshot(conn: any, asOfIso?: string): Promise<string | null> {
   const asOfExpr = asOfIso
@@ -68,7 +99,7 @@ async function getMatchingSnapshots(
     ),
     days AS (
       SELECT
-        today_pst - INTERVAL d DAY AS day_pst,
+        today_pst - d * INTERVAL 1 DAY AS day_pst,
         snap_hour,
         snap_minute
       FROM current_parts,
@@ -123,12 +154,20 @@ async function main(): Promise<void> {
   try {
     await initMonitoringSchema(conn);
 
-    const asOfFlag = process.argv.find((arg) => arg.startsWith('--as-of='));
-    const asOfIso = asOfFlag ? asOfFlag.split('=')[1] : undefined;
-
-    const site = DEFAULT_SITE;
-    const days = DEFAULT_DAYS;
-    const mediaSources = DEFAULT_MEDIA_SOURCES;
+    const asOfIso = getFlag('as-of');
+    const site = getFlag('site') || DEFAULT_SITE;
+    const days = parseInt(getFlag('days') || String(DEFAULT_DAYS), 10);
+    const mediaSources = getFlagList('media-source') || DEFAULT_MEDIA_SOURCES;
+    
+    // Optional filters for drilling down
+    const campaignId = getFlag('campaign-id');
+    const campaignName = getFlag('campaign-name');
+    const adsetId = getFlag('adset-id');
+    const adsetName = getFlag('adset-name');
+    const owner = getFlag('owner');
+    const category = getFlag('category');
+    const lane = getFlag('lane');
+    const level = getFlag('level');
 
     const currentSnapshot = await getCurrentSnapshot(conn, asOfIso);
     if (!currentSnapshot) {
@@ -146,6 +185,14 @@ async function main(): Promise<void> {
     console.log(`Site: ${site}`);
     console.log(`Media Sources: ${mediaSources.join(', ')}`);
     console.log(`Days (including today): ${days}`);
+    if (campaignId) console.log(`Campaign ID: ${campaignId}`);
+    if (campaignName) console.log(`Campaign Name: ${campaignName}`);
+    if (adsetId) console.log(`Ad Set ID: ${adsetId}`);
+    if (adsetName) console.log(`Ad Set Name: ${adsetName}`);
+    if (owner) console.log(`Owner: ${owner}`);
+    if (category) console.log(`Category: ${category}`);
+    if (lane) console.log(`Lane: ${lane}`);
+    if (level) console.log(`Level: ${level}`);
     console.log(`Current snapshot_pst: ${currentSnapshot}`);
     console.log(`Comparing snapshots:`);
     snapshots.forEach((s) => console.log(`  - ${s}`));
@@ -155,6 +202,40 @@ async function main(): Promise<void> {
     const mediaSourceFilter = mediaSources
       .map((m) => sqlString(m))
       .join(', ');
+
+    // Build WHERE clause with optional filters
+    const whereConditions: string[] = [
+      `snapshot_pst IN (${snapshotList})`,
+      `rsoc_site = ${sqlString(site)}`,
+      `media_source IN (${mediaSourceFilter})`,
+    ];
+
+    if (campaignId) {
+      whereConditions.push(`campaign_id = ${sqlString(campaignId)}`);
+    }
+    if (campaignName) {
+      whereConditions.push(`campaign_name = ${sqlString(campaignName)}`);
+    }
+    if (adsetId) {
+      whereConditions.push(`adset_id = ${sqlString(adsetId)}`);
+    }
+    if (adsetName) {
+      whereConditions.push(`adset_name = ${sqlString(adsetName)}`);
+    }
+    if (owner) {
+      whereConditions.push(`owner = ${sqlString(owner)}`);
+    }
+    if (category) {
+      whereConditions.push(`category = ${sqlString(category)}`);
+    }
+    if (lane) {
+      whereConditions.push(`lane = ${sqlString(lane)}`);
+    }
+    if (level) {
+      whereConditions.push(`level = ${sqlString(level)}`);
+    }
+
+    const whereClause = whereConditions.join(' AND ');
 
     const rows = await allRows<any>(
       conn,
@@ -167,14 +248,18 @@ async function main(): Promise<void> {
         rsoc_site,
         owner,
         category,
+        lane,
+        level,
+        campaign_id,
+        campaign_name,
+        adset_id,
+        adset_name,
         sessions,
         revenue,
         rpc
       FROM hourly_snapshot_metrics
-      WHERE snapshot_pst IN (${snapshotList})
-        AND rsoc_site = ${sqlString(site)}
-        AND media_source IN (${mediaSourceFilter})
-      ORDER BY snapshot_pst, day_pst, hour_pst, media_source, category, owner
+      WHERE ${whereClause}
+      ORDER BY snapshot_pst, day_pst, hour_pst, media_source, category, owner, campaign_id, adset_id
     `
     );
 
@@ -191,6 +276,7 @@ async function main(): Promise<void> {
       bySnapshot[key].push(row);
     }
 
+    // Display by snapshot, showing cumulative totals per day
     for (const [snapshot, snapshotRows] of Object.entries(bySnapshot)) {
       console.log(`\n## Snapshot: ${snapshot}`);
 
@@ -204,8 +290,14 @@ async function main(): Promise<void> {
 
       const sortedKeys = Object.keys(byDayHour).sort();
 
+      // Track cumulative totals per day
+      const cumulativeByDay: Record<string, { sessions: number; revenue: number }> = {};
+
       for (const key of sortedKeys) {
         const hourRows = byDayHour[key];
+        const dayPst = hourRows[0].day_pst;
+        const hourPst = hourRows[0].hour_pst;
+
         const totalSessions = hourRows.reduce(
           (sum, r) => sum + Number(r.sessions || 0),
           0
@@ -217,12 +309,76 @@ async function main(): Promise<void> {
         const rpc =
           totalSessions > 0 ? totalRevenue / totalSessions : 0;
 
+        // Update cumulative totals
+        if (!cumulativeByDay[dayPst]) {
+          cumulativeByDay[dayPst] = { sessions: 0, revenue: 0 };
+        }
+        cumulativeByDay[dayPst].sessions += totalSessions;
+        cumulativeByDay[dayPst].revenue += totalRevenue;
+
+        const cumRpc =
+          cumulativeByDay[dayPst].sessions > 0
+            ? cumulativeByDay[dayPst].revenue / cumulativeByDay[dayPst].sessions
+            : 0;
+
         console.log(
           `- ${key} | sessions=${totalSessions.toFixed(
             0
-          )} | revenue=$${totalRevenue.toFixed(2)} | rpc=$${rpc.toFixed(4)}`
+          )} | revenue=$${totalRevenue.toFixed(2)} | rpc=$${rpc.toFixed(4)} | cum_sessions=${cumulativeByDay[dayPst].sessions.toFixed(
+            0
+          )} | cum_revenue=$${cumulativeByDay[dayPst].revenue.toFixed(2)} | cum_rpc=$${cumRpc.toFixed(4)}`
         );
       }
+    }
+
+    // Add day-to-day comparison summary
+    // For each snapshot, find the "snapshot day" (the day the snapshot was taken)
+    // and compute cumulative totals for that day up to the snapshot hour
+    console.log(`\n## Day-to-Day Cumulative Comparison (at snapshot time)`);
+    const snapshotDayTotals: Array<{ day: string; snapshot: string; sessions: number; revenue: number; rpc: number }> = [];
+    
+    for (const snapshot of snapshots) {
+      const snapshotRows = bySnapshot[snapshot];
+      if (!snapshotRows || snapshotRows.length === 0) continue;
+
+      // Find the snapshot day (the latest day_pst in this snapshot, which should be the day the snapshot was taken)
+      const snapshotDay = snapshotRows
+        .map((r) => String(r.day_pst))
+        .sort()
+        .reverse()[0];
+
+      // Get all rows for this snapshot day, sorted by hour
+      const dayRows = snapshotRows
+        .filter((r) => String(r.day_pst) === snapshotDay)
+        .sort((a, b) => Number(a.hour_pst) - Number(b.hour_pst));
+
+      // Compute cumulative totals up to the snapshot hour
+      let cumSessions = 0;
+      let cumRevenue = 0;
+      for (const r of dayRows) {
+        cumSessions += Number(r.sessions || 0);
+        cumRevenue += Number(r.revenue || 0);
+      }
+
+      const rpc = cumSessions > 0 ? cumRevenue / cumSessions : 0;
+      snapshotDayTotals.push({
+        day: snapshotDay,
+        snapshot,
+        sessions: cumSessions,
+        revenue: cumRevenue,
+        rpc,
+      });
+    }
+
+    // Sort by day descending (most recent first)
+    snapshotDayTotals.sort((a, b) => b.day.localeCompare(a.day));
+
+    for (const totals of snapshotDayTotals) {
+      console.log(
+        `- ${totals.day} (snapshot: ${totals.snapshot}) | cum_sessions=${totals.sessions.toFixed(
+          0
+        )} | cum_revenue=$${totals.revenue.toFixed(2)} | cum_rpc=$${totals.rpc.toFixed(4)}`
+      );
     }
 
     console.log('\n');
