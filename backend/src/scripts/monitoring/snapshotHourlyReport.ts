@@ -383,11 +383,47 @@ async function main(): Promise<void> {
       // Get unique days in this snapshot
       const uniqueDays = Array.from(
         new Set(currentSnapshotRows.map((r) => String(r.day_pst)))
-      ).sort();
+      );
 
-      // Get the snapshot day (most recent day) and its maximum hour
-      // This represents the snapshot hour - we'll compare all days up to this hour
-      const snapshotDay = uniqueDays[uniqueDays.length - 1]; // Most recent day
+      // Extract the snapshot day from the snapshot timestamp (in PST)
+      // The snapshot timestamp is UTC, so convert to PST to get the correct day
+      const snapshotTimestamp = new Date(snapshots[0]); // Use the first (most recent) snapshot
+      const snapshotPstDate = new Date(snapshotTimestamp.getTime() - 8 * 60 * 60 * 1000); // UTC to PST
+      const snapshotDayStr = snapshotPstDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+      
+      // Find the snapshot day in uniqueDays by matching date strings
+      // day_pst might be a Date object or a string, so we need to normalize both
+      let snapshotDay: string | null = null;
+      for (const day of uniqueDays) {
+        // Try to parse day as a Date and compare
+        const dayDate = new Date(day);
+        if (!isNaN(dayDate.getTime())) {
+          const dayStr = dayDate.toISOString().split('T')[0];
+          if (dayStr === snapshotDayStr) {
+            snapshotDay = day;
+            break;
+          }
+        }
+        // Also try direct string comparison if day is already in YYYY-MM-DD format
+        if (day === snapshotDayStr || day.startsWith(snapshotDayStr)) {
+          snapshotDay = day;
+          break;
+        }
+      }
+      
+      // Fallback: if we can't find the snapshot day, use the chronologically most recent day
+      if (!snapshotDay) {
+        const sortedDays = uniqueDays
+          .map((d) => ({ str: d, date: new Date(d) }))
+          .filter((d) => !isNaN(d.date.getTime()))
+          .sort((a, b) => b.date.getTime() - a.date.getTime());
+        if (sortedDays.length > 0) {
+          snapshotDay = sortedDays[0].str;
+        } else {
+          snapshotDay = uniqueDays[0]; // Last resort fallback
+        }
+      }
+      
       const snapshotDayRows = currentSnapshotRows.filter(
         (r) => String(r.day_pst) === snapshotDay
       );
@@ -397,7 +433,7 @@ async function main(): Promise<void> {
         : 23; // Fallback to 23 if no rows found
       
       // Debug: log the snapshot hour for verification
-      console.log(`DEBUG: Snapshot day=${snapshotDay}, maxHourPst=${maxHourPst}, hours present: [${snapshotDayHours.sort((a,b)=>a-b).join(',')}]`);
+      console.log(`DEBUG: Snapshot timestamp=${snapshots[0]}, snapshotDayStr=${snapshotDayStr}, snapshotDay=${snapshotDay}, maxHourPst=${maxHourPst}, hours present: [${snapshotDayHours.sort((a,b)=>a-b).join(',')}]`);
 
       // For each day, compute cumulative totals up to the snapshot hour
       for (const day of uniqueDays) {
@@ -445,8 +481,16 @@ async function main(): Promise<void> {
       }
     }
 
-    // Sort by day descending (most recent first)
-    dayTotals.sort((a, b) => b.day.localeCompare(a.day));
+    // Sort by day descending (most recent first) - parse dates properly
+    dayTotals.sort((a, b) => {
+      const dateA = new Date(a.day);
+      const dateB = new Date(b.day);
+      if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
+        // Fallback to string comparison if dates can't be parsed
+        return b.day.localeCompare(a.day);
+      }
+      return dateB.getTime() - dateA.getTime();
+    });
 
     if (dayTotals.length > 0) {
       for (const totals of dayTotals) {
