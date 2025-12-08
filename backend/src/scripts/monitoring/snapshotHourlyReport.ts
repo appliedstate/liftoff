@@ -57,6 +57,14 @@ function getFlagList(name: string): string[] | undefined {
 }
 
 async function getCurrentSnapshot(conn: any, asOfIso?: string): Promise<string | null> {
+  // First check if table has any rows
+  const countRows = await allRows<{ count: number }>(
+    conn,
+    `SELECT COUNT(*)::INTEGER AS count FROM hourly_snapshot_metrics`
+  );
+  const count = countRows[0]?.count || 0;
+  console.error(`DEBUG getCurrentSnapshot: table has ${count} rows`);
+
   // If asOfIso is provided, use it; otherwise get the latest snapshot (more lenient)
   let query: string;
   if (asOfIso) {
@@ -75,11 +83,19 @@ async function getCurrentSnapshot(conn: any, asOfIso?: string): Promise<string |
 
   const rows = await allRows<{ current_snapshot: string }>(conn, query);
 
+  // Debug: log what we got
+  console.error(`DEBUG getCurrentSnapshot: rows.length=${rows.length}, rows=${JSON.stringify(rows)}`);
+
   const snap = rows[0]?.current_snapshot;
   // Convert DuckDB timestamp to ISO string if it's a Date object
-  if (!snap) return null;
+  if (!snap) {
+    console.error(`DEBUG getCurrentSnapshot: snap is null/undefined`);
+    return null;
+  }
   const snapDate = new Date(snap);
-  return snapDate.toISOString();
+  const iso = snapDate.toISOString();
+  console.error(`DEBUG getCurrentSnapshot: returning ${iso}`);
+  return iso;
 }
 
 async function getMatchingSnapshots(
