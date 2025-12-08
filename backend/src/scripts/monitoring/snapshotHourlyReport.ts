@@ -57,18 +57,23 @@ function getFlagList(name: string): string[] | undefined {
 }
 
 async function getCurrentSnapshot(conn: any, asOfIso?: string): Promise<string | null> {
-  const asOfExpr = asOfIso
-    ? `${sqlString(asOfIso)}::TIMESTAMP`
-    : 'now() - INTERVAL 8 HOUR'; // treat as PST "now"
+  // If asOfIso is provided, use it; otherwise get the latest snapshot (more lenient)
+  let query: string;
+  if (asOfIso) {
+    query = `
+      SELECT max(snapshot_pst) AS current_snapshot
+      FROM hourly_snapshot_metrics
+      WHERE snapshot_pst <= ${sqlString(asOfIso)}::TIMESTAMP
+    `;
+  } else {
+    // Just get the latest snapshot without time filtering
+    query = `
+      SELECT max(snapshot_pst) AS current_snapshot
+      FROM hourly_snapshot_metrics
+    `;
+  }
 
-  const rows = await allRows<{ current_snapshot: string }>(
-    conn,
-    `
-    SELECT max(snapshot_pst) AS current_snapshot
-    FROM hourly_snapshot_metrics
-    WHERE snapshot_pst <= ${asOfExpr}
-  `
-  );
+  const rows = await allRows<{ current_snapshot: string }>(conn, query);
 
   const snap = rows[0]?.current_snapshot;
   // Convert DuckDB timestamp to ISO string if it's a Date object
