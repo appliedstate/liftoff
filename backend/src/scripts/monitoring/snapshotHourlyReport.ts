@@ -403,11 +403,23 @@ async function main(): Promise<void> {
         // Only include hours up to the snapshot hour (in PST)
         const filteredDayRows = dayRows.filter((r) => Number(r.hour_pst) <= maxHourPst);
 
+        // Aggregate by hour first (in case there are multiple rows per hour due to dimensions)
+        const hourlyAgg: Record<number, { sessions: number; revenue: number }> = {};
+        for (const r of filteredDayRows) {
+          const hour = Number(r.hour_pst);
+          if (!hourlyAgg[hour]) {
+            hourlyAgg[hour] = { sessions: 0, revenue: 0 };
+          }
+          hourlyAgg[hour].sessions += Number(r.sessions || 0);
+          hourlyAgg[hour].revenue += Number(r.revenue || 0);
+        }
+
+        // Sum up the aggregated hourly totals
         let cumSessions = 0;
         let cumRevenue = 0;
-        for (const r of filteredDayRows) {
-          cumSessions += Number(r.sessions || 0);
-          cumRevenue += Number(r.revenue || 0);
+        for (const hour of Object.keys(hourlyAgg).map(Number).sort((a, b) => a - b)) {
+          cumSessions += hourlyAgg[hour].sessions;
+          cumRevenue += hourlyAgg[hour].revenue;
         }
 
         const rpc = cumSessions > 0 ? cumRevenue / cumSessions : 0;
