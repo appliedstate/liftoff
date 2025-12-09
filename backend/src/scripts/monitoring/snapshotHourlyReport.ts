@@ -266,6 +266,33 @@ async function main(): Promise<void> {
 
     const whereClause = whereConditions.join(' AND ');
 
+    // Debug: check if campaign exists at all
+    if (campaignId) {
+      const campaignCheck = await allRows<{ count: number }>(
+        conn,
+        `SELECT COUNT(*)::INTEGER AS count FROM hourly_snapshot_metrics WHERE campaign_id = ${sqlString(campaignId)}`
+      );
+      console.error(`DEBUG: Rows with campaign_id='${campaignId}': ${campaignCheck[0]?.count || 0}`);
+    }
+
+    // Debug: check with site filter
+    const siteCheck = await allRows<{ count: number }>(
+      conn,
+      `SELECT COUNT(*)::INTEGER AS count FROM hourly_snapshot_metrics WHERE rsoc_site = ${sqlString(site)}`
+    );
+    console.error(`DEBUG: Rows with rsoc_site='${site}': ${siteCheck[0]?.count || 0}`);
+
+    // Debug: check with owner filter
+    if (owner) {
+      const ownerCheck = await allRows<{ count: number }>(
+        conn,
+        `SELECT COUNT(*)::INTEGER AS count FROM hourly_snapshot_metrics WHERE LOWER(owner) = LOWER(${sqlString(owner)})`
+      );
+      console.error(`DEBUG: Rows with owner='${owner}': ${ownerCheck[0]?.count || 0}`);
+    }
+
+    console.error(`DEBUG: WHERE clause: ${whereClause}`);
+
     const rows = await allRows<any>(
       conn,
       `
@@ -291,6 +318,8 @@ async function main(): Promise<void> {
       ORDER BY snapshot_pst, day_pst, hour_pst, media_source, category, owner, campaign_id, adset_id
     `
     );
+
+    console.error(`DEBUG: Query returned ${rows.length} rows`);
 
     if (!rows.length) {
       console.log('No snapshot metrics found for the selected criteria.');
