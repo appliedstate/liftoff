@@ -91,15 +91,16 @@ async function main(): Promise<void> {
     const queryDate = date.toISOString().slice(0, 10);
 
     try {
+      console.log(`Fetching session data for ${queryDate}...`);
       // Fetch session-level data (includes keywords)
       const sessions = await api.fetchS1SessionRevenue(queryDate, false); // Include zero-revenue sessions
       
-      if (d === 0) {
-        console.log(`Fetched ${sessions.length} sessions for ${queryDate}`);
-        if (sessions.length > 0) {
-          console.log(`Sample session fields: ${Object.keys(sessions[0]).join(', ')}`);
-        }
+      console.log(`  ✓ Fetched ${sessions.length} sessions for ${queryDate}`);
+      if (sessions.length > 0) {
+        console.log(`  Sample session fields: ${Object.keys(sessions[0]).join(', ')}`);
       }
+      
+      let matchingSessions = 0;
 
       // Filter by campaign and aggregate by keyword
       for (const session of sessions) {
@@ -112,6 +113,8 @@ async function main(): Promise<void> {
           session.campaignId_strategis;
         
         if (!rowCampaignId || rowCampaignId !== campaignId) continue;
+        
+        matchingSessions++;
         
         // Extract keyword (try various field names)
         const keyword = 
@@ -140,6 +143,8 @@ async function main(): Promise<void> {
         stats.sessions += 1; // Each row is one session
         stats.revenue += revenue;
       }
+      
+      console.log(`  ✓ Processed ${matchingSessions} sessions matching campaign ${campaignId}, found ${keywordStats.size} unique keywords`);
     } catch (error: any) {
       console.error(`Error fetching session data from S1 API for ${queryDate}:`, error.message);
       if (error.response) {
