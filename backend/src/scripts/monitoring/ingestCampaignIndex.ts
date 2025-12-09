@@ -584,8 +584,18 @@ class CampaignAggregator {
   toRecords(snapshotSource: StrategistSource): CampaignRecordInput[] {
     const rows: CampaignRecordInput[] = [];
     for (const agg of this.aggregates.values()) {
+      // CRITICAL: Always use Strategis campaign ID as the primary key
+      // Only fall back to campaignId if Strategis ID is truly not available
       const campaignId = agg.strategisCampaignId || agg.campaignId;
-      if (!campaignId) continue;
+      if (!campaignId) {
+        console.warn(`[ingestCampaignIndex] Skipping aggregate with no campaign ID: ${JSON.stringify({ key: agg.key, campaignName: agg.campaignName })}`);
+        continue;
+      }
+      
+      // Warn if we're using a non-Strategis campaign ID (likely a Facebook campaign ID)
+      if (!agg.strategisCampaignId && campaignId && String(campaignId).length > 10 && !campaignId.includes('sipuli')) {
+        console.warn(`[ingestCampaignIndex] Warning: Using Facebook campaign ID ${campaignId} as primary key because no Strategis campaign ID found. Campaign may be missing from S1 data.`);
+      }
       const spend = asNullable(agg.spendUsd);
       const revenue = asNullable(agg.revenueUsd);
       const roas = spend && revenue ? revenue / spend : null;
@@ -631,12 +641,59 @@ class CampaignAggregator {
       'strategisCampaignID',
     ]);
     const campaignId = pickId(row, ['campaign_id', 'campaignId', 'campaign']);
+    
+    // CRITICAL: Always prioritize Strategis campaign ID as the primary key
+    // If we have a Strategis ID, use it as the key
+    // If we only have a Facebook campaign ID, try to find an existing aggregate that matches
     const key = strategisId || campaignId;
     if (!key) return null;
+    
     let agg = this.aggregates.get(key);
+    
+    // If no aggregate found and we only have a Facebook campaign ID (not Strategis ID),
+    // try to find an existing aggregate by Facebook campaign ID
+    if (!agg && !strategisId && campaignId) {
+      // Check if any existing aggregate has this Facebook campaign ID stored
+      for (const existingAgg of this.aggregates.values()) {
+        if (existingAgg.facebookCampaignId === campaignId && existingAgg.strategisCampaignId) {
+          // Found a match! Use the Strategis campaign ID as the key
+          agg = existingAgg;
+          // Update the key mapping if needed
+          if (agg.key !== existingAgg.strategisCampaignId) {
+            this.aggregates.delete(agg.key);
+            agg.key = existingAgg.strategisCampaignId;
+            this.aggregates.set(agg.key, agg);
+          }
+          break;
+        }
+      }
+      
+      // If still no match, try matching by campaign name
+      if (!agg) {
+        const campaignName = pick(row, ['campaign_name', 'name']);
+        if (campaignName) {
+          for (const existingAgg of this.aggregates.values()) {
+            if (existingAgg.campaignName === campaignName && existingAgg.strategisCampaignId && existingAgg.mediaSource === 'facebook') {
+              agg = existingAgg;
+              // Store the Facebook campaign ID in this aggregate
+              if (!agg.facebookCampaignId) {
+                agg.facebookCampaignId = campaignId;
+              }
+              break;
+            }
+          }
+        }
+      }
+    }
+    
+    // Create new aggregate only if we truly don't have a match
     if (!agg) {
+      // If we don't have a Strategis ID, this is a problem - we should always have one
+      if (!strategisId) {
+        console.warn(`[ingestCampaignIndex] Warning: No Strategis campaign ID found for campaign ${campaignId || 'unknown'} from ${dataset}. This campaign may not be in S1 data.`);
+      }
       agg = {
-        key,
+        key: strategisId || campaignId, // Use Strategis ID if available, otherwise fallback to campaign ID
         strategisCampaignId: strategisId ?? null,
         campaignId: campaignId ?? strategisId ?? key,
         spendUsd: 0,
@@ -646,11 +703,21 @@ class CampaignAggregator {
         conversions: 0,
         sourceMetrics: {},
       };
-      this.aggregates.set(key, agg);
+      this.aggregates.set(agg.key, agg);
     } else {
-      if (!agg.strategisCampaignId && strategisId) agg.strategisCampaignId = strategisId;
+      // Update existing aggregate
+      if (!agg.strategisCampaignId && strategisId) {
+        agg.strategisCampaignId = strategisId;
+        // If the key was a Facebook campaign ID, update it to use Strategis ID
+        if (agg.key !== strategisId) {
+          this.aggregates.delete(agg.key);
+          agg.key = strategisId;
+          this.aggregates.set(agg.key, agg);
+        }
+      }
       if (!agg.campaignId && campaignId) agg.campaignId = campaignId;
     }
+    
     if (!agg.sourceMetrics[dataset]) {
       agg.sourceMetrics[dataset] = { rows: 0 };
     }
