@@ -133,6 +133,35 @@ async function findStrategisCampaignId(conn: any, fbCampaignId: string, dateStr:
           console.log(`  ✓ Found Strategis campaign ID: ${strategisRows[0].campaign_id}`);
           return strategisRows[0].campaign_id;
         } else {
+          // Try searching by campaign name in S1 data sources
+          const campaignName = directRows[0]?.campaign_name;
+          if (campaignName) {
+            console.log(`  Searching S1 data sources by campaign name: "${campaignName}"...`);
+            const s1Rows = await allRows<any>(conn, `
+              SELECT DISTINCT campaign_id, campaign_name, facebook_campaign_id, date, snapshot_source
+              FROM campaign_index
+              WHERE campaign_name = ${sqlString(campaignName)}
+                AND snapshot_source IN ('s1_daily_v3', 's1_reconciled')
+                AND campaign_id IS NOT NULL
+                AND (
+                  campaign_id LIKE '%sipuli%' 
+                  OR LENGTH(campaign_id) < 15 
+                  OR NOT REGEXP_MATCHES(campaign_id, '^[0-9]+$')
+                )
+                AND date >= ${sqlString(startDate.toISOString().slice(0, 10))}
+                AND date <= ${sqlString(dateStr)}
+                AND media_source = 'facebook'
+              ORDER BY date DESC
+              LIMIT 10
+            `);
+            
+            if (s1Rows.length > 0) {
+              console.log(`  ✓ Found Strategis campaign ID via campaign name match: ${s1Rows[0].campaign_id}`);
+              console.log(`  Note: This match is by name, not Facebook ID. Verify it's the correct campaign.`);
+              return s1Rows[0].campaign_id;
+            }
+          }
+          
           console.log(`  ⚠ No Strategis campaign ID found. Campaign may not exist in S1 data yet.`);
           console.log(`  Using Facebook campaign ID as fallback: ${foundCampaignId}`);
           return foundCampaignId; // Fallback to Facebook ID
