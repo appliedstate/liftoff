@@ -1,10 +1,13 @@
 #!/usr/bin/env ts-node
 
 /**
- * Snapshot Hourly Report
+ * Snapshot Hourly Report (UTC)
  *
  * Compares today vs prior N days at the same snapshot time, by hour,
  * using pre-materialized hourly_snapshot_metrics.
+ * 
+ * Note: All times and dates are in UTC. Column names use "_pst" suffix for
+ * backward compatibility, but values are UTC.
  *
  * Usage:
  *   npm run monitor:snapshot-report
@@ -16,9 +19,9 @@
  *   npm run monitor:snapshot-report -- --as-of=2025-12-08T12:00:00Z
  *
  * Filters:
- *   --site=<site>              Filter by rsoc_site (default: wesoughtit.com)
+ *   --site=<site>              Filter by rsoc_site
  *   --days=<n>                 Number of days to compare (default: 3)
- *   --media-source=<sources>   Comma-separated media sources (default: mediago,facebook)
+ *   --media-source=<sources>   Comma-separated media sources
  *   --campaign-id=<id>         Filter by campaign_id
  *   --campaign-name=<name>     Filter by campaign_name
  *   --adset-id=<id>            Filter by adset_id
@@ -27,7 +30,7 @@
  *   --category=<category>      Filter by category
  *   --lane=<lane>              Filter by lane
  *   --level=<level>            Filter by level (campaign/adset)
- *   --as-of=<iso-timestamp>     Use snapshot as of specific time (default: latest)
+ *   --as-of=<iso-timestamp>     Use snapshot as of specific UTC time (default: latest)
  */
 
 import 'dotenv/config';
@@ -39,9 +42,7 @@ import {
 } from '../../lib/monitoringDb';
 import { initMonitoringSchema } from '../../lib/monitoringDb';
 
-const DEFAULT_SITE = 'wesoughtit.com';
 const DEFAULT_DAYS = 3;
-const DEFAULT_MEDIA_SOURCES = ['mediago', 'facebook'];
 
 function getFlag(name: string): string | undefined {
   const key = `--${name}=`;
@@ -84,72 +85,66 @@ async function getCurrentSnapshot(conn: any, asOfIso?: string): Promise<string |
 
 async function getMatchingSnapshots(
   conn: any,
-  currentSnapshotPst: string,
+  currentSnapshotUtc: string,
   days: number
 ): Promise<string[]> {
-  // We look for, for each day d = 0..days-1, the latest snapshot for that PST day
-  // whose local time-of-day is <= current snapshot's local time-of-day.
+  // We look for, for each UTC day d = 0..days-1, the latest snapshot for that UTC day
+  // whose time-of-day is <= current snapshot's time-of-day.
   const rows = await allRows<{ snapshot_pst: string }>(
     conn,
     `
     WITH current AS (
       SELECT
-        ${sqlString(currentSnapshotPst)}::TIMESTAMP AS snapshot_pst,
-        ( ${sqlString(currentSnapshotPst)}::TIMESTAMP - INTERVAL 8 HOUR ) AS snapshot_pst_local
-    ),
-    current_parts AS (
-      SELECT
-        snapshot_pst,
-        date_trunc('day', snapshot_pst_local) AS today_pst,
-        extract(hour FROM snapshot_pst_local) AS snap_hour,
-        extract(minute FROM snapshot_pst_local) AS snap_minute
-      FROM current
+        ${sqlString(currentSnapshotUtc)}::TIMESTAMP AS snapshot_utc,
+        date_trunc('day', ${sqlString(currentSnapshotUtc)}::TIMESTAMP) AS today_utc,
+        extract(hour FROM ${sqlString(currentSnapshotUtc)}::TIMESTAMP) AS snap_hour,
+        extract(minute FROM ${sqlString(currentSnapshotUtc)}::TIMESTAMP) AS snap_minute
     ),
     days AS (
       SELECT
-        today_pst - d.generate_series * INTERVAL 1 DAY AS day_pst,
+        today_utc - d.generate_series * INTERVAL 1 DAY AS day_utc,
         snap_hour,
         snap_minute
-      FROM current_parts,
+      FROM current,
       generate_series(0, ${days - 1}) AS d
     ),
     candidates AS (
       SELECT
         h.snapshot_pst,
-        d.day_pst,
-        (h.snapshot_pst - INTERVAL 8 HOUR) AS local_ts,
-        date_trunc('day', h.snapshot_pst - INTERVAL 8 HOUR) AS local_day,
-        extract(hour FROM h.snapshot_pst - INTERVAL 8 HOUR) AS local_hour,
-        extract(minute FROM h.snapshot_pst - INTERVAL 8 HOUR) AS local_minute
+        d.day_utc,
+        h.snapshot_pst AS snapshot_ts,
+        date_trunc('day', h.snapshot_pst) AS snapshot_day,
+        extract(hour FROM h.snapshot_pst) AS snapshot_hour,
+        extract(minute FROM h.snapshot_pst) AS snapshot_minute
       FROM hourly_snapshot_metrics h
       JOIN days d
-        ON date_trunc('day', h.snapshot_pst - INTERVAL 8 HOUR) = d.day_pst
+        ON date_trunc('day', h.snapshot_pst) = d.day_utc
     ),
     filtered AS (
       SELECT
         c.snapshot_pst,
-        c.day_pst,
-        c.local_ts
+        c.day_utc,
+        c.snapshot_ts
       FROM candidates c
-      JOIN current_parts cp ON TRUE
+      JOIN current cp ON TRUE
       WHERE
-        -- Only include snapshots up to the same local time-of-day
+        -- Only include snapshots up to the same UTC time-of-day
         (
-          extract(hour FROM c.local_ts) < cp.snap_hour OR
-          (extract(hour FROM c.local_ts) = cp.snap_hour AND extract(minute FROM c.local_ts) <= cp.snap_minute)
+          c.snapshot_hour < cp.snap_hour OR
+          (c.snapshot_hour = cp.snap_hour AND c.snapshot_minute <= cp.snap_minute)
         )
     ),
     ranked AS (
       SELECT
         snapshot_pst,
-        day_pst,
-        row_number() OVER (PARTITION BY day_pst ORDER BY local_ts DESC) AS rn
+        day_utc,
+        row_number() OVER (PARTITION BY day_utc ORDER BY snapshot_ts DESC) AS rn
       FROM filtered
     )
     SELECT snapshot_pst
     FROM ranked
     WHERE rn = 1
-    ORDER BY day_pst DESC
+    ORDER BY day_utc DESC
   `
   );
 
@@ -168,9 +163,9 @@ async function main(): Promise<void> {
     await initMonitoringSchema(conn);
 
     const asOfIso = getFlag('as-of');
-    const site = getFlag('site'); // No default - show all sites unless filtered
+    const site = getFlag('site');
     const days = parseInt(getFlag('days') || String(DEFAULT_DAYS), 10);
-    const mediaSources = getFlagList('media-source'); // No default - show all media sources unless filtered
+    const mediaSources = getFlagList('media-source');
     
     // Optional filters for drilling down
     const campaignId = getFlag('campaign-id');
@@ -235,7 +230,7 @@ async function main(): Promise<void> {
       return;
     }
 
-    console.log(`\n# Hourly Snapshot Report`);
+    console.log(`\n# Hourly Snapshot Report (UTC)`);
     console.log(`Site: ${site || 'ALL (no filter)'}`);
     console.log(`Media Sources: ${mediaSources && mediaSources.length > 0 ? mediaSources.join(', ') : 'ALL (no filter)'}`);
     console.log(`Days (including today): ${days}`);
@@ -247,7 +242,7 @@ async function main(): Promise<void> {
     if (category) console.log(`Category: ${category}`);
     if (lane) console.log(`Lane: ${lane}`);
     if (level) console.log(`Level: ${level}`);
-    console.log(`Current snapshot_pst: ${currentSnapshot}`);
+    console.log(`Current snapshot_utc: ${currentSnapshot}`);
     console.log(`Comparing snapshots:`);
     snapshots.forEach((s) => console.log(`  - ${s}`));
     console.log('');
@@ -520,11 +515,9 @@ async function main(): Promise<void> {
         new Set(currentSnapshotRows.map((r) => String(r.day_pst)))
       );
 
-      // Extract the snapshot day from the snapshot timestamp (in PST)
-      // The snapshot timestamp is UTC, so convert to PST to get the correct day
+      // Extract the snapshot day from the snapshot timestamp (UTC)
       const snapshotTimestamp = new Date(snapshots[0]); // Use the first (most recent) snapshot
-      const snapshotPstDate = new Date(snapshotTimestamp.getTime() - 8 * 60 * 60 * 1000); // UTC to PST
-      const snapshotDayStr = snapshotPstDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+      const snapshotDayStr = snapshotTimestamp.toISOString().split('T')[0]; // YYYY-MM-DD format (UTC)
       
       // Find the snapshot day in uniqueDays by matching date strings
       // day_pst might be a Date object or a string, so we need to normalize both
@@ -575,7 +568,7 @@ async function main(): Promise<void> {
           .filter((r) => String(r.day_pst) === day)
           .sort((a, b) => Number(a.hour_pst) - Number(b.hour_pst));
 
-        // Only include hours up to the snapshot hour (in PST)
+        // Only include hours up to the snapshot hour (UTC)
         const filteredDayRows = dayRows.filter((r) => {
           const hour = Number(r.hour_pst);
           return hour <= maxHourPst;
