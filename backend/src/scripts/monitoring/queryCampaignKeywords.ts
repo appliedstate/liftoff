@@ -668,6 +668,66 @@ async function main(): Promise<void> {
     }
   }
   
+  // Build a lookup map of Facebook campaign ID -> campaign name from campaign_index
+  // This helps us match sessions even when campaign_name isn't in the session data
+  const fbCampaignIdToName = new Map<string, string>();
+  if (campaignId) {
+    try {
+      const date = new Date(dateStr);
+      const startDate = new Date(date);
+      startDate.setDate(date.getDate() - 30);
+      
+      const nameRows = await allRows<any>(conn, `
+        SELECT DISTINCT facebook_campaign_id, campaign_name
+        FROM campaign_index
+        WHERE campaign_id = ${sqlString(campaignId)}
+          AND date >= ${sqlString(startDate.toISOString().slice(0, 10))}
+          AND date <= ${sqlString(dateStr)}
+          AND facebook_campaign_id IS NOT NULL
+          AND campaign_name IS NOT NULL
+          AND media_source = 'facebook'
+        ORDER BY date DESC
+        LIMIT 100
+      `);
+      
+      for (const row of nameRows) {
+        if (row.facebook_campaign_id && row.campaign_name) {
+          fbCampaignIdToName.set(String(row.facebook_campaign_id), String(row.campaign_name));
+        }
+      }
+      
+      // Also search by campaign name pattern (in case facebook_campaign_id isn't populated)
+      const patternRows = await allRows<any>(conn, `
+        SELECT DISTINCT facebook_campaign_id, campaign_name
+        FROM campaign_index
+        WHERE campaign_name LIKE ${sqlString(`%${campaignId}%`)}
+          AND date >= ${sqlString(startDate.toISOString().slice(0, 10))}
+          AND date <= ${sqlString(dateStr)}
+          AND facebook_campaign_id IS NOT NULL
+          AND campaign_name IS NOT NULL
+          AND media_source = 'facebook'
+        ORDER BY date DESC
+        LIMIT 100
+      `);
+      
+      for (const row of patternRows) {
+        if (row.facebook_campaign_id && row.campaign_name) {
+          fbCampaignIdToName.set(String(row.facebook_campaign_id), String(row.campaign_name));
+        }
+      }
+      
+      if (fbCampaignIdToName.size > 0) {
+        console.log(`  ✓ Found ${fbCampaignIdToName.size} Facebook campaign ID(s) with campaign names in campaign_index`);
+        // Add these Facebook IDs to fbCampaignIds set
+        for (const fbId of fbCampaignIdToName.keys()) {
+          fbCampaignIds.add(fbId);
+        }
+      }
+    } catch (error: any) {
+      console.warn(`  ⚠ Warning: Could not build campaign name lookup: ${error.message}`);
+    }
+  }
+  
   closeConnection(conn);
 
   // Display header with campaign IDs
@@ -718,7 +778,12 @@ async function main(): Promise<void> {
       for (const session of sessions) {
         // Get Facebook campaign ID from session
         const fbCampaignId = session.campaign_id || session.campaignId;
-        const campaignName = session.campaign_name || session.campaignName || session.networkCampaignName;
+        // Try to get campaign name from session data first, then fall back to lookup
+        let campaignName = session.campaign_name || session.campaignName || session.networkCampaignName;
+        // If campaign name not in session data, look it up from campaign_index
+        if (!campaignName && fbCampaignId && fbCampaignIdToName.has(String(fbCampaignId))) {
+          campaignName = fbCampaignIdToName.get(String(fbCampaignId)) || null;
+        }
         
         // Extract strategisCampaignId from campaign name if available
         // Pattern: campaignName.split('_')[0] (as per Strategis architecture)
