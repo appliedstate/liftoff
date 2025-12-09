@@ -192,28 +192,39 @@ async function main(): Promise<void> {
                MAX(snapshot_pst) as latest_snapshot
         FROM hourly_snapshot_metrics
       `);
-      if (debugRows.length > 0 && debugRows[0].total_rows > 0) {
-        console.log('DEBUG: Table has data but getCurrentSnapshot returned null');
-        console.log(`  Total rows: ${debugRows[0].total_rows}`);
-        console.log(`  Unique snapshots: ${debugRows[0].unique_snapshots}`);
-        console.log(`  Earliest: ${debugRows[0].earliest_snapshot}`);
-        console.log(`  Latest: ${debugRows[0].latest_snapshot}`);
+      
+      // Always show debug info, even if table is empty
+      console.log('DEBUG: Snapshot table status:');
+      if (debugRows.length > 0) {
+        const stats = debugRows[0];
+        console.log(`  Total rows: ${stats.total_rows || 0}`);
+        console.log(`  Unique snapshots: ${stats.unique_snapshots || 0}`);
+        if (stats.earliest_snapshot) {
+          console.log(`  Earliest snapshot: ${stats.earliest_snapshot}`);
+        }
+        if (stats.latest_snapshot) {
+          console.log(`  Latest snapshot: ${stats.latest_snapshot}`);
+        }
         
-        // Also check what campaign IDs exist
-        const campaignRows = await allRows<any>(conn, `
-          SELECT DISTINCT campaign_id, COUNT(*) as row_count
-          FROM hourly_snapshot_metrics
-          GROUP BY campaign_id
-          ORDER BY row_count DESC
-          LIMIT 20
-        `);
-        console.log(`\n  Sample campaign IDs in snapshots (top 20):`);
-        campaignRows.forEach((r: any) => {
-          console.log(`    ${r.campaign_id}: ${r.row_count} rows`);
-        });
+        if (stats.total_rows > 0) {
+          // Also check what campaign IDs exist
+          const campaignRows = await allRows<any>(conn, `
+            SELECT DISTINCT campaign_id, COUNT(*) as row_count
+            FROM hourly_snapshot_metrics
+            GROUP BY campaign_id
+            ORDER BY row_count DESC
+            LIMIT 20
+          `);
+          console.log(`\n  Sample campaign IDs in snapshots (top 20):`);
+          campaignRows.forEach((r: any) => {
+            console.log(`    ${r.campaign_id}: ${r.row_count} rows`);
+          });
+        } else {
+          console.log('\n  Table is empty. No snapshots have been created yet.');
+          console.log('  To create snapshots, run: npm run monitor:snapshot-hourly');
+        }
       } else {
-        console.log('No snapshots available in hourly_snapshot_metrics.');
-        console.log('  Run: npm run monitor:snapshot-hourly');
+        console.log('  Could not query snapshot table.');
       }
       return;
     }
