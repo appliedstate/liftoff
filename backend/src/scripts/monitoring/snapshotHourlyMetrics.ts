@@ -243,11 +243,11 @@ async function runSnapshot(): Promise<void> {
         SELECT s.*
         FROM stamped s, snap_window w
         WHERE s.day_pst BETWEEN w.start_day_pst AND w.end_day_pst
-          -- Compare: ts_pst (PST) <= snapshot_pst (UTC)
-          -- ts_pst is already UTC-8, so we need to convert snapshot_pst to PST for comparison
-          -- OR convert ts_pst back to UTC: ts_pst + 8 hours <= snapshot_pst
-          -- Actually, ts_pst is stored as UTC timestamp minus 8 hours, so to compare:
-          -- ts_pst + 8 hours (to get UTC) <= snapshot_pst (UTC)
+          -- Compare: ts_pst (PST-represented timestamp) <= snapshot_pst (UTC)
+          -- ts_pst = UTC timestamp - 8 hours (represents PST wall-clock time)
+          -- snapshot_pst = UTC timestamp (represents PST wall-clock time at UTC)
+          -- To compare: convert snapshot_pst to PST-represented timestamp, OR convert ts_pst back to UTC
+          -- Method: ts_pst + 8 hours = original UTC timestamp, compare with snapshot_pst (UTC)
           AND (s.ts_pst + INTERVAL 8 HOUR) <= w.snapshot_pst
       )
       SELECT
