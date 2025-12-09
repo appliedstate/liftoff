@@ -743,6 +743,17 @@ async function main(): Promise<void> {
             // Match by Strategis campaign ID (from name extraction or direct field)
             if (sessionStrategisId && sessionStrategisId.toLowerCase() === campaignId.toLowerCase()) {
               matchesCampaign = true;
+            } else if (campaignName) {
+              // Also try matching by campaign name pattern (Strategis ID is often prefix)
+              const campaignNameLower = campaignName.toLowerCase();
+              const searchIdLower = campaignId.toLowerCase();
+              if (campaignNameLower.includes(searchIdLower) || campaignNameLower.startsWith(searchIdLower + '_')) {
+                matchesCampaign = true;
+                // Also add this Facebook campaign ID to our set for future matches
+                if (fbCampaignId) {
+                  fbCampaignIds.add(String(fbCampaignId));
+                }
+              }
             } else if (fbCampaignId) {
               // Fallback: try direct match (in case campaign_id in session is actually Strategis ID)
               const fbCampaignIdStr = String(fbCampaignId).toLowerCase().trim();
