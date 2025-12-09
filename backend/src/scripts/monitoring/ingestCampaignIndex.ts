@@ -698,7 +698,9 @@ async function main(): Promise<void> {
   const level = (getFlag('level', 'campaign').toLowerCase() === 'adset' ? 'adset' : 'campaign') as Level;
   const limitStr = getFlag('limit', '');
   const limit = limitStr ? Math.max(1, Math.min(Number(limitStr) || 50000, 200000)) : 50000;
-  const mode = getFlag('mode', 'snapshot').toLowerCase();
+  // Default to 'remote' mode to fetch directly from APIs (no snapshot files required)
+  // This ensures Facebook campaign IDs are always captured for new campaigns
+  const mode = getFlag('mode', 'remote').toLowerCase();
 
   let records: CampaignRecordInput[] = [];
   let conn: ReturnType<typeof createMonitoringConnection> | null = null;

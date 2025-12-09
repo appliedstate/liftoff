@@ -209,7 +209,11 @@ npm run monitor:track-launches -- $(date -u +%Y-%m-%d)
 crontab -e
 
 # Add these lines (runs hourly):
-20 * * * * cd /opt/liftoff/backend && MONITORING_DB_PATH="/opt/liftoff/data/monitoring.duckdb" IX_ID_EMAIL="roach@interlincx.com" IX_ID_PASSWORD="<password>" STRATEGIS_API_BASE_URL="https://strategis.lincx.in" IX_ID_BASE_URL="https://ix-id.lincx.la" npm run monitor:ingest-campaigns -- --mode=remote --date=$(date -u +\%Y-\%m-\%d) >> /opt/liftoff/logs/campaign-index.log 2>&1
+# Campaign level - captures campaign metadata and Facebook campaign IDs from campaigns API
+20 * * * * cd /opt/liftoff/backend && MONITORING_DB_PATH="/opt/liftoff/data/monitoring.duckdb" IX_ID_EMAIL="roach@interlincx.com" IX_ID_PASSWORD="<password>" STRATEGIS_API_BASE_URL="https://strategis.lincx.in" IX_ID_BASE_URL="https://ix-id.lincx.la" npm run monitor:ingest-campaigns -- --level=campaign --mode=remote --date=$(date -u +\%Y-\%m-\%d) >> /opt/liftoff/logs/campaign-index.log 2>&1
+
+# Adset level - IMPORTANT: captures Facebook campaign IDs from adset data (required for Facebook campaign ID mapping)
+21 * * * * cd /opt/liftoff/backend && MONITORING_DB_PATH="/opt/liftoff/data/monitoring.duckdb" IX_ID_EMAIL="roach@interlincx.com" IX_ID_PASSWORD="<password>" STRATEGIS_API_BASE_URL="https://strategis.lincx.in" IX_ID_BASE_URL="https://ix-id.lincx.la" npm run monitor:ingest-campaigns -- --level=adset --mode=remote --date=$(date -u +\%Y-\%m-\%d) >> /opt/liftoff/logs/campaign-index-adset.log 2>&1
 
 25 * * * * cd /opt/liftoff/backend && MONITORING_DB_PATH="/opt/liftoff/data/monitoring.duckdb" IX_ID_EMAIL="roach@interlincx.com" IX_ID_PASSWORD="<password>" STRATEGIS_API_BASE_URL="https://strategis.lincx.in" IX_ID_BASE_URL="https://ix-id.lincx.la" npm run monitor:ingest-sessions -- --date=$(date -u +\%Y-\%m-\%d) >> /opt/liftoff/logs/session-metrics.log 2>&1
 

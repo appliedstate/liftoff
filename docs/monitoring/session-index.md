@@ -76,6 +76,7 @@ Example cadence (UTC) to keep the index fresh every hour:
 
 ```
 # Campaign metadata at :15 past the hour (fetches all platforms: Facebook, Taboola, Outbrain, NewsBreak, MediaGo, Zemanta, SmartNews, GoogleAds)
+# IMPORTANT: Run both campaign and adset levels to capture Facebook campaign IDs from adsets
 15 * * * * cd /opt/liftoff/backend && \
   IX_ID_EMAIL="roach@interlincx.com" \
   IX_ID_PASSWORD="pitdyd-vazsi1-Jinrow" \
@@ -87,8 +88,23 @@ Example cadence (UTC) to keep the index fresh every hour:
   STRATEGIS_TIMEZONE="UTC" \
   STRATEGIS_RPC_DAYS="3" \
   MONITORING_DB_PATH="/opt/liftoff/data/monitoring.duckdb" \
-  npm run monitor:ingest-campaigns -- --date=$(date -u +\%F) --mode=remote \
+  npm run monitor:ingest-campaigns -- --date=$(date -u +\%F) --level=campaign --mode=remote \
   >> /var/log/monitor-campaigns.log 2>&1
+
+# Adset level at :16 (captures Facebook campaign IDs from Facebook adset data)
+16 * * * * cd /opt/liftoff/backend && \
+  IX_ID_EMAIL="roach@interlincx.com" \
+  IX_ID_PASSWORD="pitdyd-vazsi1-Jinrow" \
+  STRATEGIS_API_BASE_URL="https://strategis.lincx.in" \
+  STRATEGIS_ALLOW_SELF_SIGNED=1 \
+  STRATEGIS_ORGANIZATION="Interlincx" \
+  STRATEGIS_AD_SOURCE="rsoc" \
+  STRATEGIS_NETWORK_ID="112" \
+  STRATEGIS_TIMEZONE="UTC" \
+  STRATEGIS_RPC_DAYS="3" \
+  MONITORING_DB_PATH="/opt/liftoff/data/monitoring.duckdb" \
+  npm run monitor:ingest-campaigns -- --date=$(date -u +\%F) --level=adset --mode=remote \
+  >> /var/log/monitor-campaigns-adset.log 2>&1
 
 # Session RPC snapshot at :20 (restrict to clicks logged so far, fetches all platforms)
 20 * * * * cd /opt/liftoff/backend && \
