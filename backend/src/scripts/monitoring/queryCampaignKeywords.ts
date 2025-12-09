@@ -998,6 +998,11 @@ async function main(): Promise<void> {
     }
   }
 
+  // Close connection if we kept it open for on-the-fly lookups
+  if (connNeedsClosing) {
+    closeConnection(conn);
+  }
+
   // Calculate RPC and display results
   if (keywordStats.size > 0) {
     // Calculate RPC for each keyword
