@@ -21,6 +21,7 @@ import { initMonitoringSchema } from '../../lib/monitoringDb';
 
 // Default trailing window in days (inclusive of today_pst)
 const DEFAULT_TRAILING_DAYS = 3;
+const PST_OFFSET_MS = 8 * 60 * 60 * 1000;
 
 async function getSnapshotTiming(
   _conn: any,
@@ -31,35 +32,36 @@ async function getSnapshotTiming(
   trailingStartPst: string;
   trailingEndPst: string;
 }> {
-  const PST_OFFSET_MS = 8 * 60 * 60 * 1000;
-
-  // Snapshot time in PST
-  let snapshotPstDate: Date;
+  // Snapshot time: We want the current UTC time, but we'll treat it as if it represents PST
+  // The snapshot_pst timestamp should be UTC, but represents the PST wall-clock time
+  // So if it's 6:32 PM UTC (10:32 AM PST), we store 6:32 PM UTC but interpret it as 10:32 AM PST
+  let snapshotUtcDate: Date;
   if (overrideIso) {
-    snapshotPstDate = new Date(overrideIso);
+    snapshotUtcDate = new Date(overrideIso);
   } else {
-    const nowUtc = new Date();
-    snapshotPstDate = new Date(nowUtc.getTime() - PST_OFFSET_MS);
+    snapshotUtcDate = new Date(); // Current UTC time
   }
 
-  // Helper: YYYY-MM-DD for PST date
-  const toPstDateOnly = (d: Date): string => {
-    const pst = new Date(d.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
-    const y = pst.getFullYear();
-    const m = String(pst.getMonth() + 1).padStart(2, '0');
-    const day = String(pst.getDate()).padStart(2, '0');
+  // Helper: Convert UTC date to PST date string (YYYY-MM-DD)
+  const toPstDateOnly = (utcDate: Date): string => {
+    // Convert UTC to PST by subtracting 8 hours
+    const pstDate = new Date(utcDate.getTime() - PST_OFFSET_MS);
+    const y = pstDate.getUTCFullYear();
+    const m = String(pstDate.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(pstDate.getUTCDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
   };
 
-  const todayPst = toPstDateOnly(snapshotPstDate);
+  const todayPst = toPstDateOnly(snapshotUtcDate);
 
   const trailingStart = new Date(
-    snapshotPstDate.getTime() - DEFAULT_TRAILING_DAYS * 24 * 60 * 60 * 1000
+    snapshotUtcDate.getTime() - DEFAULT_TRAILING_DAYS * 24 * 60 * 60 * 1000
   );
   const trailingStartPst = toPstDateOnly(trailingStart);
 
-  // Use ISO for the actual timestamp we hand to DuckDB
-  const snapshotPstIso = snapshotPstDate.toISOString();
+  // Store UTC timestamp - DuckDB will compare ts_pst (which is UTC-8) to this UTC timestamp
+  // So if snapshot is 18:32 UTC, and ts_pst is 10:32 PST (which is 18:32 UTC), they match
+  const snapshotPstIso = snapshotUtcDate.toISOString();
 
   return {
     snapshotPst: snapshotPstIso,
@@ -85,7 +87,11 @@ async function runSnapshot(): Promise<void> {
     } = await getSnapshotTiming(conn, overrideAsOf);
 
     console.log(`\n# Hourly Snapshot Metrics`);
-    console.log(`Snapshot PST: ${snapshotPst}`);
+    // Convert snapshot UTC to PST for display
+    const snapshotPstDisplay = new Date(new Date(snapshotPst).getTime() - PST_OFFSET_MS);
+    const pstHour = snapshotPstDisplay.getUTCHours();
+    const pstMinute = snapshotPstDisplay.getUTCMinutes();
+    console.log(`Snapshot UTC: ${snapshotPst} (PST: ${pstHour}:${String(pstMinute).padStart(2, '0')})`);
     console.log(`Window PST: ${trailingStartPst} → ${trailingEndPst}\n`);
 
     const snapshotLiteral = `${sqlString(snapshotPst)}::TIMESTAMP`;
@@ -237,7 +243,12 @@ async function runSnapshot(): Promise<void> {
         SELECT s.*
         FROM stamped s, snap_window w
         WHERE s.day_pst BETWEEN w.start_day_pst AND w.end_day_pst
-          AND s.ts_pst <= w.snapshot_pst
+          -- Compare: ts_pst (PST) <= snapshot_pst (UTC)
+          -- ts_pst is already UTC-8, so we need to convert snapshot_pst to PST for comparison
+          -- OR convert ts_pst back to UTC: ts_pst + 8 hours <= snapshot_pst
+          -- Actually, ts_pst is stored as UTC timestamp minus 8 hours, so to compare:
+          -- ts_pst + 8 hours (to get UTC) <= snapshot_pst (UTC)
+          AND (s.ts_pst + INTERVAL 8 HOUR) <= w.snapshot_pst
       )
       SELECT
         w.snapshot_pst AS snapshot_pst,
