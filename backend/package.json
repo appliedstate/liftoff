@@ -72,6 +72,7 @@
     "monitor:snapshot-hourly": "ts-node src/scripts/monitoring/snapshotHourlyMetrics.ts",
     "monitor:snapshot-report": "ts-node src/scripts/monitoring/snapshotHourlyReport.ts",
     "monitor:campaign-keywords": "ts-node src/scripts/monitoring/queryCampaignKeywords.ts",
+    "monitor:campaign-summary": "ts-node src/scripts/monitoring/campaignSummary.ts",
     "index:now": "ts-node src/scripts/indexNow.ts",
     "system1:analyze": "ts-node src/scripts/analyzeSystem1.ts",
     "s1:intake": "ts-node src/scripts/s1Intake.ts",
