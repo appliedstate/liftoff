@@ -740,22 +740,27 @@ async function main(): Promise<void> {
             // We have Facebook campaign IDs to match against
             matchesCampaign = fbCampaignIds.has(String(fbCampaignId));
           } else if (campaignId) {
-            // Match by Strategis campaign ID (from name extraction or direct field)
+            // Match by Strategis campaign ID - try multiple methods
+            // Method 1: Direct Strategis ID match (from session field or extracted from name)
             if (sessionStrategisId && sessionStrategisId.toLowerCase() === campaignId.toLowerCase()) {
               matchesCampaign = true;
-            } else if (campaignName) {
-              // Also try matching by campaign name pattern (Strategis ID is often prefix)
+            }
+            // Method 2: Campaign name pattern matching (Strategis ID is often prefix like "sire1f06al_...")
+            if (!matchesCampaign && campaignName) {
               const campaignNameLower = campaignName.toLowerCase();
               const searchIdLower = campaignId.toLowerCase();
+              // Check if campaign name contains or starts with the Strategis ID
               if (campaignNameLower.includes(searchIdLower) || campaignNameLower.startsWith(searchIdLower + '_')) {
                 matchesCampaign = true;
                 // Also add this Facebook campaign ID to our set for future matches
                 if (fbCampaignId) {
                   fbCampaignIds.add(String(fbCampaignId));
+                  console.log(`  ✓ Found Facebook campaign ID ${fbCampaignId} via campaign name match: "${campaignName}"`);
                 }
               }
-            } else if (fbCampaignId) {
-              // Fallback: try direct match (in case campaign_id in session is actually Strategis ID)
+            }
+            // Method 3: Fallback - try direct match (in case campaign_id in session is actually Strategis ID)
+            if (!matchesCampaign && fbCampaignId) {
               const fbCampaignIdStr = String(fbCampaignId).toLowerCase().trim();
               const searchId = campaignId.toLowerCase().trim();
               matchesCampaign = fbCampaignIdStr === searchId || fbCampaignIdStr.includes(searchId);
