@@ -99,6 +99,71 @@ async function runSnapshot(): Promise<void> {
     `
     );
 
+    // Debug: Check if we have data in session_hourly_metrics
+    const debugSessionRows = await allRows<any>(conn, `
+      SELECT COUNT(*) as total_rows,
+             COUNT(DISTINCT campaign_id) as unique_campaigns,
+             MIN(date) as earliest_date,
+             MAX(date) as latest_date,
+             COUNT(DISTINCT date) as unique_dates
+      FROM session_hourly_metrics
+      WHERE media_source IS NOT NULL
+    `);
+    
+    if (debugSessionRows.length > 0) {
+      const stats = debugSessionRows[0];
+      console.log(`\nDEBUG: session_hourly_metrics table status:`);
+      console.log(`  Total rows: ${stats.total_rows || 0}`);
+      console.log(`  Unique campaigns: ${stats.unique_campaigns || 0}`);
+      console.log(`  Date range: ${stats.earliest_date || 'N/A'} to ${stats.latest_date || 'N/A'}`);
+      console.log(`  Unique dates: ${stats.unique_dates || 0}`);
+      
+      // Check for the specific campaign
+      const campaignRows = await allRows<any>(conn, `
+        SELECT COUNT(*) as row_count,
+               COUNT(DISTINCT date) as date_count,
+               SUM(sessions) as total_sessions,
+               SUM(revenue) as total_revenue
+        FROM session_hourly_metrics
+        WHERE campaign_id = 'siqd18d06g4'
+          AND media_source IS NOT NULL
+      `);
+      
+      if (campaignRows.length > 0 && campaignRows[0].row_count > 0) {
+        console.log(`\nDEBUG: Campaign siqd18d06g4 in session_hourly_metrics:`);
+        console.log(`  Rows: ${campaignRows[0].row_count}`);
+        console.log(`  Dates: ${campaignRows[0].date_count}`);
+        console.log(`  Total sessions: ${campaignRows[0].total_sessions || 0}`);
+        console.log(`  Total revenue: ${campaignRows[0].total_revenue || 0}`);
+      } else {
+        console.log(`\nDEBUG: Campaign siqd18d06g4 NOT found in session_hourly_metrics`);
+        console.log(`  Checking what campaign IDs exist...`);
+        const sampleCampaigns = await allRows<any>(conn, `
+          SELECT DISTINCT campaign_id, COUNT(*) as row_count
+          FROM session_hourly_metrics
+          WHERE media_source IS NOT NULL
+          GROUP BY campaign_id
+          ORDER BY row_count DESC
+          LIMIT 10
+        `);
+        console.log(`  Sample campaign IDs (top 10):`);
+        sampleCampaigns.forEach((r: any) => {
+          console.log(`    ${r.campaign_id}: ${r.row_count} rows`);
+        });
+      }
+      
+      // Check campaign_index
+      const indexRows = await allRows<any>(conn, `
+        SELECT COUNT(*) as total_rows,
+               COUNT(DISTINCT campaign_id) as unique_campaigns
+        FROM campaign_index
+        WHERE date >= '2025-12-05' AND date <= '2025-12-08'
+      `);
+      console.log(`\nDEBUG: campaign_index table status (2025-12-05 to 2025-12-08):`);
+      console.log(`  Total rows: ${indexRows[0]?.total_rows || 0}`);
+      console.log(`  Unique campaigns: ${indexRows[0]?.unique_campaigns || 0}`);
+    }
+
     // Core aggregation: join hourly sessions with campaign_index (including ad set fields),
     // stamp PST time, filter to trailing window and ts_pst <= snapshot_pst, then aggregate.
     const insertSql = `
