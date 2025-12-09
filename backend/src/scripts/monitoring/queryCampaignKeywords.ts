@@ -711,6 +711,8 @@ async function main(): Promise<void> {
       }
       
       let matchingSessions = 0;
+      let debugSampleCount = 0;
+      const MAX_DEBUG_SAMPLES = 5;
 
       // Filter by campaign/adset/ad and aggregate by keyword
       for (const session of sessions) {
@@ -793,7 +795,17 @@ async function main(): Promise<void> {
           }
         }
         
-        if (!matchesCampaign) continue;
+        if (!matchesCampaign) {
+          // Debug: Show why sessions aren't matching (first few samples)
+          if (debugSampleCount < MAX_DEBUG_SAMPLES && campaignId) {
+            const sessionStrategisIdDebug = sessionStrategisId || '(none)';
+            const campaignNameDebug = campaignName || '(none)';
+            const fbCampaignIdDebug = fbCampaignId || '(none)';
+            console.log(`  [DEBUG] Session not matching: fbCampaignId=${fbCampaignIdDebug}, sessionStrategisId=${sessionStrategisIdDebug}, campaignName="${campaignNameDebug}", searchCampaignId=${searchCampaignId}`);
+            debugSampleCount++;
+          }
+          continue;
+        }
         
         matchingSessions++;
         
