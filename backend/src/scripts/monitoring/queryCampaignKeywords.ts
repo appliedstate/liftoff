@@ -5,12 +5,14 @@
  * 
  * Usage:
  *   npm run monitor:campaign-keywords -- --campaign-id=sipuli0615 --date=2025-12-08 --days=3
+ *   npm run monitor:campaign-keywords -- --fb-campaign-id=120231668335880424 --date=2025-12-08 --days=3
  *   npm run monitor:campaign-keywords -- --campaign-id=sipuli0615 --adset-id=120231668335910424 --date=2025-12-08 --days=3
- *   npm run monitor:campaign-keywords -- --campaign-id=sipuli0615 --ad-id=120234479088370424 --date=2025-12-08 --days=3
+ *   npm run monitor:campaign-keywords -- --fb-campaign-id=120231668335880424 --ad-id=120234479088370424 --date=2025-12-08 --days=3
  *   npm run monitor:campaign-keywords -- --show-sample=true --date=2025-12-08
  * 
  * Notes:
- *   - campaign-id: Strategis campaign ID (e.g., sipuli0615)
+ *   - campaign-id: Strategis campaign ID (e.g., sipuli0615) - script will try to map to Facebook campaign IDs
+ *   - fb-campaign-id: Facebook campaign ID (e.g., 120231668335880424) - use this if mapping fails
  *   - The script maps Facebook campaign IDs from session data to Strategis campaign IDs using campaign_index
  *   - Revenue is calculated from the revenue_updates array (sum of all revenue values)
  *   - You can filter by adset-id or ad-id to drill down further
@@ -151,6 +153,7 @@ async function findFacebookCampaignIds(conn: any, strategisCampaignId: string, d
 
 async function main(): Promise<void> {
   const campaignId = getFlag('campaign-id'); // This is Strategis campaign ID
+  const fbCampaignId = getFlag('fb-campaign-id'); // Facebook campaign ID (alternative to campaign-id)
   const adsetId = getFlag('adset-id');
   const adId = getFlag('ad-id');
   const dateStr = getFlag('date') || todayUtc();
@@ -223,20 +226,27 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (!campaignId && !showSample) {
-    console.error('Error: --campaign-id is required (or use --show-sample=true to see sample data)');
+  if (!campaignId && !fbCampaignId && !showSample) {
+    console.error('Error: --campaign-id (Strategis ID) or --fb-campaign-id (Facebook ID) is required');
+    console.error('  Or use --show-sample=true to see sample data');
     console.error('  You can also use --adset-id or --ad-id to filter by those instead');
     process.exit(1);
   }
 
-  console.log(`\n# Keyword Performance for Campaign: ${campaignId || '(filtering by adset/ad)'}`);
+  const displayId = fbCampaignId ? `Facebook: ${fbCampaignId}` : campaignId ? `Strategis: ${campaignId}` : '(filtering by adset/ad)';
+  console.log(`\n# Keyword Performance for Campaign: ${displayId}`);
   console.log(`Date Range: ${dateStr} (last ${days} days)\n`);
 
   // Load campaign mapping from monitoring database
   const conn = createMonitoringConnection();
   let fbCampaignIds: Set<string> = new Set();
+  const searchCampaignId = campaignId || fbCampaignId;
   
-  if (campaignId) {
+  if (fbCampaignId) {
+    // User provided Facebook campaign ID directly
+    fbCampaignIds.add(fbCampaignId);
+    console.log(`Using Facebook campaign ID directly: ${fbCampaignId}`);
+  } else if (campaignId) {
     console.log('Loading campaign mapping from monitoring database...');
     fbCampaignIds = await findFacebookCampaignIds(conn, campaignId, dateStr);
     
@@ -246,7 +256,8 @@ async function main(): Promise<void> {
     } else {
       console.log(`  ⚠ Warning: Could not find Facebook campaign IDs for Strategis campaign ${campaignId}`);
       console.log(`    Will try to match by Strategis campaign ID directly (may not work)`);
-      console.log(`    Tip: Check if campaign_index has data for this campaign with Facebook IDs in raw_payload`);
+      console.log(`    Tip: Use --fb-campaign-id=<id> to provide Facebook campaign ID directly`);
+      console.log(`    Tip: Or check if campaign_index has data for this campaign with Facebook IDs in raw_payload`);
     }
   }
   
@@ -297,18 +308,17 @@ async function main(): Promise<void> {
         const fbCampaignId = session.campaign_id || session.campaignId;
         if (!fbCampaignId) continue;
         
-        // Check if this Facebook campaign ID maps to our Strategis campaign ID
+        // Check if this Facebook campaign ID matches our search criteria
         let matchesCampaign = false;
-        if (campaignId) {
-          if (fbCampaignIds.has(String(fbCampaignId))) {
-            matchesCampaign = true;
-          } else {
-            // Also try direct match (in case campaign_id in session is actually Strategis ID)
+        if (searchCampaignId) {
+          if (fbCampaignIds.size > 0) {
+            // We have Facebook campaign IDs to match against
+            matchesCampaign = fbCampaignIds.has(String(fbCampaignId));
+          } else if (campaignId) {
+            // No Facebook IDs found, try direct match (in case campaign_id in session is actually Strategis ID)
             const fbCampaignIdStr = String(fbCampaignId).toLowerCase().trim();
-            const searchCampaignId = campaignId.toLowerCase().trim();
-            if (fbCampaignIdStr === searchCampaignId || fbCampaignIdStr.includes(searchCampaignId)) {
-              matchesCampaign = true;
-            }
+            const searchId = campaignId.toLowerCase().trim();
+            matchesCampaign = fbCampaignIdStr === searchId || fbCampaignIdStr.includes(searchId);
           }
         } else {
           matchesCampaign = true; // No campaign filter
@@ -372,7 +382,7 @@ async function main(): Promise<void> {
         stats.revenue += revenue;
       }
       
-      console.log(`  ✓ Processed ${matchingSessions} sessions matching campaign ${campaignId}, found ${keywordStats.size} unique keywords`);
+      console.log(`  ✓ Processed ${matchingSessions} sessions matching campaign ${searchCampaignId || '(filtered)'}, found ${keywordStats.size} unique keywords`);
     } catch (error: any) {
       console.error(`Error fetching session data from S1 API for ${queryDate}:`, error.message);
       if (error.response) {
@@ -398,12 +408,15 @@ async function main(): Promise<void> {
   }
 
   // No keyword data found
-  console.log(`\nNo keyword data found for campaign ${campaignId} in the date range.`);
+  console.log(`\nNo keyword data found for campaign ${searchCampaignId || '(filtered)'} in the date range.`);
   console.log(`\nPossible reasons:`);
   console.log(`  - Campaign has no sessions in this date range`);
   console.log(`  - Sessions don't have keyword data`);
   console.log(`  - Campaign ID mismatch (check exact campaign_id)`);
-  console.log(`\nTip: Verify the campaign ID matches exactly (case-sensitive).`);
+  console.log(`\nTips:`);
+  console.log(`  - Use --fb-campaign-id=<id> to provide Facebook campaign ID directly`);
+  console.log(`  - Use --show-sample=true to see sample campaign IDs from the API`);
+  console.log(`  - Verify the campaign ID matches exactly (case-sensitive)`);
   process.exit(1);
 }
 
