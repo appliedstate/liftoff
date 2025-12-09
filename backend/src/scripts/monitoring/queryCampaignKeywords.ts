@@ -163,8 +163,24 @@ async function findStrategisIdByCampaignName(
 }
 
 /**
+ * Extract strategisCampaignId from campaign name using the pattern: campaignName.split('_')[0]
+ * This is the standard way Strategis extracts campaign IDs from Facebook campaign names
+ */
+function extractStrategisCampaignIdFromName(campaignName: string | null | undefined): string | null {
+  if (!campaignName || typeof campaignName !== 'string') {
+    return null;
+  }
+  const parts = campaignName.trim().split('_');
+  if (parts.length > 0 && parts[0]) {
+    return parts[0];
+  }
+  return null;
+}
+
+/**
  * Query S1 API directly to find Strategis ID from Facebook campaign ID
  * Uses networkCampaignId dimension in S1 daily API to get the mapping
+ * Also tries to extract from campaign names if available
  */
 async function findStrategisIdFromS1Api(
   api: StrategisApi,
@@ -174,19 +190,50 @@ async function findStrategisIdFromS1Api(
   try {
     console.log(`  Querying S1 API directly for Facebook campaign ID ${fbCampaignId}...`);
     
-    // Query S1 daily API with networkCampaignId dimension
+    // Method 1: Query S1 daily API with networkCampaignId dimension
     // This returns both strategisCampaignId and networkCampaignId (Facebook campaign ID)
-    const s1Data = await api.fetchS1DailyWithNetworkCampaignId(dateStr, '112'); // 112 = Facebook
+    const s1Data = await api.fetchS1DailyWithNetworkCampaignId(dateStr, '112'); // 112 = Facebook (note: docs say 109, but code uses 112)
     
     // Look for matching networkCampaignId (Facebook campaign ID)
     for (const row of s1Data) {
-      const networkCampaignId = row.networkCampaignId || row.network_campaign_id || row.networkCampaignId;
+      const networkCampaignId = row.networkCampaignId || row.network_campaign_id;
       const strategisId = row.strategisCampaignId || row.strategis_campaign_id || row.strategiscampaignid;
+      const campaignName = row.networkCampaignName || row.network_campaign_name || row.campaign_name || row.campaignName;
       
+      // Direct match via networkCampaignId
       if (networkCampaignId && String(networkCampaignId) === String(fbCampaignId) && strategisId) {
-        console.log(`  ✓ Found Strategis ID via S1 API: ${strategisId} (Facebook ID: ${fbCampaignId})`);
+        console.log(`  ✓ Found Strategis ID via S1 API (networkCampaignId match): ${strategisId} (Facebook ID: ${fbCampaignId})`);
         return String(strategisId);
       }
+      
+      // Also try extracting from campaign name if networkCampaignId matches
+      if (networkCampaignId && String(networkCampaignId) === String(fbCampaignId) && campaignName) {
+        const extractedId = extractStrategisCampaignIdFromName(campaignName);
+        if (extractedId) {
+          console.log(`  ✓ Found Strategis ID via S1 API (extracted from campaign name): ${extractedId} (Facebook ID: ${fbCampaignId}, Campaign: ${campaignName})`);
+          return extractedId;
+        }
+      }
+    }
+    
+    // Method 2: Try querying Facebook campaigns API to get campaign name, then extract Strategis ID
+    try {
+      console.log(`  Trying Facebook campaigns API to get campaign name...`);
+      const fbCampaigns = await api.fetchFacebookCampaigns(dateStr);
+      for (const campaign of fbCampaigns) {
+        const campaignId = campaign.id || campaign.campaign_id || campaign.campaignId;
+        const campaignName = campaign.name || campaign.campaign_name || campaign.campaignName;
+        
+        if (campaignId && String(campaignId) === String(fbCampaignId) && campaignName) {
+          const extractedId = extractStrategisCampaignIdFromName(campaignName);
+          if (extractedId) {
+            console.log(`  ✓ Found Strategis ID via Facebook campaigns API (extracted from name): ${extractedId} (Facebook ID: ${fbCampaignId}, Campaign: ${campaignName})`);
+            return extractedId;
+          }
+        }
+      }
+    } catch (error: any) {
+      console.log(`  Could not query Facebook campaigns API: ${error.message}`);
     }
     
     console.log(`  ⚠ No match found in S1 API for Facebook campaign ID ${fbCampaignId}`);
@@ -618,19 +665,46 @@ async function main(): Promise<void> {
       for (const session of sessions) {
         // Get Facebook campaign ID from session
         const fbCampaignId = session.campaign_id || session.campaignId;
-        if (!fbCampaignId) continue;
+        const campaignName = session.campaign_name || session.campaignName || session.networkCampaignName;
         
-        // Check if this Facebook campaign ID matches our search criteria
+        // Extract strategisCampaignId from campaign name if available
+        // Pattern: campaignName.split('_')[0] (as per Strategis architecture)
+        let sessionStrategisId: string | null = null;
+        if (campaignName) {
+          sessionStrategisId = extractStrategisCampaignIdFromName(campaignName);
+        }
+        
+        // Also check if session has strategisCampaignId directly
+        const directStrategisId = session.strategisCampaignId || session.strategis_campaign_id || session.strategiscampaignid;
+        if (directStrategisId) {
+          sessionStrategisId = String(directStrategisId);
+        }
+        
+        if (!fbCampaignId && !sessionStrategisId) continue;
+        
+        // Check if this session matches our search criteria
         let matchesCampaign = false;
         if (searchCampaignId) {
           if (fbCampaignIds.size > 0) {
             // We have Facebook campaign IDs to match against
             matchesCampaign = fbCampaignIds.has(String(fbCampaignId));
           } else if (campaignId) {
-            // No Facebook IDs found, try direct match (in case campaign_id in session is actually Strategis ID)
-            const fbCampaignIdStr = String(fbCampaignId).toLowerCase().trim();
-            const searchId = campaignId.toLowerCase().trim();
-            matchesCampaign = fbCampaignIdStr === searchId || fbCampaignIdStr.includes(searchId);
+            // Match by Strategis campaign ID (from name extraction or direct field)
+            if (sessionStrategisId && sessionStrategisId.toLowerCase() === campaignId.toLowerCase()) {
+              matchesCampaign = true;
+            } else if (fbCampaignId) {
+              // Fallback: try direct match (in case campaign_id in session is actually Strategis ID)
+              const fbCampaignIdStr = String(fbCampaignId).toLowerCase().trim();
+              const searchId = campaignId.toLowerCase().trim();
+              matchesCampaign = fbCampaignIdStr === searchId || fbCampaignIdStr.includes(searchId);
+            }
+          } else if (foundStrategisId) {
+            // Match by found Strategis ID (from lookup)
+            matchesCampaign = sessionStrategisId === foundStrategisId || String(fbCampaignId) === String(fbCampaignId);
+          } else if (fbCampaignId && fbCampaignIds.size === 0) {
+            // If we're searching by Facebook campaign ID but haven't found Strategis ID yet
+            // Match if the session's Facebook campaign ID matches
+            matchesCampaign = String(fbCampaignId) === String(searchCampaignId);
           }
         } else {
           matchesCampaign = true; // No campaign filter
