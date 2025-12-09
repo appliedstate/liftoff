@@ -57,14 +57,6 @@ function getFlagList(name: string): string[] | undefined {
 }
 
 async function getCurrentSnapshot(conn: any, asOfIso?: string): Promise<string | null> {
-  // First check if table has any rows
-  const countRows = await allRows<{ count: number }>(
-    conn,
-    `SELECT COUNT(*)::INTEGER AS count FROM hourly_snapshot_metrics`
-  );
-  const count = countRows[0]?.count || 0;
-  console.error(`DEBUG getCurrentSnapshot: table has ${count} rows`);
-
   // If asOfIso is provided, use it; otherwise get the latest snapshot (more lenient)
   let query: string;
   if (asOfIso) {
@@ -83,19 +75,11 @@ async function getCurrentSnapshot(conn: any, asOfIso?: string): Promise<string |
 
   const rows = await allRows<{ current_snapshot: string }>(conn, query);
 
-  // Debug: log what we got
-  console.error(`DEBUG getCurrentSnapshot: rows.length=${rows.length}, rows=${JSON.stringify(rows)}`);
-
   const snap = rows[0]?.current_snapshot;
   // Convert DuckDB timestamp to ISO string if it's a Date object
-  if (!snap) {
-    console.error(`DEBUG getCurrentSnapshot: snap is null/undefined`);
-    return null;
-  }
+  if (!snap) return null;
   const snapDate = new Date(snap);
-  const iso = snapDate.toISOString();
-  console.error(`DEBUG getCurrentSnapshot: returning ${iso}`);
-  return iso;
+  return snapDate.toISOString();
 }
 
 async function getMatchingSnapshots(
@@ -252,7 +236,7 @@ async function main(): Promise<void> {
       whereConditions.push(`adset_name = ${sqlString(adsetName)}`);
     }
     if (owner) {
-      whereConditions.push(`owner = ${sqlString(owner)}`);
+      whereConditions.push(`LOWER(owner) = LOWER(${sqlString(owner)})`);
     }
     if (category) {
       whereConditions.push(`category = ${sqlString(category)}`);
@@ -266,32 +250,6 @@ async function main(): Promise<void> {
 
     const whereClause = whereConditions.join(' AND ');
 
-    // Debug: check if campaign exists at all
-    if (campaignId) {
-      const campaignCheck = await allRows<{ count: number }>(
-        conn,
-        `SELECT COUNT(*)::INTEGER AS count FROM hourly_snapshot_metrics WHERE campaign_id = ${sqlString(campaignId)}`
-      );
-      console.error(`DEBUG: Rows with campaign_id='${campaignId}': ${campaignCheck[0]?.count || 0}`);
-    }
-
-    // Debug: check with site filter
-    const siteCheck = await allRows<{ count: number }>(
-      conn,
-      `SELECT COUNT(*)::INTEGER AS count FROM hourly_snapshot_metrics WHERE rsoc_site = ${sqlString(site)}`
-    );
-    console.error(`DEBUG: Rows with rsoc_site='${site}': ${siteCheck[0]?.count || 0}`);
-
-    // Debug: check with owner filter
-    if (owner) {
-      const ownerCheck = await allRows<{ count: number }>(
-        conn,
-        `SELECT COUNT(*)::INTEGER AS count FROM hourly_snapshot_metrics WHERE LOWER(owner) = LOWER(${sqlString(owner)})`
-      );
-      console.error(`DEBUG: Rows with owner='${owner}': ${ownerCheck[0]?.count || 0}`);
-    }
-
-    console.error(`DEBUG: WHERE clause: ${whereClause}`);
 
     const rows = await allRows<any>(
       conn,
@@ -318,8 +276,6 @@ async function main(): Promise<void> {
       ORDER BY snapshot_pst, day_pst, hour_pst, media_source, category, owner, campaign_id, adset_id
     `
     );
-
-    console.error(`DEBUG: Query returned ${rows.length} rows`);
 
     if (!rows.length) {
       console.log('No snapshot metrics found for the selected criteria.');
