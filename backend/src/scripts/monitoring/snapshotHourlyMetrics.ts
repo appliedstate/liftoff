@@ -261,6 +261,11 @@ async function runSnapshot(): Promise<void> {
           ON ci.facebook_campaign_id = shm.campaign_id  -- Join via Facebook campaign ID
          AND ci.date = shm.date
         WHERE shm.media_source IS NOT NULL
+          -- Include UTC dates that could contribute to PST days in the window
+          -- PST day N includes UTC dates N (hours 8-23) and N+1 (hours 0-7)
+          -- So we need to include UTC dates from start_day_pst to end_day_pst+1
+          AND shm.date >= (SELECT date_trunc('day', snapshot_pst - INTERVAL 8 HOUR) - INTERVAL ${DEFAULT_TRAILING_DAYS} DAY FROM params)
+          AND shm.date <= (SELECT date_trunc('day', snapshot_pst - INTERVAL 8 HOUR) + INTERVAL 1 DAY FROM params)
       ),
       stamped AS (
         SELECT
@@ -293,6 +298,16 @@ async function runSnapshot(): Promise<void> {
           -- To compare: convert snapshot_pst to PST-represented timestamp, OR convert ts_pst back to UTC
           -- Method: ts_pst + 8 hours = original UTC timestamp, compare with snapshot_pst (UTC)
           AND (s.ts_pst + INTERVAL 8 HOUR) <= w.snapshot_pst
+      ),
+      debug_filtered AS (
+        SELECT 
+          COUNT(*) as filtered_count,
+          MIN(day_pst) as min_day,
+          MAX(day_pst) as max_day,
+          MIN(hour_pst) as min_hour,
+          MAX(hour_pst) as max_hour,
+          COUNT(DISTINCT day_pst) as unique_days
+        FROM filtered
       )
       SELECT
         w.snapshot_pst AS snapshot_pst,
