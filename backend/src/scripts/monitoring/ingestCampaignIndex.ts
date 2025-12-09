@@ -385,6 +385,42 @@ class CampaignAggregator {
       const campaignName = pick(row, ['campaign_name', 'name']);
       this.setIfEmpty(agg, 'campaignName', campaignName);
       
+      // CRITICAL: Extract strategisCampaignId from campaign name if not already set
+      // Pattern: campaignName.split('_')[0] (e.g., 'sire1f06al_20241208_facebook' -> 'sire1f06al')
+      // This follows the documented pattern in campaign-id-mapping.md
+      if (!agg.strategisCampaignId && campaignName) {
+        const parts = String(campaignName).trim().split('_');
+        if (parts.length > 0 && parts[0] && parts[0].length > 0) {
+          const extractedId = parts[0];
+          // Only use if it looks like a Strategis ID (not a Facebook ID)
+          // Strategis IDs are typically: short (< 15 chars), alphanumeric, may contain 'sipuli' or other patterns
+          // Facebook IDs are: long numeric strings (17+ digits)
+          if (extractedId.length < 15 && !/^\d+$/.test(extractedId) && /^[a-z0-9_-]+$/i.test(extractedId)) {
+            agg.strategisCampaignId = extractedId;
+            // If the key was a Facebook campaign ID, update it to use Strategis ID
+            if (agg.key !== extractedId && String(agg.key).length > 10) {
+              // Move aggregate to new key (Strategis ID)
+              const existingAgg = this.aggregates.get(extractedId);
+              if (existingAgg && existingAgg.strategisCampaignId === extractedId) {
+                // Merge: copy Facebook campaign ID to existing aggregate if not set
+                if (!existingAgg.facebookCampaignId && agg.facebookCampaignId) {
+                  existingAgg.facebookCampaignId = agg.facebookCampaignId;
+                }
+                // Delete the old aggregate (keyed by Facebook ID)
+                this.aggregates.delete(agg.key);
+                // Use existing aggregate
+                agg = existingAgg;
+              } else {
+                // Update key to Strategis ID
+                this.aggregates.delete(agg.key);
+                agg.key = extractedId;
+                this.aggregates.set(extractedId, agg);
+              }
+            }
+          }
+        }
+      }
+      
       this.setIfEmpty(agg, 'owner', pick(row, ['owner']));
       this.setIfEmpty(agg, 'lane', pick(row, ['lane']));
       this.setIfEmpty(agg, 'category', pick(row, ['category']));
