@@ -276,8 +276,11 @@ async function runSnapshot(): Promise<void> {
       snap_window AS (
         SELECT
           snapshot_pst,
-          date_trunc('day', snapshot_pst) - INTERVAL ${DEFAULT_TRAILING_DAYS} DAY AS start_day_pst,
-          date_trunc('day', snapshot_pst) AS end_day_pst
+          -- Convert snapshot_pst (UTC) to PST for day calculation
+          -- snapshot_pst is UTC timestamp representing PST wall-clock time
+          -- To get PST day: subtract 8 hours, then truncate to day
+          date_trunc('day', snapshot_pst - INTERVAL 8 HOUR) - INTERVAL ${DEFAULT_TRAILING_DAYS} DAY AS start_day_pst,
+          date_trunc('day', snapshot_pst - INTERVAL 8 HOUR) AS end_day_pst
         FROM params
       ),
       filtered AS (
