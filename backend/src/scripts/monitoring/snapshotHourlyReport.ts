@@ -341,11 +341,50 @@ async function main(): Promise<void> {
         });
         
         if (campaignId && !debugCampaigns.some((r: any) => r.campaign_id === campaignId)) {
-          console.log(`\n  ⚠ Campaign ID "${campaignId}" not found in snapshots.`);
-          console.log(`  Available campaign IDs are listed above.`);
+          console.log(`\n  ⚠ Campaign ID "${campaignId}" not found in snapshots with site=${site} and media_source IN (${mediaSources.join(', ')}).`);
+          
+          // Check if campaign exists in snapshots with different site/media_source
+          const allCampaignRows = await allRows<any>(conn, `
+            SELECT DISTINCT campaign_id, rsoc_site, media_source, COUNT(*) as row_count
+            FROM hourly_snapshot_metrics
+            WHERE snapshot_pst IN (${snapshotList})
+              AND campaign_id = ${sqlString(campaignId)}
+            GROUP BY campaign_id, rsoc_site, media_source
+            ORDER BY row_count DESC
+          `);
+          
+          if (allCampaignRows.length > 0) {
+            console.log(`\n  Campaign "${campaignId}" exists in snapshots with different filters:`);
+            allCampaignRows.forEach((r: any) => {
+              console.log(`    site=${r.rsoc_site || 'NULL'}, media_source=${r.media_source || 'NULL'}: ${r.row_count} rows`);
+            });
+            console.log(`\n  Try running with: --site=${allCampaignRows[0].rsoc_site || 'N/A'} --media-source=${allCampaignRows[0].media_source || 'N/A'}`);
+          } else {
+            console.log(`  Campaign "${campaignId}" not found in snapshots at all.`);
+            console.log(`  This might mean the join with campaign_index failed (no facebook_campaign_id match).`);
+          }
         }
       } else {
         console.log(`\nDEBUG: No campaigns found matching site=${site} and media_source IN (${mediaSources.join(', ')})`);
+        
+        // If we're looking for a specific campaign, check if it exists without filters
+        if (campaignId) {
+          const unfilteredRows = await allRows<any>(conn, `
+            SELECT DISTINCT campaign_id, rsoc_site, media_source, COUNT(*) as row_count
+            FROM hourly_snapshot_metrics
+            WHERE snapshot_pst IN (${snapshotList})
+              AND campaign_id = ${sqlString(campaignId)}
+            GROUP BY campaign_id, rsoc_site, media_source
+            LIMIT 5
+          `);
+          
+          if (unfilteredRows.length > 0) {
+            console.log(`\n  Campaign "${campaignId}" exists in snapshots but with different site/media:`);
+            unfilteredRows.forEach((r: any) => {
+              console.log(`    site=${r.rsoc_site || 'NULL'}, media_source=${r.media_source || 'NULL'}: ${r.row_count} rows`);
+            });
+          }
+        }
       }
       
       return;
