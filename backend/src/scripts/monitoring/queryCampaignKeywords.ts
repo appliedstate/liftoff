@@ -472,7 +472,29 @@ async function findFacebookCampaignIds(conn: any, strategisCampaignId: string, d
       }
     }
     
-    // Method 2: Fallback - search in raw_payload (for older data)
+    // Method 2: Reverse lookup - find Facebook campaign IDs from session_hourly_metrics
+    // Join session_hourly_metrics with campaign_index to find Facebook campaign IDs
+    if (fbCampaignIds.size === 0) {
+      const reverseRows = await allRows<any>(conn, `
+        SELECT DISTINCT shm.campaign_id AS fb_campaign_id
+        FROM session_hourly_metrics shm
+        INNER JOIN campaign_index ci
+          ON ci.facebook_campaign_id = shm.campaign_id
+         AND ci.date = shm.date
+        WHERE ci.campaign_id = ${sqlString(strategisCampaignId)}
+          AND shm.date >= ${sqlString(startDate.toISOString().slice(0, 10))}
+          AND shm.date <= ${sqlString(dateStr)}
+          AND shm.media_source = 'facebook'
+      `);
+      
+      for (const row of reverseRows) {
+        if (row.fb_campaign_id && String(row.fb_campaign_id).length > 10) {
+          fbCampaignIds.add(String(row.fb_campaign_id));
+        }
+      }
+    }
+    
+    // Method 3: Fallback - search in raw_payload (for older data)
     if (fbCampaignIds.size === 0) {
       const rows = await allRows<any>(conn, `
         SELECT DISTINCT raw_payload
