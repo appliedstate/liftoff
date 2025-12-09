@@ -184,7 +184,37 @@ async function main(): Promise<void> {
 
     const currentSnapshot = await getCurrentSnapshot(conn, asOfIso);
     if (!currentSnapshot) {
-      console.log('No snapshots available in hourly_snapshot_metrics.');
+      // Debug: Check if table exists and has any data
+      const debugRows = await allRows<any>(conn, `
+        SELECT COUNT(*) as total_rows, 
+               COUNT(DISTINCT snapshot_pst) as unique_snapshots,
+               MIN(snapshot_pst) as earliest_snapshot,
+               MAX(snapshot_pst) as latest_snapshot
+        FROM hourly_snapshot_metrics
+      `);
+      if (debugRows.length > 0 && debugRows[0].total_rows > 0) {
+        console.log('DEBUG: Table has data but getCurrentSnapshot returned null');
+        console.log(`  Total rows: ${debugRows[0].total_rows}`);
+        console.log(`  Unique snapshots: ${debugRows[0].unique_snapshots}`);
+        console.log(`  Earliest: ${debugRows[0].earliest_snapshot}`);
+        console.log(`  Latest: ${debugRows[0].latest_snapshot}`);
+        
+        // Also check what campaign IDs exist
+        const campaignRows = await allRows<any>(conn, `
+          SELECT DISTINCT campaign_id, COUNT(*) as row_count
+          FROM hourly_snapshot_metrics
+          GROUP BY campaign_id
+          ORDER BY row_count DESC
+          LIMIT 20
+        `);
+        console.log(`\n  Sample campaign IDs in snapshots (top 20):`);
+        campaignRows.forEach((r: any) => {
+          console.log(`    ${r.campaign_id}: ${r.row_count} rows`);
+        });
+      } else {
+        console.log('No snapshots available in hourly_snapshot_metrics.');
+        console.log('  Run: npm run monitor:snapshot-hourly');
+      }
       return;
     }
 
@@ -279,6 +309,34 @@ async function main(): Promise<void> {
 
     if (!rows.length) {
       console.log('No snapshot metrics found for the selected criteria.');
+      
+      // Debug: Show what campaign IDs exist in snapshots
+      const debugCampaigns = await allRows<any>(conn, `
+        SELECT DISTINCT campaign_id, COUNT(*) as row_count
+        FROM hourly_snapshot_metrics
+        WHERE snapshot_pst IN (${snapshotList})
+          AND rsoc_site = ${sqlString(site)}
+          AND media_source IN (${mediaSourceFilter})
+        GROUP BY campaign_id
+        ORDER BY row_count DESC
+        LIMIT 20
+      `);
+      
+      if (debugCampaigns.length > 0) {
+        console.log(`\nDEBUG: Found ${debugCampaigns.length} campaign IDs in snapshots (matching site/media filters):`);
+        debugCampaigns.forEach((r: any) => {
+          const match = campaignId && r.campaign_id === campaignId ? ' ← LOOKING FOR THIS' : '';
+          console.log(`  ${r.campaign_id}: ${r.row_count} rows${match}`);
+        });
+        
+        if (campaignId && !debugCampaigns.some((r: any) => r.campaign_id === campaignId)) {
+          console.log(`\n  ⚠ Campaign ID "${campaignId}" not found in snapshots.`);
+          console.log(`  Available campaign IDs are listed above.`);
+        }
+      } else {
+        console.log(`\nDEBUG: No campaigns found matching site=${site} and media_source IN (${mediaSources.join(', ')})`);
+      }
+      
       return;
     }
 
