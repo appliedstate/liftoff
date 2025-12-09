@@ -354,18 +354,48 @@ async function main(): Promise<void> {
         
         if (!keyword || keyword.trim() === '') continue;
 
-        // Calculate total revenue from revenue_updates array
+        // Calculate total revenue for this session
+        // 
+        // Revenue calculation priority:
+        // 1. session.total_revenue - Final reconciled/reported total revenue (if available)
+        // 2. Last revenue value from revenue_updates - Final settled revenue at the last click hour update
+        // 3. Sum of all revenue values in revenue_updates - If updates are incremental per hour
+        // 4. Direct revenue fields - Fallback
+        //
+        // Note: revenue_updates array contains revenue updates at different click hours.
+        // Each update's revenue value represents the revenue at that specific hour.
+        // The final reported total revenue is typically the last update's revenue value
+        // (representing the final settled revenue) rather than the sum of incremental updates.
         let revenue = 0;
-        if (session.revenue_updates && Array.isArray(session.revenue_updates)) {
-          // Sum all revenue values from the updates
-          revenue = session.revenue_updates.reduce((sum: number, update: any) => {
-            const rev = Number(update.revenue || 0);
-            return sum + (isNaN(rev) ? 0 : rev);
-          }, 0);
+        
+        // First, check if there's a final total_revenue field (reconciled/final value)
+        if (session.total_revenue !== undefined && session.total_revenue !== null) {
+          revenue = Number(session.total_revenue);
+        } else if (session.revenue_updates && Array.isArray(session.revenue_updates) && session.revenue_updates.length > 0) {
+          // Use the last revenue value from revenue_updates (final settled revenue at the last update)
+          // Sort by hour (descending) to get the latest update
+          const sortedUpdates = [...session.revenue_updates].sort((a: any, b: any) => {
+            const hourA = Number(a.hour || 0);
+            const hourB = Number(b.hour || 0);
+            return hourB - hourA; // Descending order - latest hour first
+          });
+          
+          const lastUpdate = sortedUpdates[0];
+          const lastRevenue = Number(lastUpdate.revenue || 0);
+          
+          if (!isNaN(lastRevenue)) {
+            // Use final settled revenue from last update (this is the final reported total revenue)
+            revenue = lastRevenue;
+          } else {
+            // Fallback: sum all revenue values (if updates are incremental)
+            revenue = session.revenue_updates.reduce((sum: number, update: any) => {
+              const rev = Number(update.revenue || 0);
+              return sum + (isNaN(rev) ? 0 : rev);
+            }, 0);
+          }
         } else {
           // Fallback to direct revenue field
           revenue = Number(
-            session.total_revenue || 
             session.revenue || 
             session.estimated_revenue || 
             session.revenue_usd ||
