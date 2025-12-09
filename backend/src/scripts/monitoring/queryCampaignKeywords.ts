@@ -73,41 +73,89 @@ function displayKeywordResults(
 
 async function findStrategisCampaignId(conn: any, fbCampaignId: string, dateStr: string): Promise<string | null> {
   // Reverse lookup: Find Strategis campaign ID from Facebook campaign ID
+  // NOTE: campaign_index stores Strategis campaign IDs, not Facebook campaign IDs
+  // Facebook campaign IDs may be in raw_payload from Facebook API responses, but
+  // the Facebook APIs typically return strategisCampaignId, not Facebook campaign IDs
   try {
     const date = new Date(dateStr);
     const startDate = new Date(date);
     startDate.setDate(date.getDate() - 30); // Look back 30 days
     
     const rows = await allRows<any>(conn, `
-      SELECT DISTINCT campaign_id, campaign_name, raw_payload, date
+      SELECT DISTINCT campaign_id, campaign_name, raw_payload, date, snapshot_source
       FROM campaign_index
       WHERE date >= ${sqlString(startDate.toISOString().slice(0, 10))}
         AND date <= ${sqlString(dateStr)}
         AND raw_payload IS NOT NULL
+        AND media_source = 'facebook'
       ORDER BY date DESC
+      LIMIT 1000
     `);
     
+    console.log(`  Checking ${rows.length} Facebook campaigns in campaign_index for Facebook campaign ID ${fbCampaignId}...`);
+    
+    let checkedCount = 0;
     for (const row of rows) {
       try {
         const raw = typeof row.raw_payload === 'string' ? JSON.parse(row.raw_payload) : row.raw_payload;
+        
         // Check various possible field names for Facebook campaign ID
         const rawFbCampaignId = 
           raw?.fbCampaignId || 
           raw?.fb_campaign_id || 
           raw?.facebookCampaignId || 
+          raw?.campaignId || // Facebook API might return campaignId as Facebook ID
+          raw?.id || // Sometimes just 'id'
           raw?.properties?.fbCampaignId ||
-          raw?.properties?.fb_campaign_id;
+          raw?.properties?.fb_campaign_id ||
+          raw?.properties?.campaignId;
         
+        checkedCount++;
         if (rawFbCampaignId && String(rawFbCampaignId) === String(fbCampaignId)) {
           // Found matching Facebook campaign ID, return the Strategis campaign ID
+          console.log(`  ✓ Found match! Strategis campaign ID: ${row.campaign_id} (from ${row.snapshot_source})`);
           return row.campaign_id;
         }
       } catch {
         // Ignore malformed JSON
       }
     }
+    
+    console.log(`  ⚠ Checked ${checkedCount} campaigns but no Facebook campaign ID match found`);
+    console.log(`  Note: campaign_index may not store Facebook campaign IDs - it primarily stores Strategis campaign IDs`);
+    console.log(`  The Facebook campaign ${fbCampaignId} may not be in campaign_index, or the mapping may be stored elsewhere`);
+    
   } catch (error: any) {
     console.warn(`Warning: Could not query reverse campaign mapping: ${error.message}`);
+  }
+  
+  return null;
+}
+
+async function findStrategisCampaignIdByAdset(conn: any, adsetId: string, dateStr: string): Promise<string | null> {
+  // Alternative lookup: Find Strategis campaign ID by matching adset_id
+  // campaign_index stores adset_id, so we can use that to find the Strategis campaign ID
+  try {
+    const date = new Date(dateStr);
+    const startDate = new Date(date);
+    startDate.setDate(date.getDate() - 30);
+    
+    const rows = await allRows<any>(conn, `
+      SELECT DISTINCT campaign_id, campaign_name, adset_id, date
+      FROM campaign_index
+      WHERE adset_id = ${sqlString(adsetId)}
+        AND date >= ${sqlString(startDate.toISOString().slice(0, 10))}
+        AND date <= ${sqlString(dateStr)}
+        AND media_source = 'facebook'
+      ORDER BY date DESC
+      LIMIT 10
+    `);
+    
+    if (rows.length > 0) {
+      return rows[0].campaign_id; // Return the first match
+    }
+  } catch (error: any) {
+    console.warn(`Warning: Could not query by adset_id: ${error.message}`);
   }
   
   return null;
@@ -283,15 +331,22 @@ async function main(): Promise<void> {
   
   if (fbCampaignId) {
     // User provided Facebook campaign ID directly - find the Strategis campaign ID
+    // NOTE: This Facebook campaign ID was chosen from sample session data (--show-sample=true)
+    // It's one of the campaigns that appeared in the API response for 2025-12-08
     fbCampaignIds.add(fbCampaignId);
     console.log(`Using Facebook campaign ID directly: ${fbCampaignId}`);
-    console.log('Looking up Strategis campaign ID...');
+    console.log(`(This ID was from sample session data - it may not map to a Strategis campaign in campaign_index)`);
+    console.log('Looking up Strategis campaign ID in campaign_index...');
     foundStrategisId = await findStrategisCampaignId(conn, fbCampaignId, dateStr);
     if (foundStrategisId) {
       console.log(`  ✓ Found Strategis campaign ID: ${foundStrategisId}`);
     } else {
       console.log(`  ⚠ Could not find Strategis campaign ID for Facebook campaign ${fbCampaignId}`);
-      console.log(`    This may be expected if the campaign is not in campaign_index`);
+      console.log(`    Possible reasons:`);
+      console.log(`    - campaign_index stores Strategis campaign IDs, not Facebook campaign IDs`);
+      console.log(`    - Facebook APIs return strategisCampaignId, not Facebook campaign IDs`);
+      console.log(`    - This campaign may not be ingested into campaign_index yet`);
+      console.log(`    - The mapping may need to be found via adset_id or ad_id instead`);
     }
   } else if (campaignId) {
     console.log('Loading campaign mapping from monitoring database...');
