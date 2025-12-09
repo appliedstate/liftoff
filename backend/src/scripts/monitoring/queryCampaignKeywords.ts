@@ -71,6 +71,97 @@ function displayKeywordResults(
   );
 }
 
+/**
+ * Find Strategis campaign ID by matching campaign name across different data sources.
+ * This links Facebook campaigns (with Facebook IDs) to Strategis campaigns (with Strategis IDs).
+ */
+async function findStrategisIdByCampaignName(
+  conn: any,
+  campaignName: string | null | undefined,
+  fbCampaignId: string,
+  startDate: string,
+  endDate: string
+): Promise<string | null> {
+  if (!campaignName) {
+    return null;
+  }
+  
+  console.log(`  Searching for Strategis ID by campaign name: "${campaignName}"...`);
+  
+  // Case-insensitive search for campaigns with the same name from S1 sources
+  // These should have Strategis IDs as their campaign_id
+  const s1Rows = await allRows<any>(conn, `
+    SELECT DISTINCT campaign_id, campaign_name, facebook_campaign_id, date, snapshot_source, owner, lane, category
+    FROM campaign_index
+    WHERE LOWER(TRIM(campaign_name)) = LOWER(TRIM(${sqlString(campaignName)}))
+      AND snapshot_source IN ('s1_daily_v3', 's1_reconciled')
+      AND campaign_id IS NOT NULL
+      AND (
+        campaign_id LIKE '%sipuli%' 
+        OR LENGTH(campaign_id) < 15 
+        OR NOT REGEXP_MATCHES(campaign_id, '^[0-9]+$')
+      )
+      AND date >= ${sqlString(startDate)}
+      AND date <= ${sqlString(endDate)}
+      AND media_source = 'facebook'
+    ORDER BY date DESC, snapshot_source DESC
+    LIMIT 10
+  `);
+  
+  if (s1Rows.length > 0) {
+    const strategisId = s1Rows[0].campaign_id;
+    const s1CampaignName = s1Rows[0].campaign_name;
+    const s1FacebookId = s1Rows[0].facebook_campaign_id;
+    
+    // If the S1 record already has this Facebook ID, perfect match!
+    if (s1FacebookId === fbCampaignId) {
+      console.log(`  ✓ Found exact match: Strategis ID ${strategisId} already linked to Facebook ID ${fbCampaignId}`);
+      return strategisId;
+    }
+    
+    // Otherwise, it's a name match - verify it's likely the same campaign
+    console.log(`  ✓ Found Strategis campaign ID via name match: ${strategisId}`);
+    console.log(`    Campaign name: "${s1CampaignName}"`);
+    if (s1FacebookId) {
+      console.log(`    S1 record has Facebook ID: ${s1FacebookId} (querying for: ${fbCampaignId})`);
+    } else {
+      console.log(`    S1 record has no Facebook ID - this is a new link!`);
+    }
+    console.log(`    Note: Verify this is the correct campaign match.`);
+    return strategisId;
+  }
+  
+  // Also check if any Facebook source records have this name and a Strategis ID
+  // (in case Facebook data was ingested after S1 data)
+  const fbRowsWithStrategisId = await allRows<any>(conn, `
+    SELECT DISTINCT campaign_id, campaign_name, facebook_campaign_id, date, snapshot_source
+    FROM campaign_index
+    WHERE LOWER(TRIM(campaign_name)) = LOWER(TRIM(${sqlString(campaignName)}))
+      AND snapshot_source IN ('facebook_campaigns', 'facebook_adsets', 'facebook_report')
+      AND facebook_campaign_id = ${sqlString(fbCampaignId)}
+      AND campaign_id IS NOT NULL
+      AND (
+        campaign_id LIKE '%sipuli%' 
+        OR LENGTH(campaign_id) < 15 
+        OR NOT REGEXP_MATCHES(campaign_id, '^[0-9]+$')
+      )
+      AND date >= ${sqlString(startDate)}
+      AND date <= ${sqlString(endDate)}
+      AND media_source = 'facebook'
+    ORDER BY date DESC
+    LIMIT 10
+  `);
+  
+  if (fbRowsWithStrategisId.length > 0) {
+    const strategisId = fbRowsWithStrategisId[0].campaign_id;
+    console.log(`  ✓ Found Strategis campaign ID in Facebook source: ${strategisId}`);
+    console.log(`    This Facebook campaign was already linked to a Strategis ID.`);
+    return strategisId;
+  }
+  
+  return null;
+}
+
 async function findStrategisCampaignId(conn: any, fbCampaignId: string, dateStr: string): Promise<string | null> {
   // Reverse lookup: Find Strategis campaign ID from Facebook campaign ID
   // Uses the facebook_campaign_id column in campaign_index (populated from Facebook adset/campaign APIs)
@@ -133,33 +224,18 @@ async function findStrategisCampaignId(conn: any, fbCampaignId: string, dateStr:
           console.log(`  ✓ Found Strategis campaign ID: ${strategisRows[0].campaign_id}`);
           return strategisRows[0].campaign_id;
         } else {
-          // Try searching by campaign name in S1 data sources
+          // Try searching by campaign name to link Facebook campaign to Strategis ID
           const campaignName = directRows[0]?.campaign_name;
-          if (campaignName) {
-            console.log(`  Searching S1 data sources by campaign name: "${campaignName}"...`);
-            const s1Rows = await allRows<any>(conn, `
-              SELECT DISTINCT campaign_id, campaign_name, facebook_campaign_id, date, snapshot_source
-              FROM campaign_index
-              WHERE campaign_name = ${sqlString(campaignName)}
-                AND snapshot_source IN ('s1_daily_v3', 's1_reconciled')
-                AND campaign_id IS NOT NULL
-                AND (
-                  campaign_id LIKE '%sipuli%' 
-                  OR LENGTH(campaign_id) < 15 
-                  OR NOT REGEXP_MATCHES(campaign_id, '^[0-9]+$')
-                )
-                AND date >= ${sqlString(startDate.toISOString().slice(0, 10))}
-                AND date <= ${sqlString(dateStr)}
-                AND media_source = 'facebook'
-              ORDER BY date DESC
-              LIMIT 10
-            `);
-            
-            if (s1Rows.length > 0) {
-              console.log(`  ✓ Found Strategis campaign ID via campaign name match: ${s1Rows[0].campaign_id}`);
-              console.log(`  Note: This match is by name, not Facebook ID. Verify it's the correct campaign.`);
-              return s1Rows[0].campaign_id;
-            }
+          const foundStrategisId = await findStrategisIdByCampaignName(
+            conn, 
+            campaignName, 
+            fbCampaignId, 
+            startDate.toISOString().slice(0, 10), 
+            dateStr
+          );
+          
+          if (foundStrategisId) {
+            return foundStrategisId;
           }
           
           console.log(`  ⚠ No Strategis campaign ID found. Campaign may not exist in S1 data yet.`);
