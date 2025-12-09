@@ -20,7 +20,7 @@
 
 import 'dotenv/config';
 import { StrategisApi } from '../../lib/strategisApi';
-import { createMonitoringConnection, allRows, closeConnection, sqlString } from '../../lib/monitoringDb';
+import { createMonitoringConnection, allRows, closeConnection, sqlString, initMonitoringSchema } from '../../lib/monitoringDb';
 
 function getFlag(name: string, def?: string): string {
   const key = `--${name}=`;
@@ -329,6 +329,8 @@ async function main(): Promise<void> {
 
   // Load campaign mapping from monitoring database
   const conn = createMonitoringConnection();
+  // Ensure schema is initialized (adds facebook_campaign_id column if needed)
+  await initMonitoringSchema(conn);
   let fbCampaignIds: Set<string> = new Set();
   let foundStrategisId: string | null = null;
   const searchCampaignId = campaignId || fbCampaignId;

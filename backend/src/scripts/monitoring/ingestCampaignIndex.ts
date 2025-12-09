@@ -665,7 +665,7 @@ class CampaignAggregator {
 
   private setIfEmpty(
     agg: CampaignAggregate,
-    field: 'accountId' | 'campaignName' | 'owner' | 'lane' | 'category' | 'mediaSource' | 'adsetId' | 'adsetName' | 'rsocSite' | 's1GoogleAccount',
+    field: 'accountId' | 'campaignName' | 'owner' | 'lane' | 'category' | 'mediaSource' | 'adsetId' | 'adsetName' | 'rsocSite' | 's1GoogleAccount' | 'facebookCampaignId',
     value?: string | null
   ): void {
     if (!value) return;
