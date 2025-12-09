@@ -659,7 +659,7 @@ async function main(): Promise<void> {
 
   // API was already initialized above for campaign ID lookup
 
-  const keywordStats = new Map<string, { sessions: number; revenue: number; rpc: number }>();
+  const keywordStats = new Map<string, KeywordStats>();
 
   // Query S1 session-level API (includes keywords)
   console.log('\nQuerying S1 session-level API for keyword data...\n');
