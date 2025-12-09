@@ -92,8 +92,47 @@ async function findStrategisCampaignId(conn: any, fbCampaignId: string, dateStr:
     `);
     
     if (directRows.length > 0) {
-      console.log(`  ✓ Found match via facebook_campaign_id column! Strategis campaign ID: ${directRows[0].campaign_id}`);
-      return directRows[0].campaign_id;
+      const foundCampaignId = directRows[0].campaign_id;
+      // Check if campaign_id looks like a Strategis ID (alphanumeric, contains "sipuli", or short)
+      // vs Facebook ID (long numeric string)
+      const looksLikeStrategisId = foundCampaignId && (
+        foundCampaignId.includes('sipuli') ||
+        foundCampaignId.length < 15 ||
+        /^[a-zA-Z0-9_-]+$/.test(foundCampaignId) && !/^\d+$/.test(foundCampaignId)
+      );
+      
+      if (looksLikeStrategisId) {
+        console.log(`  ✓ Found match via facebook_campaign_id column! Strategis campaign ID: ${foundCampaignId}`);
+        return foundCampaignId;
+      } else {
+        // campaign_id is a Facebook ID, not a Strategis ID
+        // Search for other campaigns with the same facebook_campaign_id that might have a Strategis ID
+        console.log(`  ⚠ Found campaign but campaign_id (${foundCampaignId}) looks like a Facebook ID, not Strategis ID`);
+        console.log(`  Searching for Strategis ID in other records...`);
+        
+        // Look for campaigns with same facebook_campaign_id but different campaign_id (which should be Strategis ID)
+        const strategisRows = await allRows<any>(conn, `
+          SELECT DISTINCT campaign_id, campaign_name, facebook_campaign_id, date, snapshot_source
+          FROM campaign_index
+          WHERE facebook_campaign_id = ${sqlString(fbCampaignId)}
+            AND campaign_id != ${sqlString(foundCampaignId)}
+            AND campaign_id IS NOT NULL
+            AND (campaign_id LIKE '%sipuli%' OR LENGTH(campaign_id) < 15 OR campaign_id NOT GLOB '[0-9]*')
+            AND date >= ${sqlString(startDate.toISOString().slice(0, 10))}
+            AND date <= ${sqlString(dateStr)}
+          ORDER BY date DESC
+          LIMIT 10
+        `);
+        
+        if (strategisRows.length > 0) {
+          console.log(`  ✓ Found Strategis campaign ID: ${strategisRows[0].campaign_id}`);
+          return strategisRows[0].campaign_id;
+        } else {
+          console.log(`  ⚠ No Strategis campaign ID found. Campaign may not exist in S1 data yet.`);
+          console.log(`  Using Facebook campaign ID as fallback: ${foundCampaignId}`);
+          return foundCampaignId; // Fallback to Facebook ID
+        }
+      }
     }
     
     // Fallback: Search in raw_payload (for older data that may not have facebook_campaign_id populated)
