@@ -257,9 +257,20 @@ async function main(): Promise<void> {
     // Build WHERE clause with optional filters
     const whereConditions: string[] = [
       `snapshot_pst IN (${snapshotList})`,
-      `rsoc_site = ${sqlString(site)}`,
-      `media_source IN (${mediaSourceFilter})`,
     ];
+    
+    // Only filter by site if explicitly provided
+    if (site) {
+      whereConditions.push(`rsoc_site = ${sqlString(site)}`);
+    }
+    
+    // Only filter by media_source if explicitly provided
+    if (mediaSources && mediaSources.length > 0) {
+      const mediaSourceFilter = mediaSources
+        .map((m) => sqlString(m))
+        .join(', ');
+      whereConditions.push(`media_source IN (${mediaSourceFilter})`);
+    }
 
     if (campaignId) {
       whereConditions.push(`campaign_id = ${sqlString(campaignId)}`);
