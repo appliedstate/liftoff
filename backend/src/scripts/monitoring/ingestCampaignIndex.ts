@@ -939,7 +939,9 @@ async function main(): Promise<void> {
       { label: 's1_reconciled', fetch: () => api.fetchS1Reconciled(date, true), merge: (rows) => aggregator.mergeS1Reconciled(rows) },
       { label: 's1_rpc_average', fetch: () => api.fetchS1RpcAverage(date), merge: (rows) => aggregator.mergeS1Rpc(rows) },
       // S1 mapping of networkCampaignId (Facebook) to strategisCampaignId
-      { label: 's1_network_map', fetch: () => api.fetchS1DailyWithNetworkCampaignId(date, '112'), merge: (rows) => aggregator.mergeNetworkCampaignMap(rows) },
+      // Try both known Facebook networkIds (109 documented, 112 observed elsewhere)
+      { label: 's1_network_map_109', fetch: () => api.fetchS1DailyWithNetworkCampaignId(date, '109'), merge: (rows) => aggregator.mergeNetworkCampaignMap(rows) },
+      { label: 's1_network_map_112', fetch: () => api.fetchS1DailyWithNetworkCampaignId(date, '112'), merge: (rows) => aggregator.mergeNetworkCampaignMap(rows) },
       
       // Facebook Data
       { label: 'facebook_report', fetch: () => api.fetchFacebookReport(date), merge: (rows) => aggregator.mergeFacebookReport(rows) },
