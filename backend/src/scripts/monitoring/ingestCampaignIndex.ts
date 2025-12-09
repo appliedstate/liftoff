@@ -692,8 +692,9 @@ class CampaignAggregator {
       if (!strategisId) {
         console.warn(`[ingestCampaignIndex] Warning: No Strategis campaign ID found for campaign ${campaignId || 'unknown'} from ${dataset}. This campaign may not be in S1 data.`);
       }
+      // At this point, key is guaranteed to be a string (we checked on line 649)
       agg = {
-        key: strategisId || campaignId, // Use Strategis ID if available, otherwise fallback to campaign ID
+        key: key, // key is guaranteed to be non-null string here
         strategisCampaignId: strategisId ?? null,
         campaignId: campaignId ?? strategisId ?? key,
         spendUsd: 0,
@@ -718,6 +719,7 @@ class CampaignAggregator {
       if (!agg.campaignId && campaignId) agg.campaignId = campaignId;
     }
     
+    // At this point, agg is guaranteed to be defined
     if (!agg.sourceMetrics[dataset]) {
       agg.sourceMetrics[dataset] = { rows: 0 };
     }
