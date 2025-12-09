@@ -712,11 +712,6 @@ async function main(): Promise<void> {
     }
   }
   
-  // Build a lookup map of Facebook campaign ID -> campaign name from campaign_index
-  // This helps us match sessions even when campaign_name isn't in the session data
-  // Declare early so it can be used in the reverse lookup above
-  const fbCampaignIdToName = new Map<string, string>();
-  
   if (campaignId) {
     try {
       const date = new Date(dateStr);
