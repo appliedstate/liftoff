@@ -330,12 +330,19 @@ async function main(): Promise<void> {
       console.log('No snapshot metrics found for the selected criteria.');
       
       // Debug: Show what campaign IDs exist in snapshots
+      const debugWhereConditions: string[] = [`snapshot_pst IN (${snapshotList})`];
+      if (site) {
+        debugWhereConditions.push(`rsoc_site = ${sqlString(site)}`);
+      }
+      if (mediaSources && mediaSources.length > 0) {
+        const mediaSourceFilter = mediaSources.map((m) => sqlString(m)).join(', ');
+        debugWhereConditions.push(`media_source IN (${mediaSourceFilter})`);
+      }
+      
       const debugCampaigns = await allRows<any>(conn, `
         SELECT DISTINCT campaign_id, COUNT(*) as row_count
         FROM hourly_snapshot_metrics
-        WHERE snapshot_pst IN (${snapshotList})
-          AND rsoc_site = ${sqlString(site)}
-          AND media_source IN (${mediaSourceFilter})
+        WHERE ${debugWhereConditions.join(' AND ')}
         GROUP BY campaign_id
         ORDER BY row_count DESC
         LIMIT 20
