@@ -188,6 +188,8 @@ async function runSnapshot(): Promise<void> {
           ci.campaign_name,
           ci.adset_id,
           ci.adset_name,
+          ci.clicks,
+          ci.conversions,
           -- UTC timestamp: date + click_hour
           shm.date + shm.click_hour * INTERVAL 1 HOUR AS ts_utc
         FROM session_hourly_metrics shm
@@ -238,9 +240,14 @@ async function runSnapshot(): Promise<void> {
         f.adset_name,
         SUM(f.sessions)    AS sessions,
         SUM(f.revenue)     AS revenue,
-        NULL               AS clicks,
-        NULL               AS conversions,
+        -- Clicks and conversions from campaign_index (daily aggregated)
+        -- For hourly snapshots, we'll aggregate these at the day level
+        -- Note: These are daily totals, not hourly, so they'll be the same for all hours in a day
+        MAX(f.clicks)      AS clicks,
+        MAX(f.conversions) AS conversions,
+        -- Calculate RPC: prefer revenue/conversions if conversions > 0, otherwise revenue/sessions
         CASE
+          WHEN MAX(f.conversions) > 0 THEN SUM(f.revenue) / MAX(f.conversions)
           WHEN SUM(f.sessions) > 0 THEN SUM(f.revenue) / SUM(f.sessions)
           ELSE 0
         END AS rpc
