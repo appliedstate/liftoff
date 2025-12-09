@@ -71,6 +71,48 @@ function displayKeywordResults(
   );
 }
 
+async function findStrategisCampaignId(conn: any, fbCampaignId: string, dateStr: string): Promise<string | null> {
+  // Reverse lookup: Find Strategis campaign ID from Facebook campaign ID
+  try {
+    const date = new Date(dateStr);
+    const startDate = new Date(date);
+    startDate.setDate(date.getDate() - 30); // Look back 30 days
+    
+    const rows = await allRows<any>(conn, `
+      SELECT DISTINCT campaign_id, campaign_name, raw_payload, date
+      FROM campaign_index
+      WHERE date >= ${sqlString(startDate.toISOString().slice(0, 10))}
+        AND date <= ${sqlString(dateStr)}
+        AND raw_payload IS NOT NULL
+      ORDER BY date DESC
+    `);
+    
+    for (const row of rows) {
+      try {
+        const raw = typeof row.raw_payload === 'string' ? JSON.parse(row.raw_payload) : row.raw_payload;
+        // Check various possible field names for Facebook campaign ID
+        const rawFbCampaignId = 
+          raw?.fbCampaignId || 
+          raw?.fb_campaign_id || 
+          raw?.facebookCampaignId || 
+          raw?.properties?.fbCampaignId ||
+          raw?.properties?.fb_campaign_id;
+        
+        if (rawFbCampaignId && String(rawFbCampaignId) === String(fbCampaignId)) {
+          // Found matching Facebook campaign ID, return the Strategis campaign ID
+          return row.campaign_id;
+        }
+      } catch {
+        // Ignore malformed JSON
+      }
+    }
+  } catch (error: any) {
+    console.warn(`Warning: Could not query reverse campaign mapping: ${error.message}`);
+  }
+  
+  return null;
+}
+
 async function findFacebookCampaignIds(conn: any, strategisCampaignId: string, dateStr: string): Promise<Set<string>> {
   const fbCampaignIds = new Set<string>();
   
@@ -233,19 +275,32 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const displayId = fbCampaignId ? `Facebook: ${fbCampaignId}` : campaignId ? `Strategis: ${campaignId}` : '(filtering by adset/ad)';
+  const displayId = fbCampaignId 
+    ? `Facebook: ${fbCampaignId}${foundStrategisId ? ` (Strategis: ${foundStrategisId})` : ''}` 
+    : campaignId 
+    ? `Strategis: ${campaignId}` 
+    : '(filtering by adset/ad)';
   console.log(`\n# Keyword Performance for Campaign: ${displayId}`);
   console.log(`Date Range: ${dateStr} (last ${days} days)\n`);
 
   // Load campaign mapping from monitoring database
   const conn = createMonitoringConnection();
   let fbCampaignIds: Set<string> = new Set();
+  let foundStrategisId: string | null = null;
   const searchCampaignId = campaignId || fbCampaignId;
   
   if (fbCampaignId) {
-    // User provided Facebook campaign ID directly
+    // User provided Facebook campaign ID directly - find the Strategis campaign ID
     fbCampaignIds.add(fbCampaignId);
     console.log(`Using Facebook campaign ID directly: ${fbCampaignId}`);
+    console.log('Looking up Strategis campaign ID...');
+    foundStrategisId = await findStrategisCampaignId(conn, fbCampaignId, dateStr);
+    if (foundStrategisId) {
+      console.log(`  ✓ Found Strategis campaign ID: ${foundStrategisId}`);
+    } else {
+      console.log(`  ⚠ Could not find Strategis campaign ID for Facebook campaign ${fbCampaignId}`);
+      console.log(`    This may be expected if the campaign is not in campaign_index`);
+    }
   } else if (campaignId) {
     console.log('Loading campaign mapping from monitoring database...');
     fbCampaignIds = await findFacebookCampaignIds(conn, campaignId, dateStr);
@@ -438,8 +493,30 @@ async function main(): Promise<void> {
     const sortedKeywords = Array.from(keywordStats.entries())
       .sort((a, b) => b[1].revenue - a[1].revenue);
 
-    console.log(`\nFound ${sortedKeywords.length} keywords for campaign ${campaignId}:\n`);
+    const displayCampaignId = foundStrategisId || campaignId || searchCampaignId || '(filtered)';
+    console.log(`\nFound ${sortedKeywords.length} keywords for campaign ${displayCampaignId}:\n`);
     displayKeywordResults(sortedKeywords, keywordStats);
+    
+    // Show verification info
+    if (foundStrategisId || campaignId) {
+      const strategisId = foundStrategisId || campaignId;
+      console.log(`\n${'='.repeat(80)}`);
+      console.log(`VERIFICATION:`);
+      console.log(`  Strategis Campaign ID: ${strategisId}`);
+      if (fbCampaignId) {
+        console.log(`  Facebook Campaign ID: ${fbCampaignId}`);
+      }
+      const totalRevenue = Array.from(keywordStats.values()).reduce((sum, stats) => sum + stats.revenue, 0);
+      const totalSessions = Array.from(keywordStats.values()).reduce((sum, stats) => sum + stats.sessions, 0);
+      console.log(`\n  Keyword Query Results:`);
+      console.log(`    Total Sessions: ${totalSessions}`);
+      console.log(`    Total Revenue: $${totalRevenue.toFixed(2)}`);
+      console.log(`    Overall RPC: $${(totalRevenue / totalSessions).toFixed(4)}`);
+      console.log(`\n  To verify revenue in snapshot report, run:`);
+      console.log(`    npm run monitor:snapshot-report -- --campaign-id=${strategisId} --date=${dateStr} --days=${days}`);
+      console.log(`${'='.repeat(80)}\n`);
+    }
+    
     return;
   }
 
