@@ -158,6 +158,47 @@ async function runSnapshot(): Promise<void> {
         });
       }
       
+      // Check what click hours exist for Dec 8
+      const clickHourRows = await allRows<any>(conn, `
+        SELECT 
+          click_hour,
+          COUNT(*) as row_count,
+          SUM(sessions) as total_sessions
+        FROM session_hourly_metrics
+        WHERE date = DATE '2025-12-08'
+          AND media_source IS NOT NULL
+        GROUP BY click_hour
+        ORDER BY click_hour
+      `);
+      
+      if (clickHourRows.length > 0) {
+        const minHour = clickHourRows[0].click_hour;
+        const maxHour = clickHourRows[clickHourRows.length - 1].click_hour;
+        console.log(`\nDEBUG: Click hours in session_hourly_metrics for 2025-12-08:`);
+        console.log(`  UTC click hours: ${minHour} to ${maxHour} (${clickHourRows.length} hours)`);
+        console.log(`  PST hours (UTC-8): ${(minHour - 8 + 24) % 24} to ${(maxHour - 8 + 24) % 24}`);
+        console.log(`  Snapshot was at: ${new Date(snapshotPst).toISOString()} (PST hour ${(new Date(snapshotPst).getUTCHours() - 8 + 24) % 24})`);
+        
+        // Show sample of hours
+        if (clickHourRows.length <= 24) {
+          clickHourRows.forEach((r: any) => {
+            const pstHour = (r.click_hour - 8 + 24) % 24;
+            console.log(`    UTC hour ${r.click_hour} (PST hour ${pstHour}): ${r.row_count} rows, ${r.total_sessions || 0} sessions`);
+          });
+        } else {
+          console.log(`  (Showing first 10 and last 5 hours)`);
+          clickHourRows.slice(0, 10).forEach((r: any) => {
+            const pstHour = (r.click_hour - 8 + 24) % 24;
+            console.log(`    UTC hour ${r.click_hour} (PST hour ${pstHour}): ${r.row_count} rows`);
+          });
+          console.log(`    ...`);
+          clickHourRows.slice(-5).forEach((r: any) => {
+            const pstHour = (r.click_hour - 8 + 24) % 24;
+            console.log(`    UTC hour ${r.click_hour} (PST hour ${pstHour}): ${r.row_count} rows`);
+          });
+        }
+      }
+      
       // Check campaign_index
       const indexRows = await allRows<any>(conn, `
         SELECT COUNT(*) as total_rows,
