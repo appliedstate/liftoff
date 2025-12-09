@@ -356,45 +356,51 @@ async function main(): Promise<void> {
 
         // Calculate total revenue for this session
         // 
-        // Revenue calculation priority:
-        // 1. session.total_revenue - Final reconciled/reported total revenue (if available)
-        // 2. Last revenue value from revenue_updates - Final settled revenue at the last click hour update
-        // 3. Sum of all revenue values in revenue_updates - If updates are incremental per hour
-        // 4. Direct revenue fields - Fallback
+        // IMPORTANT: Revenue calculation must be accurate as RPC depends on it.
         //
-        // Note: revenue_updates array contains revenue updates at different click hours.
-        // Each update's revenue value represents the revenue at that specific hour.
-        // The final reported total revenue is typically the last update's revenue value
-        // (representing the final settled revenue) rather than the sum of incremental updates.
+        // Revenue calculation priority:
+        // 1. Sum of all revenue values in revenue_updates array - Each click hour reports incremental revenue
+        //    This is the PRIMARY method: sum revenue from all reported click hours
+        // 2. session.total_revenue - Only use if we can verify it's final (end of day, not mid-day snapshot)
+        //    NOTE: total_revenue is updated throughout the day, so we should NOT use it for mid-day snapshots
+        // 3. Direct revenue fields - Fallback only
+        //
+        // Note: revenue_updates array contains incremental revenue updates at different click hours.
+        // Each update's revenue value represents the revenue reported for that specific click hour.
+        // We MUST SUM all revenue values to get the total revenue for the session.
         let revenue = 0;
         
-        // First, check if there's a final total_revenue field (reconciled/final value)
-        if (session.total_revenue !== undefined && session.total_revenue !== null) {
-          revenue = Number(session.total_revenue);
-        } else if (session.revenue_updates && Array.isArray(session.revenue_updates) && session.revenue_updates.length > 0) {
-          // Use the last revenue value from revenue_updates (final settled revenue at the last update)
-          // Sort by hour (descending) to get the latest update
-          const sortedUpdates = [...session.revenue_updates].sort((a: any, b: any) => {
-            const hourA = Number(a.hour || 0);
-            const hourB = Number(b.hour || 0);
-            return hourB - hourA; // Descending order - latest hour first
-          });
+        if (session.revenue_updates && Array.isArray(session.revenue_updates) && session.revenue_updates.length > 0) {
+          // PRIMARY METHOD: Sum all revenue values from revenue_updates
+          // Each revenue value represents incremental revenue for that click hour
+          revenue = session.revenue_updates.reduce((sum: number, update: any) => {
+            const rev = Number(update.revenue || 0);
+            if (!isNaN(rev) && rev > 0) {
+              return sum + rev;
+            }
+            return sum;
+          }, 0);
           
-          const lastUpdate = sortedUpdates[0];
-          const lastRevenue = Number(lastUpdate.revenue || 0);
-          
-          if (!isNaN(lastRevenue)) {
-            // Use final settled revenue from last update (this is the final reported total revenue)
-            revenue = lastRevenue;
-          } else {
-            // Fallback: sum all revenue values (if updates are incremental)
-            revenue = session.revenue_updates.reduce((sum: number, update: any) => {
-              const rev = Number(update.revenue || 0);
-              return sum + (isNaN(rev) ? 0 : rev);
-            }, 0);
+          // Only use total_revenue as validation/fallback if:
+          // 1. Sum is zero or invalid AND total_revenue exists
+          // 2. We're querying historical data (not current day) where total_revenue is final
+          // For now, we prioritize the sum from revenue_updates as it's the source of truth
+          if (revenue === 0 && session.total_revenue !== undefined && session.total_revenue !== null) {
+            const totalRev = Number(session.total_revenue);
+            if (!isNaN(totalRev) && totalRev > 0) {
+              // Only use total_revenue if sum is zero (might be a session with no revenue updates yet)
+              revenue = totalRev;
+            }
+          }
+        } else if (session.total_revenue !== undefined && session.total_revenue !== null) {
+          // Fallback: Use total_revenue only if revenue_updates is not available
+          // WARNING: This may be mid-day data, so total_revenue might not be final
+          const totalRev = Number(session.total_revenue);
+          if (!isNaN(totalRev)) {
+            revenue = totalRev;
           }
         } else {
-          // Fallback to direct revenue field
+          // Final fallback: Direct revenue fields
           revenue = Number(
             session.revenue || 
             session.estimated_revenue || 
