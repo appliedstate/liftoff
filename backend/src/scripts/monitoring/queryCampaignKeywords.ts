@@ -111,13 +111,18 @@ async function findStrategisCampaignId(conn: any, fbCampaignId: string, dateStr:
         console.log(`  Searching for Strategis ID in other records...`);
         
         // Look for campaigns with same facebook_campaign_id but different campaign_id (which should be Strategis ID)
+        // DuckDB doesn't support GLOB - use REGEXP_MATCHES for pattern matching
         const strategisRows = await allRows<any>(conn, `
           SELECT DISTINCT campaign_id, campaign_name, facebook_campaign_id, date, snapshot_source
           FROM campaign_index
           WHERE facebook_campaign_id = ${sqlString(fbCampaignId)}
             AND campaign_id != ${sqlString(foundCampaignId)}
             AND campaign_id IS NOT NULL
-            AND (campaign_id LIKE '%sipuli%' OR LENGTH(campaign_id) < 15 OR campaign_id NOT GLOB '[0-9]*')
+            AND (
+              campaign_id LIKE '%sipuli%' 
+              OR LENGTH(campaign_id) < 15 
+              OR NOT REGEXP_MATCHES(campaign_id, '^[0-9]+$')
+            )
             AND date >= ${sqlString(startDate.toISOString().slice(0, 10))}
             AND date <= ${sqlString(dateStr)}
           ORDER BY date DESC
