@@ -141,12 +141,18 @@ export class StrategisApi {
 
   /**
    * Fetch S1 session-level revenue data (includes keywords)
+   * Note: This endpoint is currently only available on the staging Strategis API
    * @param date Date string (YYYY-MM-DD)
    * @param filterZero Whether to filter out zero-revenue sessions (default: false)
    * @returns Array of session records with keyword, campaign_id, revenue, etc.
    */
   async fetchS1SessionRevenue(date: string, filterZero: boolean = false): Promise<any[]> {
-    const params: Record<string, any> = {
+    // This endpoint is currently only on staging Strategis API
+    // Use staging URL directly (matching how other scripts access it)
+    const stagingBaseUrl = process.env.STRATEGIS_STAGING_BASE_URL || 'https://staging-dot-strategis-273115.appspot.com';
+    const axios = require('axios');
+    
+    const params: Record<string, string> = {
       date,
       filterZero: filterZero ? '1' : '0',
       incremental: '1',
@@ -154,8 +160,14 @@ export class StrategisApi {
       offset: '0',
       output: 'json',
     };
-    const payload = await this.client.get('/api/s1/report/get-session-rev', params);
-    return extractRows(payload);
+    
+    const fullUrl = `${stagingBaseUrl}/api/s1/report/get-session-rev`;
+    const response = await axios.get(fullUrl, {
+      params,
+      timeout: 60000,
+    });
+    
+    return extractRows(response.data);
   }
 
   async fetchS1RpcAverage(date: string): Promise<any[]> {
