@@ -121,6 +121,24 @@ export class StrategisApi {
     return extractRows(payload);
   }
 
+  async fetchS1HourlyWithKeywords(date: string, includeAllNetworks: boolean = false): Promise<any[]> {
+    const params: Record<string, any> = {
+      ...this.singleDayRange(date),
+      organization: this.organization,
+      adSource: this.adSource,
+      timezone: this.timezone,
+      dbSource: DEFAULT_DB_SOURCE,
+      dimensions: 'date-hour-strategisCampaignId-keyword',
+    };
+    // Only include networkId filter if we want a specific network (default behavior)
+    // If includeAllNetworks=true, omit networkId to get all platforms
+    if (!includeAllNetworks && this.networkId) {
+      params.networkId = this.networkId;
+    }
+    const payload = await this.client.get('/api/s1/report/hourly-v3', params);
+    return extractRows(payload);
+  }
+
   async fetchS1RpcAverage(date: string): Promise<any[]> {
     const params = {
       date,
@@ -153,7 +171,6 @@ export class StrategisApi {
       ...this.singleDayRange(date),
       organization: this.organization,
       adSource: this.adSource,
-      dbSource: DEFAULT_DB_SOURCE,
       timezone: this.timezone,
       dimensions: 'date-strategisCampaignId',
     };
@@ -167,13 +184,27 @@ export class StrategisApi {
   // Platform-specific spend endpoints
 
   async fetchTaboolaReport(date: string): Promise<any[]> {
-    const params = {
+    /**
+     * Taboola spend data
+     *
+     * NOTE:
+     * - We intentionally call Strategis' cached campaign summary endpoint instead of the
+     *   low-level Taboola proxy to avoid 502s from Taboola and to let Strategis own the
+     *   dimension mapping.
+     * - Do NOT pass Taboola-specific `dimension` strings like `date-strategisCampaignId`
+     *   here – the Strategis backend will choose appropriate dimensions based on this
+     *   summary endpoint.
+     *
+     * Upstream reference: Taboola dimensions cheat sheet
+     * (see Strategis backend for exact mapping).
+     */
+    const params: Record<string, any> = {
       ...this.singleDayRange(date),
       organization: this.organization,
       adSource: this.adSource,
-      dimension: 'date-strategisCampaignId',
+      cached: 1,
     };
-    const payload = await this.client.get('/api/taboola/report', params);
+    const payload = await this.client.get('/api/taboola/campaign-summary-report', params);
     return extractRows(payload);
   }
 
