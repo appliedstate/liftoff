@@ -657,6 +657,46 @@ async function main(): Promise<void> {
     console.log('Loading campaign mapping from monitoring database...');
     fbCampaignIds = await findFacebookCampaignIds(conn, campaignId, dateStr);
     
+    // If still empty, try reverse lookup: find Facebook campaign IDs from session_hourly_metrics
+    // that map to this Strategis campaign ID via campaign_index (same approach as snapshotHourlyMetrics)
+    if (fbCampaignIds.size === 0) {
+      console.log(`  Trying reverse lookup from session_hourly_metrics (like snapshotHourlyMetrics)...`);
+      try {
+        const date = new Date(dateStr);
+        const startDate = new Date(date);
+        startDate.setDate(date.getDate() - 30);
+        
+        // Query session_hourly_metrics joined with campaign_index to find Facebook IDs
+        // This matches the join logic in snapshotHourlyMetrics
+        const reverseRows = await allRows<any>(conn, `
+          SELECT DISTINCT shm.campaign_id AS fb_campaign_id, ci.campaign_name
+          FROM session_hourly_metrics shm
+          INNER JOIN campaign_index ci
+            ON ci.facebook_campaign_id = shm.campaign_id
+           AND ci.date = shm.date
+          WHERE ci.campaign_id = ${sqlString(campaignId)}
+            AND shm.date = DATE '${dateStr}'
+            AND shm.media_source = 'facebook'
+        `);
+        
+        for (const row of reverseRows) {
+          const fbId = String(row.fb_campaign_id);
+          if (fbId && fbId.length > 10) {
+            fbCampaignIds.add(fbId);
+            if (row.campaign_name) {
+              fbCampaignIdToName.set(fbId, String(row.campaign_name));
+            }
+          }
+        }
+        
+        if (fbCampaignIds.size > 0) {
+          console.log(`  ✓ Found ${fbCampaignIds.size} Facebook campaign ID(s) via reverse lookup from session_hourly_metrics`);
+        }
+      } catch (error: any) {
+        console.warn(`  ⚠ Warning: Reverse lookup failed: ${error.message}`);
+      }
+    }
+    
     if (fbCampaignIds.size > 0) {
       console.log(`  ✓ Found ${fbCampaignIds.size} Facebook campaign ID(s) for Strategis campaign ${campaignId}:`);
       console.log(`    ${Array.from(fbCampaignIds).slice(0, 5).join(', ')}${fbCampaignIds.size > 5 ? '...' : ''}`);
