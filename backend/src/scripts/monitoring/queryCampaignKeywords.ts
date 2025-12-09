@@ -825,11 +825,14 @@ async function main(): Promise<void> {
         }
         
         if (!keywordStats.has(keyword)) {
-          keywordStats.set(keyword, { sessions: 0, revenue: 0, rpc: 0 });
+          keywordStats.set(keyword, { sessions: 0, sessionsWithRevenue: 0, revenue: 0, rpc: 0, rpcPerClick: 0 });
         }
 
         const stats = keywordStats.get(keyword)!;
         stats.sessions += 1; // Each row is one session
+        if (revenue > 0) {
+          stats.sessionsWithRevenue += 1;
+        }
         stats.revenue += revenue;
       }
       
