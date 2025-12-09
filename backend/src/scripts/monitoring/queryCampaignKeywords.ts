@@ -700,7 +700,7 @@ async function main(): Promise<void> {
             }
           } else if (foundStrategisId) {
             // Match by found Strategis ID (from lookup)
-            matchesCampaign = sessionStrategisId === foundStrategisId || String(fbCampaignId) === String(fbCampaignId);
+            matchesCampaign = sessionStrategisId === foundStrategisId;
           } else if (fbCampaignId && fbCampaignIds.size === 0) {
             // If we're searching by Facebook campaign ID but haven't found Strategis ID yet
             // Match if the session's Facebook campaign ID matches
