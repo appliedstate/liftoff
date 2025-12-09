@@ -421,7 +421,22 @@ class CampaignAggregator {
                 this.aggregates.set(extractedId, agg);
               }
             }
+          } else {
+            // Debug: Log when extraction fails
+            if (this.aggregates.size < 10) { // Only log first few to avoid spam
+              console.log(`[ingestCampaignIndex] DEBUG: Could not extract Strategis ID from campaign name "${campaignName}"`);
+              console.log(`  Extracted part: "${extractedId}"`);
+              console.log(`  Length check: ${extractedId.length < 15 ? 'PASS' : 'FAIL'} (length: ${extractedId.length})`);
+              console.log(`  Not all digits: ${!/^\d+$/.test(extractedId) ? 'PASS' : 'FAIL'}`);
+              console.log(`  Alphanumeric: ${/^[a-z0-9_-]+$/i.test(extractedId) ? 'PASS' : 'FAIL'}`);
+            }
           }
+        }
+      } else if (!agg.strategisCampaignId && !campaignName) {
+        // Debug: Log when campaign name is missing
+        if (this.aggregates.size < 10) { // Only log first few to avoid spam
+          console.log(`[ingestCampaignIndex] DEBUG: No campaign name available for Facebook campaign ID ${agg.key}`);
+          console.log(`  Row fields: ${Object.keys(row).join(', ')}`);
         }
       }
       
