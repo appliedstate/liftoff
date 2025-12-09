@@ -87,6 +87,27 @@ export class StrategisApi {
   }
 
   /**
+   * Fetch S1 daily data with networkCampaignId dimension to get Facebook campaign ID mapping
+   * This returns both strategisCampaignId and networkCampaignId (Facebook campaign ID)
+   */
+  async fetchS1DailyWithNetworkCampaignId(date: string, networkId?: string): Promise<any[]> {
+    const params: Record<string, any> = {
+      ...this.singleDayRange(date),
+      organization: this.organization,
+      adSource: this.adSource,
+      timezone: this.timezone,
+      dbSource: DEFAULT_DB_SOURCE,
+      // Include networkCampaignId to get Facebook campaign ID mapping
+      dimensions: 'date-strategisCampaignId-networkCampaignId',
+    };
+    if (networkId) {
+      params.networkId = networkId;
+    }
+    const payload = await this.client.get('/api/s1/report/daily-v3', params);
+    return extractRows(payload);
+  }
+
+  /**
    * Fetch S1 reconciled report (high-level) which includes buyer field directly
    */
   async fetchS1Reconciled(date: string, includeAllNetworks: boolean = false): Promise<any[]> {

@@ -162,9 +162,52 @@ async function findStrategisIdByCampaignName(
   return null;
 }
 
-async function findStrategisCampaignId(conn: any, fbCampaignId: string, dateStr: string): Promise<string | null> {
+/**
+ * Query S1 API directly to find Strategis ID from Facebook campaign ID
+ * Uses networkCampaignId dimension in S1 daily API to get the mapping
+ */
+async function findStrategisIdFromS1Api(
+  api: StrategisApi,
+  fbCampaignId: string,
+  dateStr: string
+): Promise<string | null> {
+  try {
+    console.log(`  Querying S1 API directly for Facebook campaign ID ${fbCampaignId}...`);
+    
+    // Query S1 daily API with networkCampaignId dimension
+    // This returns both strategisCampaignId and networkCampaignId (Facebook campaign ID)
+    const s1Data = await api.fetchS1DailyWithNetworkCampaignId(dateStr, '112'); // 112 = Facebook
+    
+    // Look for matching networkCampaignId (Facebook campaign ID)
+    for (const row of s1Data) {
+      const networkCampaignId = row.networkCampaignId || row.network_campaign_id || row.networkCampaignId;
+      const strategisId = row.strategisCampaignId || row.strategis_campaign_id || row.strategiscampaignid;
+      
+      if (networkCampaignId && String(networkCampaignId) === String(fbCampaignId) && strategisId) {
+        console.log(`  ✓ Found Strategis ID via S1 API: ${strategisId} (Facebook ID: ${fbCampaignId})`);
+        return String(strategisId);
+      }
+    }
+    
+    console.log(`  ⚠ No match found in S1 API for Facebook campaign ID ${fbCampaignId}`);
+    return null;
+  } catch (error: any) {
+    console.warn(`  Warning: Could not query S1 API for mapping: ${error.message}`);
+    return null;
+  }
+}
+
+async function findStrategisCampaignId(conn: any, fbCampaignId: string, dateStr: string, api?: StrategisApi): Promise<string | null> {
   // Reverse lookup: Find Strategis campaign ID from Facebook campaign ID
-  // Uses the facebook_campaign_id column in campaign_index (populated from Facebook adset/campaign APIs)
+  // First try: Query S1 API directly (most reliable)
+  if (api) {
+    const s1ApiResult = await findStrategisIdFromS1Api(api, fbCampaignId, dateStr);
+    if (s1ApiResult) {
+      return s1ApiResult;
+    }
+  }
+  
+  // Fallback: Uses the facebook_campaign_id column in campaign_index (populated from Facebook adset/campaign APIs)
   try {
     const date = new Date(dateStr);
     const startDate = new Date(date);
@@ -480,6 +523,15 @@ async function main(): Promise<void> {
   const conn = createMonitoringConnection();
   // Ensure schema is initialized (adds facebook_campaign_id column if needed)
   await initMonitoringSchema(conn);
+  
+  // Initialize API early so we can use it for direct S1 API queries
+  const api = new StrategisApi({
+    organization: process.env.STRATEGIS_ORGANIZATION || 'Interlincx',
+    adSource: process.env.STRATEGIS_AD_SOURCE || 'rsoc',
+    networkId: process.env.STRATEGIS_NETWORK_ID,
+    timezone: process.env.STRATEGIS_TIMEZONE || 'UTC',
+  });
+  
   let fbCampaignIds: Set<string> = new Set();
   let foundStrategisId: string | null = null;
   const searchCampaignId = campaignId || fbCampaignId;
@@ -491,8 +543,8 @@ async function main(): Promise<void> {
     fbCampaignIds.add(fbCampaignId);
     console.log(`Using Facebook campaign ID directly: ${fbCampaignId}`);
     console.log(`(This ID was from sample session data - it may not map to a Strategis campaign in campaign_index)`);
-    console.log('Looking up Strategis campaign ID in campaign_index...');
-    foundStrategisId = await findStrategisCampaignId(conn, fbCampaignId, dateStr);
+    console.log('Looking up Strategis campaign ID...');
+    foundStrategisId = await findStrategisCampaignId(conn, fbCampaignId, dateStr, api);
     if (foundStrategisId) {
       console.log(`  ✓ Found Strategis campaign ID: ${foundStrategisId}`);
     } else {
@@ -529,13 +581,7 @@ async function main(): Promise<void> {
   console.log(`\n# Keyword Performance for Campaign: ${displayId}`);
   console.log(`Date Range: ${dateStr} (last ${days} days)\n`);
 
-  // Try S1 API first with keyword dimensions
-  const api = new StrategisApi({
-    organization: process.env.STRATEGIS_ORGANIZATION || 'Interlincx',
-    adSource: process.env.STRATEGIS_AD_SOURCE || 'rsoc',
-    networkId: process.env.STRATEGIS_NETWORK_ID,
-    timezone: process.env.STRATEGIS_TIMEZONE || 'UTC',
-  });
+  // API was already initialized above for campaign ID lookup
 
   const keywordStats = new Map<string, { sessions: number; revenue: number; rpc: number }>();
 
