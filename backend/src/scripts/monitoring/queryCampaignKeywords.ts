@@ -722,13 +722,18 @@ async function main(): Promise<void> {
         for (const fbId of fbCampaignIdToName.keys()) {
           fbCampaignIds.add(fbId);
         }
+      } else {
+        console.log(`  ⚠ No Facebook campaign IDs found in campaign_index for Strategis campaign ${campaignId}`);
+        console.log(`    Will try to match sessions by querying campaign_index on-the-fly`);
       }
     } catch (error: any) {
       console.warn(`  ⚠ Warning: Could not build campaign name lookup: ${error.message}`);
     }
   }
   
-  closeConnection(conn);
+  // Keep connection open if we need to do on-the-fly lookups
+  // We'll close it after processing sessions
+  let connNeedsClosing = true;
 
   // Display header with campaign IDs
   const displayId = fbCampaignId 
