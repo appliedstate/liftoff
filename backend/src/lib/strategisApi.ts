@@ -139,6 +139,25 @@ export class StrategisApi {
     return extractRows(payload);
   }
 
+  /**
+   * Fetch S1 session-level revenue data (includes keywords)
+   * @param date Date string (YYYY-MM-DD)
+   * @param filterZero Whether to filter out zero-revenue sessions (default: false)
+   * @returns Array of session records with keyword, campaign_id, revenue, etc.
+   */
+  async fetchS1SessionRevenue(date: string, filterZero: boolean = false): Promise<any[]> {
+    const params: Record<string, any> = {
+      date,
+      filterZero: filterZero ? '1' : '0',
+      incremental: '1',
+      limit: '-1',
+      offset: '0',
+      output: 'json',
+    };
+    const payload = await this.client.get('/api/s1/report/get-session-rev', params);
+    return extractRows(payload);
+  }
+
   async fetchS1RpcAverage(date: string): Promise<any[]> {
     const params = {
       date,
