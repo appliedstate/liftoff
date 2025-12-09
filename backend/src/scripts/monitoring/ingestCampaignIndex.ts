@@ -382,7 +382,39 @@ class CampaignAggregator {
       const agg = this.ensureAggregate(row, 'facebook_campaigns');
       if (!agg) continue;
       this.setIfEmpty(agg, 'accountId', pick(row, ['account_id', 'ad_account_id']));
-      this.setIfEmpty(agg, 'campaignName', pick(row, ['campaign_name', 'name']));
+      const campaignName = pick(row, ['campaign_name', 'name']);
+      this.setIfEmpty(agg, 'campaignName', campaignName);
+      
+      // CRITICAL: Extract strategisCampaignId from campaign name if not already set
+      // Pattern: campaignName.split('_')[0] (e.g., 'sire1f06al_20241208_facebook' -> 'sire1f06al')
+      if (!agg.strategisCampaignId && campaignName) {
+        const parts = String(campaignName).trim().split('_');
+        if (parts.length > 0 && parts[0] && parts[0].length > 0) {
+          const extractedId = parts[0];
+          // Only use if it looks like a Strategis ID (not a Facebook ID)
+          if (extractedId.length < 15 && (extractedId.includes('sipuli') || /^[a-z0-9_-]+$/i.test(extractedId))) {
+            agg.strategisCampaignId = extractedId;
+            // Update the key to use Strategis ID if we extracted one
+            if (agg.key !== extractedId) {
+              // Move aggregate to new key
+              const existingAgg = this.aggregates.get(extractedId);
+              if (existingAgg && existingAgg.strategisCampaignId === extractedId) {
+                // Merge into existing aggregate with Strategis ID
+                this.mergeAggregateData(agg, existingAgg);
+                this.aggregates.delete(agg.key);
+                agg.key = extractedId;
+                this.aggregates.set(extractedId, agg);
+              } else {
+                // Update key to Strategis ID
+                this.aggregates.delete(agg.key);
+                agg.key = extractedId;
+                this.aggregates.set(extractedId, agg);
+              }
+            }
+          }
+        }
+      }
+      
       this.setIfEmpty(agg, 'owner', pick(row, ['owner']));
       this.setIfEmpty(agg, 'lane', pick(row, ['lane']));
       this.setIfEmpty(agg, 'category', pick(row, ['category']));
@@ -634,13 +666,29 @@ class CampaignAggregator {
   }
 
   private ensureAggregate(row: Record<string, any>, dataset: string): CampaignAggregate | null {
-    const strategisId = pickId(row, [
+    let strategisId = pickId(row, [
       'strategisCampaignId',
       'strategis_campaign_id',
       'strategiscampaignid',
       'strategisCampaignID',
     ]);
     const campaignId = pickId(row, ['campaign_id', 'campaignId', 'campaign']);
+    
+    // CRITICAL: If no Strategis ID found, try extracting from campaign name
+    // Pattern: campaignName.split('_')[0] (e.g., 'sire1f06al_20241208_facebook' -> 'sire1f06al')
+    if (!strategisId) {
+      const campaignName = pick(row, ['campaign_name', 'name']);
+      if (campaignName) {
+        const parts = String(campaignName).trim().split('_');
+        if (parts.length > 0 && parts[0] && parts[0].length > 0) {
+          const extractedId = parts[0];
+          // Only use if it looks like a Strategis ID (not a Facebook ID)
+          if (extractedId.length < 15 && (extractedId.includes('sipuli') || /^[a-z0-9_-]+$/i.test(extractedId)) && !/^\d+$/.test(extractedId)) {
+            strategisId = extractedId;
+          }
+        }
+      }
+    }
     
     // CRITICAL: Always prioritize Strategis campaign ID as the primary key
     // If we have a Strategis ID, use it as the key
