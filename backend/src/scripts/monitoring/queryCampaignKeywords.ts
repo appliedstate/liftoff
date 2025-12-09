@@ -786,8 +786,40 @@ async function main(): Promise<void> {
         // Try to get campaign name from session data first, then fall back to lookup
         let campaignName = session.campaign_name || session.campaignName || session.networkCampaignName;
         // If campaign name not in session data, look it up from campaign_index
-        if (!campaignName && fbCampaignId && fbCampaignIdToName.has(String(fbCampaignId))) {
-          campaignName = fbCampaignIdToName.get(String(fbCampaignId)) || null;
+        if (!campaignName && fbCampaignId) {
+          if (fbCampaignIdToName.has(String(fbCampaignId))) {
+            campaignName = fbCampaignIdToName.get(String(fbCampaignId)) || null;
+          } else if (campaignId && connNeedsClosing) {
+            // On-the-fly lookup: query campaign_index for this Facebook campaign ID
+            // This helps when the pre-built lookup map was empty
+            try {
+              const lookupDate = new Date(dateStr);
+              const lookupStartDate = new Date(lookupDate);
+              lookupStartDate.setDate(lookupDate.getDate() - 30);
+              
+              const lookupRows = await allRows<any>(conn, `
+                SELECT DISTINCT campaign_name, campaign_id
+                FROM campaign_index
+                WHERE facebook_campaign_id = ${sqlString(String(fbCampaignId))}
+                  AND date >= DATE '${lookupStartDate.toISOString().slice(0, 10)}'
+                  AND date <= DATE '${dateStr}'
+                  AND campaign_name IS NOT NULL
+                  AND media_source = 'facebook'
+                ORDER BY date DESC
+                LIMIT 1
+              `);
+              if (lookupRows.length > 0 && lookupRows[0].campaign_name) {
+                campaignName = String(lookupRows[0].campaign_name);
+                fbCampaignIdToName.set(String(fbCampaignId), campaignName);
+                // If the campaign_id matches our search, add to fbCampaignIds
+                if (lookupRows[0].campaign_id === campaignId) {
+                  fbCampaignIds.add(String(fbCampaignId));
+                }
+              }
+            } catch (error: any) {
+              // Ignore lookup errors - connection might be closed or query failed
+            }
+          }
         }
         
         // Extract strategisCampaignId from campaign name if available
