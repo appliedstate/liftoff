@@ -58,6 +58,7 @@ export async function initMonitoringSchema(conn: any): Promise<void> {
       campaign_name TEXT,
       adset_id TEXT,
       adset_name TEXT,
+      facebook_campaign_id TEXT,
       owner TEXT,
       lane TEXT,
       category TEXT,
@@ -80,6 +81,9 @@ export async function initMonitoringSchema(conn: any): Promise<void> {
     `,
     `
     ALTER TABLE campaign_index ADD COLUMN IF NOT EXISTS s1_google_account TEXT
+    `,
+    `
+    ALTER TABLE campaign_index ADD COLUMN IF NOT EXISTS facebook_campaign_id TEXT
     `,
     `
     CREATE TABLE IF NOT EXISTS campaign_index_runs (

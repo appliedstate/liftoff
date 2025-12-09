@@ -24,6 +24,7 @@ type CampaignRecordInput = {
   campaignName?: string | null;
   adsetId?: string | null;
   adsetName?: string | null;
+  facebookCampaignId?: string | null;
   owner?: string | null;
   lane?: string | null;
   category?: string | null;
@@ -136,6 +137,7 @@ async function upsertRow(
     campaignName?: string | null;
     adsetId?: string | null;
     adsetName?: string | null;
+    facebookCampaignId?: string | null;
     owner?: string | null;
     lane?: string | null;
     category?: string | null;
@@ -171,6 +173,7 @@ async function upsertRow(
       campaign_name,
       adset_id,
       adset_name,
+      facebook_campaign_id,
       owner,
       lane,
       category,
@@ -194,6 +197,7 @@ async function upsertRow(
       ${sqlString(opts.campaignName || null)},
       ${sqlString(opts.adsetId || null)},
       ${sqlString(opts.adsetName || null)},
+      ${sqlString(opts.facebookCampaignId || null)},
       ${sqlString(opts.owner || null)},
       ${sqlString(opts.lane || null)},
       ${sqlString(opts.category || null)},
@@ -327,6 +331,7 @@ type CampaignAggregate = {
   campaignId?: string | null;
   adsetId?: string | null;
   adsetName?: string | null;
+  facebookCampaignId?: string | null;
   accountId?: string | null;
   campaignName?: string | null;
   owner?: string | null;
@@ -375,6 +380,14 @@ class CampaignAggregator {
       this.setIfEmpty(agg, 'lane', pick(row, ['lane']));
       this.setIfEmpty(agg, 'category', pick(row, ['category']));
       this.setIfEmpty(agg, 'mediaSource', 'facebook');
+      // Extract Facebook campaign ID from Facebook campaigns API response
+      // The campaign_id field in Facebook API responses is the Facebook campaign ID
+      // But note: Facebook APIs may return strategisCampaignId instead
+      const fbCampaignId = pick(row, ['id', 'campaign_id', 'campaignId', 'fbCampaignId', 'fb_campaign_id']);
+      if (fbCampaignId && String(fbCampaignId).length > 10 && !fbCampaignId.includes('sipuli') && !fbCampaignId.match(/^[a-z]/i)) {
+        // Facebook IDs are long numeric strings, not short alphanumeric like Strategis IDs
+        this.setIfEmpty(agg, 'facebookCampaignId', fbCampaignId);
+      }
     }
   }
 
@@ -382,9 +395,15 @@ class CampaignAggregator {
     for (const row of rows) {
       const agg = this.ensureAggregate(row, 'facebook_adsets');
       if (!agg) continue;
-      this.setIfEmpty(agg, 'adsetId', pick(row, ['adset_id', 'adSetId']));
-      this.setIfEmpty(agg, 'adsetName', pick(row, ['adset_name', 'adSetName']));
+      this.setIfEmpty(agg, 'adsetId', pick(row, ['adset_id', 'adSetId', 'adsetId']));
+      this.setIfEmpty(agg, 'adsetName', pick(row, ['adset_name', 'adSetName', 'adsetName']));
       this.setIfEmpty(agg, 'mediaSource', 'facebook');
+      // Extract Facebook campaign ID from adset data
+      // Facebook adsets have a campaign_id field that is the Facebook campaign ID
+      const fbCampaignId = pick(row, ['campaign_id', 'campaignId', 'fbCampaignId', 'fb_campaign_id']);
+      if (fbCampaignId && String(fbCampaignId).length > 10) { // Facebook IDs are long numbers
+        this.setIfEmpty(agg, 'facebookCampaignId', fbCampaignId);
+      }
       this.addNumber(agg, 'facebook_adsets', 'spendUsd', pickNumber(row, ['spend', 'spend_usd']));
       this.addNumber(agg, 'facebook_adsets', 'clicks', pickNumber(row, ['clicks']));
     }
@@ -572,6 +591,7 @@ class CampaignAggregator {
         campaignName: agg.campaignName ?? null,
         adsetId: agg.adsetId ?? null,
         adsetName: agg.adsetName ?? null,
+        facebookCampaignId: agg.facebookCampaignId ?? null,
         owner: agg.owner ?? null,
         lane: agg.lane ?? null,
         category: agg.category ?? null,
@@ -587,6 +607,7 @@ class CampaignAggregator {
         raw: {
           strategisCampaignId: agg.strategisCampaignId ?? null,
           campaignId: agg.campaignId ?? null,
+          facebookCampaignId: agg.facebookCampaignId ?? null,
           avgRpc: agg.avgRpc ?? null,
           sourceMetrics: agg.sourceMetrics,
         },

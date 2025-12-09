@@ -73,14 +73,31 @@ function displayKeywordResults(
 
 async function findStrategisCampaignId(conn: any, fbCampaignId: string, dateStr: string): Promise<string | null> {
   // Reverse lookup: Find Strategis campaign ID from Facebook campaign ID
-  // NOTE: campaign_index stores Strategis campaign IDs, not Facebook campaign IDs
-  // Facebook campaign IDs may be in raw_payload from Facebook API responses, but
-  // the Facebook APIs typically return strategisCampaignId, not Facebook campaign IDs
+  // Uses the facebook_campaign_id column in campaign_index (populated from Facebook adset/campaign APIs)
   try {
     const date = new Date(dateStr);
     const startDate = new Date(date);
     startDate.setDate(date.getDate() - 30); // Look back 30 days
     
+    // First try: Direct lookup using facebook_campaign_id column
+    const directRows = await allRows<any>(conn, `
+      SELECT DISTINCT campaign_id, campaign_name, facebook_campaign_id, date, snapshot_source
+      FROM campaign_index
+      WHERE facebook_campaign_id = ${sqlString(fbCampaignId)}
+        AND date >= ${sqlString(startDate.toISOString().slice(0, 10))}
+        AND date <= ${sqlString(dateStr)}
+        AND media_source = 'facebook'
+      ORDER BY date DESC
+      LIMIT 10
+    `);
+    
+    if (directRows.length > 0) {
+      console.log(`  ✓ Found match via facebook_campaign_id column! Strategis campaign ID: ${directRows[0].campaign_id}`);
+      return directRows[0].campaign_id;
+    }
+    
+    // Fallback: Search in raw_payload (for older data that may not have facebook_campaign_id populated)
+    console.log(`  No direct match found, searching raw_payload...`);
     const rows = await allRows<any>(conn, `
       SELECT DISTINCT campaign_id, campaign_name, raw_payload, date, snapshot_source
       FROM campaign_index
@@ -113,7 +130,7 @@ async function findStrategisCampaignId(conn: any, fbCampaignId: string, dateStr:
         checkedCount++;
         if (rawFbCampaignId && String(rawFbCampaignId) === String(fbCampaignId)) {
           // Found matching Facebook campaign ID, return the Strategis campaign ID
-          console.log(`  ✓ Found match! Strategis campaign ID: ${row.campaign_id} (from ${row.snapshot_source})`);
+          console.log(`  ✓ Found match in raw_payload! Strategis campaign ID: ${row.campaign_id} (from ${row.snapshot_source})`);
           return row.campaign_id;
         }
       } catch {
@@ -122,8 +139,9 @@ async function findStrategisCampaignId(conn: any, fbCampaignId: string, dateStr:
     }
     
     console.log(`  ⚠ Checked ${checkedCount} campaigns but no Facebook campaign ID match found`);
-    console.log(`  Note: campaign_index may not store Facebook campaign IDs - it primarily stores Strategis campaign IDs`);
-    console.log(`  The Facebook campaign ${fbCampaignId} may not be in campaign_index, or the mapping may be stored elsewhere`);
+    console.log(`  Note: The Facebook campaign ${fbCampaignId} may not be in campaign_index yet.`);
+    console.log(`  Try running: npm run monitor:ingest-campaign-index -- --date=${dateStr} --level=adset`);
+    console.log(`  This will populate facebook_campaign_id from Facebook adset data.`);
     
   } catch (error: any) {
     console.warn(`Warning: Could not query reverse campaign mapping: ${error.message}`);
@@ -165,72 +183,58 @@ async function findFacebookCampaignIds(conn: any, strategisCampaignId: string, d
   const fbCampaignIds = new Set<string>();
   
   try {
-    // Method 1: Query session_hourly_metrics to find Facebook campaign IDs for this Strategis campaign
-    // The campaign_id in session_hourly_metrics should be the Strategis campaign ID
-    // But we need to find the corresponding Facebook campaign IDs from the session data
-    // Actually, session_hourly_metrics doesn't have Facebook campaign IDs...
-    
-    // Method 2: Query campaign_index to find Facebook campaign IDs in raw_payload
     const date = new Date(dateStr);
     const startDate = new Date(date);
     startDate.setDate(date.getDate() - 30); // Look back 30 days for mapping
     
-    const rows = await allRows<any>(conn, `
-      SELECT DISTINCT campaign_id, raw_payload, media_source
+    // Method 1: Direct lookup using facebook_campaign_id column (most efficient)
+    const directRows = await allRows<any>(conn, `
+      SELECT DISTINCT facebook_campaign_id
       FROM campaign_index
       WHERE campaign_id = ${sqlString(strategisCampaignId)}
         AND date >= ${sqlString(startDate.toISOString().slice(0, 10))}
         AND date <= ${sqlString(dateStr)}
-        AND raw_payload IS NOT NULL
+        AND facebook_campaign_id IS NOT NULL
+        AND media_source = 'facebook'
     `);
     
-    for (const row of rows) {
-      // Try to extract Facebook campaign ID from raw_payload
-      try {
-        const raw = typeof row.raw_payload === 'string' ? JSON.parse(row.raw_payload) : row.raw_payload;
-        // Check various possible field names for Facebook campaign ID
-        const fbCampaignId = 
-          raw?.fbCampaignId || 
-          raw?.fb_campaign_id || 
-          raw?.facebookCampaignId || 
-          raw?.properties?.fbCampaignId ||
-          raw?.properties?.fb_campaign_id ||
-          raw?.campaign_id; // Sometimes campaign_id in raw might be Facebook ID
-        
-        if (fbCampaignId && String(fbCampaignId).length > 10) { // Facebook IDs are long numbers
-          fbCampaignIds.add(String(fbCampaignId));
-        }
-      } catch {
-        // Ignore malformed JSON
+    for (const row of directRows) {
+      if (row.facebook_campaign_id) {
+        fbCampaignIds.add(String(row.facebook_campaign_id));
       }
     }
     
-    // Method 3: If still not found, try querying by matching campaign name patterns
-    // This is a fallback - we'll look for campaigns with similar names
+    // Method 2: Fallback - search in raw_payload (for older data)
     if (fbCampaignIds.size === 0) {
-      const nameRows = await allRows<any>(conn, `
-        SELECT DISTINCT campaign_id, campaign_name, raw_payload
+      const rows = await allRows<any>(conn, `
+        SELECT DISTINCT raw_payload
         FROM campaign_index
-        WHERE campaign_id LIKE ${sqlString(`%${strategisCampaignId}%`)}
+        WHERE campaign_id = ${sqlString(strategisCampaignId)}
           AND date >= ${sqlString(startDate.toISOString().slice(0, 10))}
           AND date <= ${sqlString(dateStr)}
+          AND raw_payload IS NOT NULL
+          AND media_source = 'facebook'
       `);
       
-      for (const row of nameRows) {
-        if (row.campaign_id === strategisCampaignId) {
-          try {
-            const raw = typeof row.raw_payload === 'string' ? JSON.parse(row.raw_payload) : row.raw_payload;
-            const fbCampaignId = 
-              raw?.fbCampaignId || 
-              raw?.fb_campaign_id || 
-              raw?.facebookCampaignId ||
-              raw?.properties?.fbCampaignId;
-            if (fbCampaignId && String(fbCampaignId).length > 10) {
-              fbCampaignIds.add(String(fbCampaignId));
-            }
-          } catch {
-            // Ignore
+      for (const row of rows) {
+        try {
+          const raw = typeof row.raw_payload === 'string' ? JSON.parse(row.raw_payload) : row.raw_payload;
+          // Check various possible field names for Facebook campaign ID
+          const fbCampaignId = 
+            raw?.fbCampaignId || 
+            raw?.fb_campaign_id || 
+            raw?.facebookCampaignId || 
+            raw?.properties?.fbCampaignId ||
+            raw?.properties?.fb_campaign_id ||
+            raw?.campaignId || // Facebook API might return campaignId as Facebook ID
+            raw?.id; // Sometimes just 'id'
+          
+          if (fbCampaignId && String(fbCampaignId).length > 10 && !String(fbCampaignId).includes('sipuli')) {
+            // Facebook IDs are long numbers, not short alphanumeric like Strategis IDs
+            fbCampaignIds.add(String(fbCampaignId));
           }
+        } catch {
+          // Ignore malformed JSON
         }
       }
     }
