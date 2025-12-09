@@ -259,7 +259,13 @@ async function runSnapshot(): Promise<void> {
         FROM session_hourly_metrics shm
         LEFT JOIN campaign_index ci
           ON ci.facebook_campaign_id = shm.campaign_id  -- Join via Facebook campaign ID
-         AND ci.date = shm.date
+         -- For UTC date N+1 (hours 0-7), join with PST day N (UTC date N)
+         -- For UTC date N (hours 8-23), join with PST day N (UTC date N)
+         -- So we join on the PST day, which is shm.date for hours 8-23, or shm.date - 1 day for hours 0-7
+         AND ci.date = CASE 
+           WHEN shm.click_hour < 8 THEN shm.date - INTERVAL 1 DAY  -- UTC hours 0-7 map to previous PST day
+           ELSE shm.date  -- UTC hours 8-23 map to same PST day
+         END
         WHERE shm.media_source IS NOT NULL
           -- Include UTC dates that could contribute to PST days in the window
           -- PST day N includes UTC dates N (hours 8-23) and N+1 (hours 0-7)
