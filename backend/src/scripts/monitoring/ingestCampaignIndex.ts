@@ -364,6 +364,13 @@ class CampaignAggregator {
       this.setIfEmpty(agg, 'lane', pick(row, ['lane']));
       this.setIfEmpty(agg, 'category', pick(row, ['category']));
       this.setIfEmpty(agg, 'mediaSource', 'facebook');
+      // Extract Facebook campaign ID if present (when API returns campaignId instead of strategisCampaignId)
+      // This happens when dimensions='campaignId' is used - the campaign_id field will be Facebook campaign ID
+      const fbCampaignId = pick(row, ['campaign_id', 'campaignId']);
+      if (fbCampaignId && String(fbCampaignId).length > 10 && !fbCampaignId.includes('sipuli') && !fbCampaignId.match(/^[a-z]/i)) {
+        // Facebook IDs are long numeric strings, not short alphanumeric like Strategis IDs
+        this.setIfEmpty(agg, 'facebookCampaignId', fbCampaignId);
+      }
       this.addNumber(agg, 'facebook_report', 'spendUsd', pickNumber(row, ['spend', 'spend_usd', 'amount_spent']));
       this.addNumber(agg, 'facebook_report', 'clicks', pickNumber(row, ['clicks']));
       this.addNumber(agg, 'facebook_report', 'conversions', pickNumber(row, ['conversions', 'purchase', 'purchases']));

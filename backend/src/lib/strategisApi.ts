@@ -34,6 +34,9 @@ export class StrategisApi {
       adSource: this.adSource,
       networkName: 'facebook',
       level: 'campaign',
+      // Note: 'campaignId' dimension returns Facebook campaign IDs, not Strategis campaign IDs
+      // We extract these and store in facebook_campaign_id column
+      // The Strategis campaign ID comes from S1 APIs (strategisCampaignId field)
       dimensions: 'campaignId',
       cached: 1,
       dbSource: DEFAULT_DB_SOURCE,
