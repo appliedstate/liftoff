@@ -114,11 +114,31 @@ async function main(): Promise<void> {
       // Try to fetch with keyword dimensions
       const rows = await api.fetchS1HourlyWithKeywords(queryDate, true);
 
+      // Debug: log first row structure if available
+      if (rows.length > 0 && d === 0) {
+        console.log(`\nDebug: API returned ${rows.length} rows for ${queryDate}`);
+        console.log('Sample row keys:', Object.keys(rows[0]));
+        if (rows.length > 0) {
+          const sampleRow = rows[0];
+          console.log('Sample row (first row):', JSON.stringify(sampleRow, null, 2).substring(0, 500));
+        }
+      }
+
       for (const row of rows) {
-        const rowCampaignId = row.strategisCampaignId || row.campaign_id || row.campaignId;
-        const keyword = row.keyword;
+        const rowCampaignId = row.strategisCampaignId || row.campaign_id || row.campaignId || row.strategiscampaignid;
+        const keyword = row.keyword || row.keyword_text || row.keywordText || row.keyword_name;
         
-        if (rowCampaignId !== campaignId || !keyword) continue;
+        if (rowCampaignId !== campaignId) continue;
+        
+        // If no keyword field, this dimension might not be supported
+        if (!keyword) {
+          if (d === 0 && rows.length > 0) {
+            console.log(`\nWarning: No keyword field found in API response for campaign ${campaignId}.`);
+            console.log(`Available fields: ${Object.keys(row).join(', ')}`);
+            console.log(`This campaign has ${rows.filter(r => (r.strategisCampaignId || r.campaign_id || r.campaignId) === campaignId).length} rows without keywords.`);
+          }
+          continue;
+        }
 
         const sessions = Number(row.sessions || 0);
         const revenue = Number(row.revenue || row.estimated_revenue || 0);
