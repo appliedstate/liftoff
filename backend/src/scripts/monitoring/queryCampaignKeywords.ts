@@ -275,14 +275,6 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const displayId = fbCampaignId 
-    ? `Facebook: ${fbCampaignId}${foundStrategisId ? ` (Strategis: ${foundStrategisId})` : ''}` 
-    : campaignId 
-    ? `Strategis: ${campaignId}` 
-    : '(filtering by adset/ad)';
-  console.log(`\n# Keyword Performance for Campaign: ${displayId}`);
-  console.log(`Date Range: ${dateStr} (last ${days} days)\n`);
-
   // Load campaign mapping from monitoring database
   const conn = createMonitoringConnection();
   let fbCampaignIds: Set<string> = new Set();
@@ -317,6 +309,15 @@ async function main(): Promise<void> {
   }
   
   closeConnection(conn);
+
+  // Display header with campaign IDs
+  const displayId = fbCampaignId 
+    ? `Facebook: ${fbCampaignId}${foundStrategisId ? ` (Strategis: ${foundStrategisId})` : ''}` 
+    : campaignId 
+    ? `Strategis: ${campaignId}` 
+    : '(filtering by adset/ad)';
+  console.log(`\n# Keyword Performance for Campaign: ${displayId}`);
+  console.log(`Date Range: ${dateStr} (last ${days} days)\n`);
 
   // Try S1 API first with keyword dimensions
   const api = new StrategisApi({
