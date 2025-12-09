@@ -633,6 +633,10 @@ async function main(): Promise<void> {
   let fbCampaignIds: Set<string> = new Set();
   let foundStrategisId: string | null = null;
   const searchCampaignId = campaignId || fbCampaignId;
+  // Build a lookup map of Facebook campaign ID -> campaign name from campaign_index
+  // This helps us match sessions even when campaign_name isn't in the session data
+  // Declare early so it can be used in the reverse lookup
+  const fbCampaignIdToName = new Map<string, string>();
   
   if (fbCampaignId) {
     // User provided Facebook campaign ID directly - find the Strategis campaign ID
