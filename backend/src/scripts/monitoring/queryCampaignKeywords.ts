@@ -1,10 +1,11 @@
 #!/usr/bin/env ts-node
 
 /**
- * Query keyword-level performance for a specific campaign from session_revenue database
+ * Query keyword-level performance for a specific campaign from S1 session-level API
  * 
  * Usage:
  *   npm run monitor:campaign-keywords -- --campaign-id=sipuli0615 --date=2025-12-08 --days=3
+ *   npm run monitor:campaign-keywords -- --show-sample=true --date=2025-12-08
  */
 
 import 'dotenv/config';
@@ -63,9 +64,76 @@ async function main(): Promise<void> {
   const campaignId = getFlag('campaign-id');
   const dateStr = getFlag('date') || todayUtc();
   const days = parseInt(getFlag('days') || '3', 10);
+  const showSample = getFlag('show-sample') === 'true';
+
+  // If --show-sample flag is set, just display sample data and exit
+  if (showSample) {
+    const api = new StrategisApi({
+      organization: process.env.STRATEGIS_ORGANIZATION || 'Interlincx',
+      adSource: process.env.STRATEGIS_AD_SOURCE || 'rsoc',
+      networkId: process.env.STRATEGIS_NETWORK_ID,
+      timezone: process.env.STRATEGIS_TIMEZONE || 'UTC',
+    });
+
+    console.log(`\n# Sample Session Data from S1 API`);
+    console.log(`Date: ${dateStr}\n`);
+
+    try {
+      const sessions = await api.fetchS1SessionRevenue(dateStr, false);
+      console.log(`Fetched ${sessions.length} total sessions\n`);
+
+      if (sessions.length === 0) {
+        console.log('No sessions found for this date.');
+        return;
+      }
+
+      // Show first 5 sessions with all fields
+      console.log('Sample Sessions (first 5):');
+      console.log('='.repeat(100));
+      for (let i = 0; i < Math.min(5, sessions.length); i++) {
+        const session = sessions[i];
+        console.log(`\nSession ${i + 1}:`);
+        console.log(JSON.stringify(session, null, 2));
+        console.log('-'.repeat(100));
+      }
+
+      // Show unique campaign IDs
+      const campaignIds = new Set<string>();
+      const campaignIdFields = new Set<string>();
+      
+      for (const session of sessions.slice(0, 100)) { // Check first 100 sessions
+        for (const [key, value] of Object.entries(session)) {
+          if (key.toLowerCase().includes('campaign') && value) {
+            campaignIdFields.add(key);
+            campaignIds.add(String(value));
+          }
+        }
+      }
+
+      console.log(`\nCampaign ID Fields Found: ${Array.from(campaignIdFields).join(', ')}`);
+      console.log(`\nSample Campaign IDs (first 20):`);
+      console.log(Array.from(campaignIds).slice(0, 20).join(', '));
+
+      // Show all field names
+      console.log(`\n\nAll Fields in Session Data:`);
+      const allFields = new Set<string>();
+      for (const session of sessions.slice(0, 10)) {
+        Object.keys(session).forEach(field => allFields.add(field));
+      }
+      console.log(Array.from(allFields).sort().join(', '));
+
+    } catch (error: any) {
+      console.error('Error fetching sample data:', error.message);
+      if (error.response) {
+        console.error(`  Status: ${error.response.status}`);
+        console.error(`  Response: ${JSON.stringify(error.response.data).substring(0, 500)}`);
+      }
+    }
+    return;
+  }
 
   if (!campaignId) {
-    console.error('Error: --campaign-id is required');
+    console.error('Error: --campaign-id is required (or use --show-sample=true to see sample data)');
     process.exit(1);
   }
 
