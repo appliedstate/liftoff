@@ -98,6 +98,15 @@ async function main(): Promise<void> {
       console.log(`  ✓ Fetched ${sessions.length} sessions for ${queryDate}`);
       if (sessions.length > 0) {
         console.log(`  Sample session fields: ${Object.keys(sessions[0]).join(', ')}`);
+        
+        // Debug: Show sample campaign IDs to help identify the format
+        const sampleCampaignIds = new Set<string>();
+        for (let i = 0; i < Math.min(20, sessions.length); i++) {
+          const session = sessions[i];
+          const cid = session.campaign_id || session.strategisCampaignId || session.campaignId;
+          if (cid) sampleCampaignIds.add(String(cid));
+        }
+        console.log(`  Sample campaign IDs (first 20): ${Array.from(sampleCampaignIds).slice(0, 10).join(', ')}`);
       }
       
       let matchingSessions = 0;
@@ -112,7 +121,15 @@ async function main(): Promise<void> {
           session.strategiscampaignid ||
           session.campaignId_strategis;
         
-        if (!rowCampaignId || rowCampaignId !== campaignId) continue;
+        if (!rowCampaignId) continue;
+        
+        // Case-insensitive comparison, and also check if campaignId is contained in the rowCampaignId
+        const rowCampaignIdStr = String(rowCampaignId).toLowerCase().trim();
+        const searchCampaignId = campaignId.toLowerCase().trim();
+        
+        if (rowCampaignIdStr !== searchCampaignId && !rowCampaignIdStr.includes(searchCampaignId) && !searchCampaignId.includes(rowCampaignIdStr)) {
+          continue;
+        }
         
         matchingSessions++;
         
