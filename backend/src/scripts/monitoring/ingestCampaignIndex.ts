@@ -406,6 +406,47 @@ class CampaignAggregator {
     }
   }
 
+  /**
+   * Map Facebook campaign IDs to Strategis campaign IDs using S1 daily with networkCampaignId.
+   * This does NOT depend on Facebook campaign name patterns.
+   */
+  mergeNetworkCampaignMap(rows: any[]): void {
+    for (const row of rows) {
+      const fbCampaignId = pickId(row, [
+        'networkCampaignId',
+        'network_campaign_id',
+        'campaignId',
+        'campaign_id',
+      ]);
+      const strategisId = pickId(row, [
+        'strategisCampaignId',
+        'strategis_campaign_id',
+        'strategiscampaignid',
+      ]);
+      if (!fbCampaignId || !strategisId) continue;
+
+      let agg = this.ensureAggregate(
+        {
+          strategisCampaignId: strategisId,
+          campaign_id: fbCampaignId,
+          campaignId: fbCampaignId,
+          campaign_name: row?.networkCampaignName || row?.campaignName || row?.campaign_name,
+        },
+        's1_network_map'
+      );
+      if (!agg) continue;
+
+      this.setIfEmpty(agg, 'facebookCampaignId', fbCampaignId);
+      const campaignName = pick(row, ['networkCampaignName', 'campaignName', 'campaign_name']);
+      this.setIfEmpty(agg, 'campaignName', campaignName);
+
+      // Ensure strategisCampaignId is set explicitly
+      if (!agg.strategisCampaignId) {
+        agg.strategisCampaignId = strategisId;
+      }
+    }
+  }
+
   mergeFacebookCampaigns(rows: any[]): void {
     for (const row of rows) {
       let agg = this.ensureAggregate(row, 'facebook_campaigns');
@@ -897,6 +938,8 @@ async function main(): Promise<void> {
       { label: 's1_daily_v3', fetch: () => api.fetchS1Daily(date, true), merge: (rows) => aggregator.mergeS1Daily(rows) },
       { label: 's1_reconciled', fetch: () => api.fetchS1Reconciled(date, true), merge: (rows) => aggregator.mergeS1Reconciled(rows) },
       { label: 's1_rpc_average', fetch: () => api.fetchS1RpcAverage(date), merge: (rows) => aggregator.mergeS1Rpc(rows) },
+      // S1 mapping of networkCampaignId (Facebook) to strategisCampaignId
+      { label: 's1_network_map', fetch: () => api.fetchS1DailyWithNetworkCampaignId(date, '112'), merge: (rows) => aggregator.mergeNetworkCampaignMap(rows) },
       
       // Facebook Data
       { label: 'facebook_report', fetch: () => api.fetchFacebookReport(date), merge: (rows) => aggregator.mergeFacebookReport(rows) },
