@@ -379,7 +379,7 @@ class CampaignAggregator {
 
   mergeFacebookCampaigns(rows: any[]): void {
     for (const row of rows) {
-      const agg = this.ensureAggregate(row, 'facebook_campaigns');
+      let agg = this.ensureAggregate(row, 'facebook_campaigns');
       if (!agg) continue;
       this.setIfEmpty(agg, 'accountId', pick(row, ['account_id', 'ad_account_id']));
       const campaignName = pick(row, ['campaign_name', 'name']);
@@ -405,6 +405,10 @@ class CampaignAggregator {
                 // Merge: copy Facebook campaign ID to existing aggregate if not set
                 if (!existingAgg.facebookCampaignId && agg.facebookCampaignId) {
                   existingAgg.facebookCampaignId = agg.facebookCampaignId;
+                }
+                // Copy other fields from agg to existingAgg
+                if (!existingAgg.campaignName && agg.campaignName) {
+                  existingAgg.campaignName = agg.campaignName;
                 }
                 // Delete the old aggregate (keyed by Facebook ID)
                 this.aggregates.delete(agg.key);
