@@ -5,11 +5,20 @@
  * 
  * Usage:
  *   npm run monitor:campaign-keywords -- --campaign-id=sipuli0615 --date=2025-12-08 --days=3
+ *   npm run monitor:campaign-keywords -- --campaign-id=sipuli0615 --adset-id=120231668335910424 --date=2025-12-08 --days=3
+ *   npm run monitor:campaign-keywords -- --campaign-id=sipuli0615 --ad-id=120234479088370424 --date=2025-12-08 --days=3
  *   npm run monitor:campaign-keywords -- --show-sample=true --date=2025-12-08
+ * 
+ * Notes:
+ *   - campaign-id: Strategis campaign ID (e.g., sipuli0615)
+ *   - The script maps Facebook campaign IDs from session data to Strategis campaign IDs using campaign_index
+ *   - Revenue is calculated from the revenue_updates array (sum of all revenue values)
+ *   - You can filter by adset-id or ad-id to drill down further
  */
 
 import 'dotenv/config';
 import { StrategisApi } from '../../lib/strategisApi';
+import { createMonitoringConnection, allRows, closeConnection, sqlString } from '../../lib/monitoringDb';
 
 function getFlag(name: string, def?: string): string {
   const key = `--${name}=`;
@@ -60,8 +69,51 @@ function displayKeywordResults(
   );
 }
 
+async function loadCampaignMapping(conn: any, dateStr: string): Promise<Map<string, string>> {
+  // Load campaign_index to map Facebook campaign IDs to Strategis campaign IDs
+  // We'll look for campaigns that match the date and try to find Facebook campaign IDs in raw_payload
+  const mapping = new Map<string, string>();
+  
+  try {
+    // Query campaign_index for the date range
+    const date = new Date(dateStr);
+    const startDate = new Date(date);
+    startDate.setDate(date.getDate() - 7); // Look back 7 days for mapping
+    
+    const rows = await allRows<any>(conn, `
+      SELECT campaign_id, raw_payload
+      FROM campaign_index
+      WHERE date >= ${sqlString(startDate.toISOString().slice(0, 10))}
+        AND date <= ${sqlString(dateStr)}
+        AND raw_payload IS NOT NULL
+    `);
+    
+    for (const row of rows) {
+      const strategisCampaignId = row.campaign_id;
+      if (!strategisCampaignId) continue;
+      
+      // Try to extract Facebook campaign ID from raw_payload
+      try {
+        const raw = typeof row.raw_payload === 'string' ? JSON.parse(row.raw_payload) : row.raw_payload;
+        const fbCampaignId = raw?.fbCampaignId || raw?.fb_campaign_id || raw?.facebookCampaignId || raw?.campaign_id;
+        if (fbCampaignId) {
+          mapping.set(String(fbCampaignId), strategisCampaignId);
+        }
+      } catch {
+        // Ignore malformed JSON
+      }
+    }
+  } catch (error: any) {
+    console.warn(`Warning: Could not load campaign mapping: ${error.message}`);
+  }
+  
+  return mapping;
+}
+
 async function main(): Promise<void> {
-  const campaignId = getFlag('campaign-id');
+  const campaignId = getFlag('campaign-id'); // This is Strategis campaign ID
+  const adsetId = getFlag('adset-id');
+  const adId = getFlag('ad-id');
   const dateStr = getFlag('date') || todayUtc();
   const days = parseInt(getFlag('days') || '3', 10);
   const showSample = getFlag('show-sample') === 'true';
@@ -132,13 +184,59 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (!campaignId) {
+  if (!campaignId && !showSample) {
     console.error('Error: --campaign-id is required (or use --show-sample=true to see sample data)');
+    console.error('  You can also use --adset-id or --ad-id to filter by those instead');
     process.exit(1);
   }
 
-  console.log(`\n# Keyword Performance for Campaign: ${campaignId}`);
+  console.log(`\n# Keyword Performance for Campaign: ${campaignId || '(filtering by adset/ad)'}`);
   console.log(`Date Range: ${dateStr} (last ${days} days)\n`);
+
+  // Load campaign mapping from monitoring database
+  const conn = createMonitoringConnection();
+  let campaignMapping: Map<string, string> = new Map();
+  let fbCampaignIds: Set<string> = new Set();
+  
+  if (campaignId) {
+    console.log('Loading campaign mapping from monitoring database...');
+    campaignMapping = await loadCampaignMapping(conn, dateStr);
+    
+    // Also query campaign_index to find Facebook campaign IDs for this Strategis campaign ID
+    try {
+      const rows = await allRows<any>(conn, `
+        SELECT DISTINCT campaign_id, raw_payload
+        FROM campaign_index
+        WHERE campaign_id = ${sqlString(campaignId)}
+          AND date >= ${sqlString(new Date(new Date(dateStr).getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10))}
+          AND date <= ${sqlString(dateStr)}
+      `);
+      
+      for (const row of rows) {
+        try {
+          const raw = typeof row.raw_payload === 'string' ? JSON.parse(row.raw_payload) : row.raw_payload;
+          const fbId = raw?.fbCampaignId || raw?.fb_campaign_id || raw?.facebookCampaignId;
+          if (fbId) {
+            fbCampaignIds.add(String(fbId));
+            campaignMapping.set(String(fbId), campaignId);
+          }
+        } catch {
+          // Ignore
+        }
+      }
+      
+      if (fbCampaignIds.size > 0) {
+        console.log(`  Found ${fbCampaignIds.size} Facebook campaign ID(s) for Strategis campaign ${campaignId}`);
+      } else {
+        console.log(`  Warning: Could not find Facebook campaign IDs for Strategis campaign ${campaignId}`);
+        console.log(`  Will search sessions by Strategis campaign ID directly (may not match)`);
+      }
+    } catch (error: any) {
+      console.warn(`  Warning: Could not query campaign_index: ${error.message}`);
+    }
+  }
+  
+  closeConnection(conn);
 
   // Try S1 API first with keyword dimensions
   const api = new StrategisApi({
@@ -151,7 +249,7 @@ async function main(): Promise<void> {
   const keywordStats = new Map<string, { sessions: number; revenue: number; rpc: number }>();
 
   // Query S1 session-level API (includes keywords)
-  console.log('Querying S1 session-level API for keyword data...\n');
+  console.log('\nQuerying S1 session-level API for keyword data...\n');
   
   for (let d = 0; d < days; d++) {
     const date = new Date(dateStr);
@@ -179,25 +277,46 @@ async function main(): Promise<void> {
       
       let matchingSessions = 0;
 
-      // Filter by campaign and aggregate by keyword
+      // Filter by campaign/adset/ad and aggregate by keyword
       for (const session of sessions) {
-        // Try various campaign ID field names
-        const rowCampaignId = 
-          session.strategisCampaignId || 
-          session.campaign_id || 
-          session.campaignId || 
-          session.strategiscampaignid ||
-          session.campaignId_strategis;
+        // Get Facebook campaign ID from session
+        const fbCampaignId = session.campaign_id || session.campaignId;
+        if (!fbCampaignId) continue;
         
-        if (!rowCampaignId) continue;
-        
-        // Case-insensitive comparison, and also check if campaignId is contained in the rowCampaignId
-        const rowCampaignIdStr = String(rowCampaignId).toLowerCase().trim();
-        const searchCampaignId = campaignId.toLowerCase().trim();
-        
-        if (rowCampaignIdStr !== searchCampaignId && !rowCampaignIdStr.includes(searchCampaignId) && !searchCampaignId.includes(rowCampaignIdStr)) {
-          continue;
+        // Check if this Facebook campaign ID maps to our Strategis campaign ID
+        let matchesCampaign = false;
+        if (campaignId) {
+          if (fbCampaignIds.has(String(fbCampaignId))) {
+            matchesCampaign = true;
+          } else {
+            // Also try direct match (in case campaign_id in session is actually Strategis ID)
+            const fbCampaignIdStr = String(fbCampaignId).toLowerCase().trim();
+            const searchCampaignId = campaignId.toLowerCase().trim();
+            if (fbCampaignIdStr === searchCampaignId || fbCampaignIdStr.includes(searchCampaignId)) {
+              matchesCampaign = true;
+            }
+          }
+        } else {
+          matchesCampaign = true; // No campaign filter
         }
+        
+        // Filter by adset_id if provided
+        if (adsetId) {
+          const sessionAdsetId = session.adset_id || session.adsetId;
+          if (!sessionAdsetId || String(sessionAdsetId).toLowerCase() !== adsetId.toLowerCase()) {
+            continue;
+          }
+        }
+        
+        // Filter by ad_id if provided
+        if (adId) {
+          const sessionAdId = session.ad_id || session.adId;
+          if (!sessionAdId || String(sessionAdId).toLowerCase() !== adId.toLowerCase()) {
+            continue;
+          }
+        }
+        
+        if (!matchesCampaign) continue;
         
         matchingSessions++;
         
@@ -211,14 +330,24 @@ async function main(): Promise<void> {
         
         if (!keyword || keyword.trim() === '') continue;
 
-        // Extract revenue (try various field names)
-        const revenue = Number(
-          session.total_revenue || 
-          session.revenue || 
-          session.estimated_revenue || 
-          session.revenue_usd ||
-          0
-        );
+        // Calculate total revenue from revenue_updates array
+        let revenue = 0;
+        if (session.revenue_updates && Array.isArray(session.revenue_updates)) {
+          // Sum all revenue values from the updates
+          revenue = session.revenue_updates.reduce((sum: number, update: any) => {
+            const rev = Number(update.revenue || 0);
+            return sum + (isNaN(rev) ? 0 : rev);
+          }, 0);
+        } else {
+          // Fallback to direct revenue field
+          revenue = Number(
+            session.total_revenue || 
+            session.revenue || 
+            session.estimated_revenue || 
+            session.revenue_usd ||
+            0
+          );
+        }
         
         if (!keywordStats.has(keyword)) {
           keywordStats.set(keyword, { sessions: 0, revenue: 0, rpc: 0 });
