@@ -168,9 +168,9 @@ async function main(): Promise<void> {
     await initMonitoringSchema(conn);
 
     const asOfIso = getFlag('as-of');
-    const site = getFlag('site') || DEFAULT_SITE;
+    const site = getFlag('site'); // No default - show all sites unless filtered
     const days = parseInt(getFlag('days') || String(DEFAULT_DAYS), 10);
-    const mediaSources = getFlagList('media-source') || DEFAULT_MEDIA_SOURCES;
+    const mediaSources = getFlagList('media-source'); // No default - show all media sources unless filtered
     
     // Optional filters for drilling down
     const campaignId = getFlag('campaign-id');
@@ -236,8 +236,8 @@ async function main(): Promise<void> {
     }
 
     console.log(`\n# Hourly Snapshot Report`);
-    console.log(`Site: ${site}`);
-    console.log(`Media Sources: ${mediaSources.join(', ')}`);
+    console.log(`Site: ${site || 'ALL (no filter)'}`);
+    console.log(`Media Sources: ${mediaSources && mediaSources.length > 0 ? mediaSources.join(', ') : 'ALL (no filter)'}`);
     console.log(`Days (including today): ${days}`);
     if (campaignId) console.log(`Campaign ID: ${campaignId}`);
     if (campaignName) console.log(`Campaign Name: ${campaignName}`);
@@ -253,9 +253,6 @@ async function main(): Promise<void> {
     console.log('');
 
     const snapshotList = snapshots.map((s) => sqlString(s)).join(', ');
-    const mediaSourceFilter = mediaSources
-      .map((m) => sqlString(m))
-      .join(', ');
 
     // Build WHERE clause with optional filters
     const whereConditions: string[] = [
@@ -341,7 +338,10 @@ async function main(): Promise<void> {
         });
         
         if (campaignId && !debugCampaigns.some((r: any) => r.campaign_id === campaignId)) {
-          console.log(`\n  ⚠ Campaign ID "${campaignId}" not found in snapshots with site=${site} and media_source IN (${mediaSources.join(', ')}).`);
+          const filterDesc = [];
+          if (site) filterDesc.push(`site=${site}`);
+          if (mediaSources && mediaSources.length > 0) filterDesc.push(`media_source IN (${mediaSources.join(', ')})`);
+          console.log(`\n  ⚠ Campaign ID "${campaignId}" not found in snapshots${filterDesc.length > 0 ? ` with ${filterDesc.join(' and ')}` : ''}.`);
           
           // Check if campaign exists in snapshots with different site/media_source
           const allCampaignRows = await allRows<any>(conn, `
@@ -364,8 +364,11 @@ async function main(): Promise<void> {
             console.log(`  This might mean the join with campaign_index failed (no facebook_campaign_id match).`);
           }
         }
-      } else {
-        console.log(`\nDEBUG: No campaigns found matching site=${site} and media_source IN (${mediaSources.join(', ')})`);
+        } else {
+          const filterDesc = [];
+          if (site) filterDesc.push(`site=${site}`);
+          if (mediaSources && mediaSources.length > 0) filterDesc.push(`media_source IN (${mediaSources.join(', ')})`);
+          console.log(`\nDEBUG: No campaigns found${filterDesc.length > 0 ? ` matching ${filterDesc.join(' and ')}` : ''}`);
         
         // If we're looking for a specific campaign, check if it exists without filters
         if (campaignId) {
