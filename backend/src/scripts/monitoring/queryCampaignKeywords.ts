@@ -872,10 +872,15 @@ async function main(): Promise<void> {
       }
       const totalRevenue = Array.from(keywordStats.values()).reduce((sum, stats) => sum + stats.revenue, 0);
       const totalSessions = Array.from(keywordStats.values()).reduce((sum, stats) => sum + stats.sessions, 0);
+      const totalSessionsWithRevenue = Array.from(keywordStats.values()).reduce((sum, stats) => sum + stats.sessionsWithRevenue, 0);
       console.log(`\n  Keyword Query Results:`);
-      console.log(`    Total Sessions: ${totalSessions}`);
+      console.log(`    Total Sessions (searches): ${totalSessions.toLocaleString()}`);
+      console.log(`    Sessions with Revenue (clicks): ${totalSessionsWithRevenue.toLocaleString()}`);
+      console.log(`    Conversion Rate: ${totalSessions > 0 ? ((totalSessionsWithRevenue / totalSessions) * 100).toFixed(2) : 0}%`);
       console.log(`    Total Revenue: $${totalRevenue.toFixed(2)}`);
-      console.log(`    Overall RPC: $${(totalRevenue / totalSessions).toFixed(4)}`);
+      console.log(`    Revenue per Search (RPC/Search): $${(totalRevenue / totalSessions).toFixed(4)}`);
+      console.log(`    Revenue per Click (RPC/Click): $${(totalRevenue / totalSessionsWithRevenue).toFixed(4)}`);
+      console.log(`\n    Compare with S1 clicks reported: ${totalSessionsWithRevenue.toLocaleString()} sessions with revenue should match S1 clicks (~1,089)`);
       console.log(`\n  To verify revenue in snapshot report, run:`);
       console.log(`    npm run monitor:snapshot-report -- --campaign-id=${strategisId} --date=${dateStr} --days=${days}`);
       console.log(`${'='.repeat(80)}\n`);
