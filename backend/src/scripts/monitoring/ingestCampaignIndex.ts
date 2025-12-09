@@ -356,10 +356,39 @@ class CampaignAggregator {
 
   mergeFacebookReport(rows: any[]): void {
     for (const row of rows) {
-      const agg = this.ensureAggregate(row, 'facebook_report');
+      let agg = this.ensureAggregate(row, 'facebook_report');
       if (!agg) continue;
       this.setIfEmpty(agg, 'accountId', pick(row, ['account_id', 'ad_account_id']));
-      this.setIfEmpty(agg, 'campaignName', pick(row, ['campaign_name', 'name']));
+      const campaignName = pick(row, ['campaign_name', 'name']);
+      this.setIfEmpty(agg, 'campaignName', campaignName);
+      
+      // CRITICAL: Extract strategisCampaignId from campaign name if not already set
+      // Pattern: campaignName.split('_')[0] (e.g., 'sire1f06al_20241208_facebook' -> 'sire1f06al')
+      if (!agg.strategisCampaignId && campaignName) {
+        const parts = String(campaignName).trim().split('_');
+        if (parts.length > 0 && parts[0] && parts[0].length > 0) {
+          const extractedId = parts[0];
+          if (extractedId.length < 15 && !/^\d+$/.test(extractedId) && /^[a-z0-9_-]+$/i.test(extractedId)) {
+            agg.strategisCampaignId = extractedId;
+            // Update key if needed
+            if (agg.key !== extractedId && String(agg.key).length > 10) {
+              const existingAgg = this.aggregates.get(extractedId);
+              if (existingAgg && existingAgg.strategisCampaignId === extractedId) {
+                if (!existingAgg.facebookCampaignId && agg.facebookCampaignId) {
+                  existingAgg.facebookCampaignId = agg.facebookCampaignId;
+                }
+                this.aggregates.delete(agg.key);
+                agg = existingAgg;
+              } else {
+                this.aggregates.delete(agg.key);
+                agg.key = extractedId;
+                this.aggregates.set(extractedId, agg);
+              }
+            }
+          }
+        }
+      }
+      
       this.setIfEmpty(agg, 'owner', pick(row, ['owner']));
       this.setIfEmpty(agg, 'lane', pick(row, ['lane']));
       this.setIfEmpty(agg, 'category', pick(row, ['category']));
