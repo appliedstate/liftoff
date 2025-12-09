@@ -672,8 +672,9 @@ async function main(): Promise<void> {
         
         // Query session_hourly_metrics joined with campaign_index to find Facebook IDs
         // This matches the join logic in snapshotHourlyMetrics
-        const reverseRows = await allRows<any>(conn, `
-          SELECT DISTINCT shm.campaign_id AS fb_campaign_id, ci.campaign_name
+        // Try both INNER JOIN (requires facebook_campaign_id populated) and LEFT JOIN (works even if not populated)
+        let reverseRows = await allRows<any>(conn, `
+          SELECT DISTINCT shm.campaign_id AS fb_campaign_id, ci.campaign_name, ci.campaign_id AS strategis_id
           FROM session_hourly_metrics shm
           INNER JOIN campaign_index ci
             ON ci.facebook_campaign_id = shm.campaign_id
@@ -683,9 +684,31 @@ async function main(): Promise<void> {
             AND shm.media_source = 'facebook'
         `);
         
+        // If INNER JOIN found nothing, try LEFT JOIN and match by campaign_name pattern
+        // This works when facebook_campaign_id isn't populated but campaign_name contains strategisCampaignId
+        if (reverseRows.length === 0) {
+          console.log(`  INNER JOIN found 0 rows, trying LEFT JOIN with campaign name pattern matching...`);
+          reverseRows = await allRows<any>(conn, `
+            SELECT DISTINCT shm.campaign_id AS fb_campaign_id, ci.campaign_name, ci.campaign_id AS strategis_id
+            FROM session_hourly_metrics shm
+            LEFT JOIN campaign_index ci
+              ON ci.facebook_campaign_id = shm.campaign_id
+             AND ci.date = shm.date
+            WHERE shm.date = DATE '${dateStr}'
+              AND shm.media_source = 'facebook'
+              AND (
+                ci.campaign_id = ${sqlString(campaignId)}
+                OR ci.campaign_name LIKE ${sqlString(`%${campaignId}%`)}
+              )
+          `);
+        }
+        
         for (const row of reverseRows) {
           const fbId = String(row.fb_campaign_id);
-          if (fbId && fbId.length > 10) {
+          const strategisId = row.strategis_id ? String(row.strategis_id) : null;
+          
+          // Only add if it matches our Strategis campaign ID
+          if (fbId && fbId.length > 10 && (!strategisId || strategisId === campaignId)) {
             fbCampaignIds.add(fbId);
             if (row.campaign_name) {
               fbCampaignIdToName.set(fbId, String(row.campaign_name));
@@ -695,6 +718,11 @@ async function main(): Promise<void> {
         
         if (fbCampaignIds.size > 0) {
           console.log(`  ✓ Found ${fbCampaignIds.size} Facebook campaign ID(s) via reverse lookup from session_hourly_metrics`);
+          console.log(`    Facebook IDs: ${Array.from(fbCampaignIds).slice(0, 3).join(', ')}${fbCampaignIds.size > 3 ? '...' : ''}`);
+        } else {
+          console.log(`  ⚠ Reverse lookup found 0 Facebook campaign IDs`);
+          console.log(`    This means campaign_index doesn't have facebook_campaign_id populated for ${campaignId}`);
+          console.log(`    Try running: npm run monitor:ingest-campaigns -- --date=${dateStr} --level=adset`);
         }
       } catch (error: any) {
         console.warn(`  ⚠ Warning: Reverse lookup failed: ${error.message}`);
