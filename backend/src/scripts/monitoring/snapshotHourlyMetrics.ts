@@ -190,7 +190,7 @@ async function runSnapshot(): Promise<void> {
       WITH hourly AS (
         SELECT
           shm.date,
-          shm.campaign_id,
+          shm.campaign_id AS fb_campaign_id, -- This is Facebook campaign ID from session data
           shm.click_hour,
           shm.sessions,
           shm.revenue,
@@ -201,7 +201,7 @@ async function runSnapshot(): Promise<void> {
           shm.media_source,
           ci.rsoc_site,
           ci.level,
-          ci.campaign_id AS ci_campaign_id,
+          ci.campaign_id AS strategis_campaign_id, -- Strategis campaign ID from campaign_index
           ci.campaign_name,
           ci.adset_id,
           ci.adset_name,
@@ -211,7 +211,7 @@ async function runSnapshot(): Promise<void> {
           (shm.date + shm.click_hour * INTERVAL 1 HOUR - INTERVAL 8 HOUR) AS ts_pst
         FROM session_hourly_metrics shm
         LEFT JOIN campaign_index ci
-          ON ci.campaign_id = shm.campaign_id
+          ON ci.facebook_campaign_id = shm.campaign_id  -- Join via Facebook campaign ID
          AND ci.date = shm.date
         WHERE shm.media_source IS NOT NULL
       ),
@@ -249,7 +249,7 @@ async function runSnapshot(): Promise<void> {
         COALESCE(f.lane, 'UNKNOWN') AS lane,
         COALESCE(f.category, 'UNKNOWN') AS category,
         COALESCE(f.level, 'UNKNOWN') AS level,
-        COALESCE(f.ci_campaign_id, f.campaign_id) AS campaign_id,
+        COALESCE(f.strategis_campaign_id, f.fb_campaign_id) AS campaign_id, -- Use Strategis ID if available, fallback to Facebook ID
         f.campaign_name,
         COALESCE(f.adset_id, 'UNKNOWN') AS adset_id,
         f.adset_name,
@@ -272,7 +272,7 @@ async function runSnapshot(): Promise<void> {
         COALESCE(f.lane, 'UNKNOWN'),
         COALESCE(f.category, 'UNKNOWN'),
         COALESCE(f.level, 'UNKNOWN'),
-        COALESCE(f.ci_campaign_id, f.campaign_id),
+        COALESCE(f.strategis_campaign_id, f.fb_campaign_id), -- Use Strategis ID if available, fallback to Facebook ID
         f.campaign_name,
         COALESCE(f.adset_id, 'UNKNOWN'),
         f.adset_name
