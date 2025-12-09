@@ -33,9 +33,17 @@ function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+type KeywordStats = {
+  sessions: number;
+  sessionsWithRevenue: number;
+  revenue: number;
+  rpc: number; // Revenue per session (search)
+  rpcPerClick: number; // Revenue per click (session with revenue)
+};
+
 function displayKeywordResults(
-  sortedKeywords: Array<[string, { sessions: number; revenue: number; rpc: number }]>,
-  keywordStats: Map<string, { sessions: number; revenue: number; rpc: number }>
+  sortedKeywords: Array<[string, KeywordStats]>,
+  keywordStats: Map<string, KeywordStats>
 ): void {
   if (sortedKeywords.length === 0) {
     console.log('No keyword data found for this campaign.');
@@ -43,32 +51,53 @@ function displayKeywordResults(
   }
 
   console.log(`Found ${sortedKeywords.length} keywords:\n`);
-  console.log('Keyword'.padEnd(40) + ' | Sessions'.padStart(10) + ' | Revenue'.padStart(12) + ' | RPC'.padStart(10));
-  console.log('-'.repeat(40) + '-+-' + '-'.repeat(10) + '-+-' + '-'.repeat(12) + '-+-' + '-'.repeat(10));
+  console.log(
+    'Keyword'.padEnd(40) + ' | ' +
+    'Sessions'.padStart(10) + ' | ' +
+    'Sessions w/Rev'.padStart(15) + ' | ' +
+    'Revenue'.padStart(12) + ' | ' +
+    'RPC/Search'.padStart(12) + ' | ' +
+    'RPC/Click'.padStart(12)
+  );
+  console.log('-'.repeat(40) + '-+-' + '-'.repeat(10) + '-+-' + '-'.repeat(15) + '-+-' + '-'.repeat(12) + '-+-' + '-'.repeat(12) + '-+-' + '-'.repeat(12));
   
   let totalSessions = 0;
+  let totalSessionsWithRevenue = 0;
   let totalRevenue = 0;
 
   for (const [keyword, stats] of sortedKeywords) {
     totalSessions += stats.sessions;
+    totalSessionsWithRevenue += stats.sessionsWithRevenue;
     totalRevenue += stats.revenue;
     const keywordDisplay = keyword.length > 40 ? keyword.substring(0, 37) + '...' : keyword;
     console.log(
       keywordDisplay.padEnd(40) + ' | ' +
       stats.sessions.toString().padStart(10) + ' | ' +
+      stats.sessionsWithRevenue.toString().padStart(15) + ' | ' +
       `$${stats.revenue.toFixed(2)}`.padStart(12) + ' | ' +
-      `$${stats.rpc.toFixed(4)}`.padStart(10)
+      `$${stats.rpc.toFixed(4)}`.padStart(12) + ' | ' +
+      `$${stats.rpcPerClick.toFixed(4)}`.padStart(12)
     );
   }
 
   const overallRpc = totalSessions > 0 ? totalRevenue / totalSessions : 0;
-  console.log('-'.repeat(40) + '-+-' + '-'.repeat(10) + '-+-' + '-'.repeat(12) + '-+-' + '-'.repeat(10));
+  const overallRpcPerClick = totalSessionsWithRevenue > 0 ? totalRevenue / totalSessionsWithRevenue : 0;
+  console.log('-'.repeat(40) + '-+-' + '-'.repeat(10) + '-+-' + '-'.repeat(15) + '-+-' + '-'.repeat(12) + '-+-' + '-'.repeat(12) + '-+-' + '-'.repeat(12));
   console.log(
     'TOTAL'.padEnd(40) + ' | ' +
     totalSessions.toString().padStart(10) + ' | ' +
+    totalSessionsWithRevenue.toString().padStart(15) + ' | ' +
     `$${totalRevenue.toFixed(2)}`.padStart(12) + ' | ' +
-    `$${overallRpc.toFixed(4)}`.padStart(10)
+    `$${overallRpc.toFixed(4)}`.padStart(12) + ' | ' +
+    `$${overallRpcPerClick.toFixed(4)}`.padStart(12)
   );
+  
+  console.log(`\nSummary:`);
+  console.log(`  Total Sessions (searches): ${totalSessions.toLocaleString()}`);
+  console.log(`  Sessions with Revenue (clicks): ${totalSessionsWithRevenue.toLocaleString()}`);
+  console.log(`  Conversion Rate: ${totalSessions > 0 ? ((totalSessionsWithRevenue / totalSessions) * 100).toFixed(2) : 0}%`);
+  console.log(`  Revenue per Search (RPC/Search): $${overallRpc.toFixed(4)}`);
+  console.log(`  Revenue per Click (RPC/Click): $${overallRpcPerClick.toFixed(4)}`);
 }
 
 /**
@@ -818,7 +847,8 @@ async function main(): Promise<void> {
   if (keywordStats.size > 0) {
     // Calculate RPC for each keyword
     for (const [keyword, stats] of keywordStats.entries()) {
-      stats.rpc = stats.sessions > 0 ? stats.revenue / stats.sessions : 0;
+      stats.rpc = stats.sessions > 0 ? stats.revenue / stats.sessions : 0; // Revenue per search (session)
+      stats.rpcPerClick = stats.sessionsWithRevenue > 0 ? stats.revenue / stats.sessionsWithRevenue : 0; // Revenue per click (session with revenue)
     }
 
     const sortedKeywords = Array.from(keywordStats.entries())
