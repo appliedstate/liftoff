@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Class-based dark mode so a user-controlled toggle can override the
+   OS preference. The lib/theme.ts hook syncs `class="dark"` onto <html>
+   based on the user's saved preference (light / dark / system). */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -12,11 +17,12 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Body CSS vars track the resolved theme (lib/theme.ts toggles the
+   .dark class on <html> when the resolved theme is dark, whether
+   that's via user override or OS preference). */
+:root.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
 }
 
 body {

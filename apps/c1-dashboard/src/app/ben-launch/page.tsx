@@ -1,7 +1,10 @@
 "use client";
 
 import { C1Chat, useThreadListManager } from "@thesysai/genui-sdk";
+import { ThemeProvider as CrayonThemeProvider } from "@crayonai/react-ui/ThemeProvider";
 import "@crayonai/react-ui/styles/index.css";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { useTheme } from "@/lib/theme";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -372,6 +375,7 @@ export default function BenLaunchWorkbench() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showAllForcekeys, setShowAllForcekeys] = useState(false);
   const [chatOpen, setChatOpen] = useState(true);
+  const { resolved: resolvedTheme } = useTheme();
   const [forcekeyWindow, setForcekeyWindow] = useState(() => trailingCompleteDayWindow(14));
   const [forcekeyRefreshNonce, setForcekeyRefreshNonce] = useState(0);
 
@@ -980,6 +984,7 @@ export default function BenLaunchWorkbench() {
                   }))}
                 />
               </div>
+              <ThemeToggle />
               <button
                 type="button"
                 onClick={() => setChatOpen((v) => !v)}
@@ -1730,11 +1735,14 @@ export default function BenLaunchWorkbench() {
             </svg>
           </button>
           <div className="min-h-0 flex-1 overflow-hidden">
-            <C1Chat
-              apiUrl={`/api/ben-launch?buyer=${encodeURIComponent(buyer)}`}
-              formFactor="full-page"
-              threadListManager={threadListManager}
-            />
+            <CrayonThemeProvider mode={resolvedTheme}>
+              <C1Chat
+                apiUrl={`/api/ben-launch?buyer=${encodeURIComponent(buyer)}`}
+                formFactor="full-page"
+                threadListManager={threadListManager}
+                disableThemeProvider
+              />
+            </CrayonThemeProvider>
           </div>
         </aside>
       ) : null}
