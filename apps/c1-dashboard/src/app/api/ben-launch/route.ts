@@ -1,0 +1,55 @@
+import { NextRequest, NextResponse } from "next/server";
+import OpenAI from "openai";
+import { transformStream } from "@crayonai/stream";
+import { DBMessage, getMessageStore } from "./messageStore";
+import { buildSystemPrompt, loadBenCatalogs } from "./catalogs";
+
+export async function POST(req: NextRequest) {
+  const { prompt, threadId, responseId } = (await req.json()) as {
+    prompt: DBMessage;
+    threadId: string;
+    responseId: string;
+  };
+
+  const client = new OpenAI({
+    baseURL: "https://api.thesys.dev/v1/embed/",
+    apiKey: process.env.THESYS_API_KEY,
+  });
+  const messageStore = getMessageStore(threadId);
+
+  if (messageStore.needsCatalogs()) {
+    const catalogs = await loadBenCatalogs();
+    messageStore.prependSystem(buildSystemPrompt(catalogs));
+  }
+
+  messageStore.addMessage(prompt);
+
+  const llmStream = await client.chat.completions.create({
+    model: "c1/openai/gpt-5/v-20250915",
+    messages: messageStore.getOpenAICompatibleMessageList(),
+    stream: true,
+  });
+
+  const responseStream = transformStream(
+    llmStream,
+    (chunk) => chunk.choices?.[0]?.delta?.content ?? "",
+    {
+      onEnd: ({ accumulated }) => {
+        const message = accumulated.filter((m) => m).join("");
+        messageStore.addMessage({
+          role: "assistant",
+          content: message,
+          id: responseId,
+        });
+      },
+    }
+  ) as ReadableStream<string>;
+
+  return new NextResponse(responseStream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+    },
+  });
+}
