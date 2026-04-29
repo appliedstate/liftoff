@@ -374,7 +374,6 @@ export default function BenLaunchWorkbench() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [copied, setCopied] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [showJson, setShowJson] = useState(false);
   const [chatOpen, setChatOpen] = useState(true);
 
   const threadListManager = useThreadListManager({
@@ -816,70 +815,63 @@ export default function BenLaunchWorkbench() {
       {/* Dashboard pane */}
       <main className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[1180px] px-6 py-6">
-          {/* Header */}
-          <header className={`${cardClass} mb-5 p-5`}>
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex h-6 items-center rounded-md bg-[#0071e3]/10 px-2 text-[11px] font-semibold uppercase tracking-wider text-[#0071e3]">
-                    Buyer Launch
-                  </span>
-                  <span className={pillClass}>one-screen shell</span>
-                </div>
-                <h1 className="mt-3 max-w-3xl text-2xl font-semibold tracking-tight text-neutral-900">
-                  Pick a proven launch shape, fill the content fields, and hand Facebook only the creative work.
-                </h1>
-                <p className="mt-2 max-w-2xl text-sm text-neutral-600">
-                  {buyerLabel}.{" "}
-                  {catalog.scope.strategistCampaigns} Strategis campaigns and{" "}
-                  {catalog.scope.matchedFacebookAdSets} matched Facebook ad sets distilled into reusable presets.
-                </p>
+          {/* Header — flat text on page bg */}
+          <header className="mb-5 flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <div className="inline-flex h-6 items-center rounded-md bg-[#0071e3]/10 px-2 text-[11px] font-semibold uppercase tracking-wider text-[#0071e3]">
+                Liftoff
               </div>
-              <div className="flex items-end gap-3">
-                <div className="min-w-[220px]">
-                  <label className={fieldLabel}>Buyer profile</label>
-                  <Dropdown
-                    value={buyer}
-                    onChange={(nextBuyer) => setBuyer(nextBuyer)}
-                    options={BUYER_OPTIONS.map((option) => ({
-                      value: option.value,
-                      label: option.label,
-                    }))}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setChatOpen((v) => !v)}
-                  className={buttonGhost}
-                  aria-label="Toggle assistant"
-                >
-                  {chatOpen ? "Hide assistant" : "Show assistant"}
-                </button>
-              </div>
+              <p className="mt-3 text-sm text-neutral-600">
+                {buyerLabel} · {catalog.profiles.length} presets ·{" "}
+                {Object.keys(catalog.lockedDefaults).length} locked defaults ·{" "}
+                {catalog.manualFields.length} manual fields · {readyCount}/5 ready
+              </p>
             </div>
-
-            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {[
-                { label: "Profiles", value: catalog.profiles.length },
-                { label: "Locked defaults", value: Object.keys(catalog.lockedDefaults).length },
-                { label: "Manual fields", value: catalog.manualFields.length },
-                { label: "Readiness", value: `${readyCount}/5` },
-              ].map((stat) => (
-                <div key={stat.label} className={`${subCardClass} px-4 py-3`}>
-                  <div className="text-xs text-neutral-500">{stat.label}</div>
-                  <div className="mt-1 text-xl font-semibold text-neutral-900">{stat.value}</div>
-                </div>
-              ))}
+            <div className="flex items-end gap-3">
+              <div className="min-w-[220px]">
+                <label className={fieldLabel}>Buyer profile</label>
+                <Dropdown
+                  value={buyer}
+                  onChange={(nextBuyer) => setBuyer(nextBuyer)}
+                  options={BUYER_OPTIONS.map((option) => ({
+                    value: option.value,
+                    label: option.label,
+                  }))}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setChatOpen((v) => !v)}
+                className={buttonGhost}
+                aria-label="Toggle assistant"
+              >
+                {chatOpen ? "Hide assistant" : "Show assistant"}
+              </button>
             </div>
           </header>
 
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-            {/* Form column */}
-            <section className={`${cardClass} p-5`}>
+          {Object.entries(catalog.lockedDefaults).length > 0 ? (
+            <div className="mb-5 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium uppercase tracking-[0.14em] text-neutral-500">
+                Locked defaults
+              </span>
+              {Object.entries(catalog.lockedDefaults).map(([key, value]) => (
+                <span key={key} className={pillClass}>
+                  {key}: {value}
+                </span>
+              ))}
+            </div>
+          ) : null}
+
+          {/* Single canvas — form on the left, summary rail on the right */}
+          <article className={cardClass}>
+            <div className="grid xl:grid-cols-[minmax(0,1fr)_320px] xl:divide-x xl:divide-black/[0.05]">
+              {/* Form column */}
+              <section className="p-6">
               {!selectedProfile ? null : (
-                <>
+                <div className="space-y-6">
                   {/* Preset row */}
-                  <div className="pb-5">
+                  <div>
                     <div className={sectionLabel}>Launch preset</div>
                     <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                       <div>
@@ -941,14 +933,14 @@ export default function BenLaunchWorkbench() {
                     </div>
 
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                      <div className={`${subCardClass} px-4 py-3`}>
+                      <div className="rounded-xl bg-neutral-100 px-3.5 py-2.5">
                         <div className="text-xs text-neutral-500">Current preset</div>
                         <div className="mt-1 font-semibold text-neutral-900">{selectedProfile.label}</div>
                         <div className="mt-1 text-xs text-neutral-500">
                           {selectedProfile.category.split(" > ").slice(0, -1).join(" • ") || "Category"}
                         </div>
                       </div>
-                      <div className={`${subCardClass} px-4 py-3`}>
+                      <div className="rounded-xl bg-neutral-100 px-3.5 py-2.5">
                         <div className="text-xs text-neutral-500">Naming family</div>
                         <div className="mt-1 font-mono text-xs text-neutral-700">
                           {selectedProfile.strategist.namingFamily?.value || "No dominant family"}
@@ -976,10 +968,11 @@ export default function BenLaunchWorkbench() {
                     </div>
                   </div>
 
+                  <div className="h-px bg-black/[0.06]" />
+
                   {/* Content inputs */}
-                  <div className="space-y-4 pt-5">
-                    <div className={`${subCardClass} p-4`}>
-                      <div className={`${sectionLabel} mb-3`}>Content inputs</div>
+                  <div className="space-y-4">
+                    <div className={sectionLabel}>Content inputs</div>
 
                       {selectedCampaign ? (
                         <div className="mb-3 rounded-xl bg-[#0071e3]/10 px-3 py-2.5 text-xs text-neutral-900">
@@ -1079,8 +1072,10 @@ export default function BenLaunchWorkbench() {
                       </div>
                     </div>
 
-                    <div className={`${subCardClass} p-4`}>
-                      <div className="mb-3 flex items-center justify-between">
+                    <div className="h-px bg-black/[0.06]" />
+
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
                         <div className={sectionLabel}>Launch controls</div>
                         <button
                           type="button"
@@ -1199,174 +1194,165 @@ export default function BenLaunchWorkbench() {
                         />
                       </label>
                     </div>
-                  </div>
-                </>
+                </div>
               )}
             </section>
 
-            {/* Summary column */}
-            <aside className="space-y-4">
-              <section className={`${cardClass} p-4`}>
-                <div className="mb-3 flex items-center justify-between">
-                  <h2 className="text-base font-semibold text-neutral-900">Launch summary</h2>
+            {/* Summary rail — flat sections divided by hairlines */}
+            <aside className="p-6">
+              <div className="space-y-5">
+                <div>
+                  <div className={sectionLabel}>Strategis</div>
+                  <div className="mt-2 space-y-1 text-sm text-neutral-800">
+                    <div>Article: {selectedCampaign?.articleSlug || selectedArticle?.label || form.article || "—"}</div>
+                    <div>Site: {strategistPreview?.rsocSite || "—"}</div>
+                    <div>Subdirectory: {strategistPreview?.subdirectory || "—"}</div>
+                    <div>Redirect: {strategistPreview?.redirectDomain || "—"}</div>
+                    <div>Forcekeys: {activeForcekeys.length}</div>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => setShowJson((v) => !v)}
-                    className={buttonGhost}
+                    onClick={() => strategistPreview && handleCopy("strategis", strategistPreview)}
+                    className={`${buttonGhost} mt-3`}
                   >
-                    {showJson ? "Hide JSON" : "Show JSON"}
+                    {copied === "strategis" ? "Copied" : "Copy Strategis JSON"}
                   </button>
                 </div>
 
-                <div className="space-y-3">
-                  <div className={`${subCardClass} px-3 py-3`}>
-                    <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">Strategis</div>
-                    <div className="mt-2 space-y-1 text-sm text-neutral-800">
-                      <div>Article: {selectedCampaign?.articleSlug || selectedArticle?.label || form.article || "—"}</div>
-                      <div>Site: {strategistPreview?.rsocSite || "—"}</div>
-                      <div>Subdirectory: {strategistPreview?.subdirectory || "—"}</div>
-                      <div>Redirect: {strategistPreview?.redirectDomain || "—"}</div>
-                      <div>Forcekeys: {activeForcekeys.length}</div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => strategistPreview && handleCopy("strategis", strategistPreview)}
-                      className={`${buttonGhost} mt-3`}
-                    >
-                      {copied === "strategis" ? "Copied" : "Copy Strategis JSON"}
-                    </button>
-                  </div>
+                <div className="h-px bg-black/[0.06]" />
 
-                  <div className={`${subCardClass} px-3 py-3`}>
-                    <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">Facebook</div>
-                    <div className="mt-2 space-y-1 text-sm text-neutral-800">
-                      <div>Ad account: {facebookPreview?.adAccountId || "—"}</div>
-                      <div>Page: {facebookPreview?.pageId || "—"}</div>
-                      <div>Pixel: {facebookPreview?.pixelId || "—"}</div>
-                      <div>Bid strategy: {facebookPreview?.bidStrategy || "—"}</div>
-                      {selectedCampaign ? <div>Source campaign: {selectedCampaign.campaignId}</div> : null}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => facebookPreview && handleCopy("facebook", facebookPreview)}
-                      className={`${buttonGhost} mt-3`}
-                    >
-                      {copied === "facebook" ? "Copied" : "Copy Facebook JSON"}
-                    </button>
+                <div>
+                  <div className={sectionLabel}>Facebook</div>
+                  <div className="mt-2 space-y-1 text-sm text-neutral-800">
+                    <div>Ad account: {facebookPreview?.adAccountId || "—"}</div>
+                    <div>Page: {facebookPreview?.pageId || "—"}</div>
+                    <div>Pixel: {facebookPreview?.pixelId || "—"}</div>
+                    <div>Bid strategy: {facebookPreview?.bidStrategy || "—"}</div>
+                    {selectedCampaign ? <div>Source campaign: {selectedCampaign.campaignId}</div> : null}
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => facebookPreview && handleCopy("facebook", facebookPreview)}
+                    className={`${buttonGhost} mt-3`}
+                  >
+                    {copied === "facebook" ? "Copied" : "Copy Facebook JSON"}
+                  </button>
+                </div>
 
-                  <div className={`${subCardClass} px-3 py-3`}>
-                    <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">Readiness</div>
-                    <div className="mt-2 space-y-1.5">
-                      {readyChecks.map((check) => (
-                        <div
-                          key={check.label}
-                          className="flex items-center justify-between text-sm text-neutral-800"
+                <div className="h-px bg-black/[0.06]" />
+
+                <div>
+                  <div className={sectionLabel}>Readiness</div>
+                  <div className="mt-2 space-y-1.5">
+                    {readyChecks.map((check) => (
+                      <div
+                        key={check.label}
+                        className="flex items-center justify-between text-sm text-neutral-800"
+                      >
+                        <span>{check.label}</span>
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+                            check.ok
+                              ? "bg-[#34c759]/12 text-[#0a7d2e]"
+                              : "bg-[#ff9500]/12 text-[#a55a00]"
+                          }`}
                         >
-                          <span>{check.label}</span>
-                          <span
-                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-                              check.ok
-                                ? "bg-[#34c759]/12 text-[#0a7d2e]"
-                                : "bg-[#ff9500]/12 text-[#a55a00]"
-                            }`}
-                          >
-                            {check.ok ? "Ready" : "Missing"}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
+                          {check.ok ? "Ready" : "Missing"}
+                        </span>
+                      </div>
+                    ))}
                   </div>
+                </div>
 
-                  {(selectedProfile?.notes || []).length > 0 ||
-                  (selectedCampaign?.notes || []).length > 0 ? (
-                    <div className="rounded-xl bg-[#ff9500]/12 px-3 py-3">
-                      <div className="text-xs font-medium uppercase tracking-wide text-[#a55a00]">Warnings</div>
-                      <ul className="mt-1.5 space-y-1 text-sm text-[#a55a00]">
-                        {[
-                          ...(selectedCampaign?.notes || []),
-                          ...(selectedProfile?.notes || []),
-                        ].map((note) => (
-                          <li key={note}>• {note}</li>
-                        ))}
-                      </ul>
+                {(selectedProfile?.notes || []).length > 0 ||
+                (selectedCampaign?.notes || []).length > 0 ? (
+                  <div className="rounded-xl bg-[#ff9500]/12 px-3 py-3">
+                    <div className="text-xs font-medium uppercase tracking-wide text-[#a55a00]">Warnings</div>
+                    <ul className="mt-1.5 space-y-1 text-sm text-[#a55a00]">
+                      {[
+                        ...(selectedCampaign?.notes || []),
+                        ...(selectedProfile?.notes || []),
+                      ].map((note) => (
+                        <li key={note}>• {note}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+
+                {setupError ? (
+                  <div className="rounded-xl bg-[#ff3b30]/10 px-3 py-3">
+                    <div className="text-xs font-medium uppercase tracking-wide text-[#a32018]">Setup error</div>
+                    <div className="mt-1.5 text-sm text-[#a32018]">{setupError}</div>
+                  </div>
+                ) : null}
+
+                {setupResult ? (
+                  <div className="rounded-xl bg-[#34c759]/12 px-3 py-3">
+                    <div className="text-xs font-medium uppercase tracking-wide text-[#0a7d2e]">
+                      {setupResult.mode} created
                     </div>
-                  ) : null}
-
-                  {setupError ? (
-                    <div className="rounded-xl bg-[#ff3b30]/10 px-3 py-3">
-                      <div className="text-xs font-medium uppercase tracking-wide text-[#a32018]">Setup error</div>
-                      <div className="mt-1.5 text-sm text-[#a32018]">{setupError}</div>
-                    </div>
-                  ) : null}
-
-                  {setupResult ? (
-                    <div className="rounded-xl bg-[#34c759]/12 px-3 py-3">
-                      <div className="text-xs font-medium uppercase tracking-wide text-[#0a7d2e]">
-                        {setupResult.mode} created
-                      </div>
-                      <div className="mt-1.5 space-y-1 text-sm text-[#063d15]">
-                        <div>Request: {setupResult.result.requestId}</div>
-                        <div>Campaign: {setupResult.result.campaignName}</div>
-                        {setupResult.result.facebookCampaign?.id ? (
-                          <div>Facebook campaign: {setupResult.result.facebookCampaign.id}</div>
-                        ) : null}
-                        {setupResult.result.strategisCampaigns?.[0]?.id ? (
-                          <div>Strategis campaign: {setupResult.result.strategisCampaigns[0].id}</div>
-                        ) : null}
-                        {setupResult.mode === "both" ? (
-                          <div>
-                            Mapping: {setupResult.result.mappingStored ? setupResult.result.mappingId || "stored" : "not stored"}
-                          </div>
-                        ) : null}
-                      </div>
-                      {(setupResult.result.warnings || []).length > 0 ? (
-                        <ul className="mt-2 space-y-1 text-xs text-[#0a7d2e]">
-                          {setupResult.result.warnings?.map((warning) => (
-                            <li key={warning}>• {warning}</li>
-                          ))}
-                        </ul>
+                    <div className="mt-1.5 space-y-1 text-sm text-[#063d15]">
+                      <div>Request: {setupResult.result.requestId}</div>
+                      <div>Campaign: {setupResult.result.campaignName}</div>
+                      {setupResult.result.facebookCampaign?.id ? (
+                        <div>Facebook campaign: {setupResult.result.facebookCampaign.id}</div>
+                      ) : null}
+                      {setupResult.result.strategisCampaigns?.[0]?.id ? (
+                        <div>Strategis campaign: {setupResult.result.strategisCampaigns[0].id}</div>
+                      ) : null}
+                      {setupResult.mode === "both" ? (
+                        <div>
+                          Mapping: {setupResult.result.mappingStored ? setupResult.result.mappingId || "stored" : "not stored"}
+                        </div>
                       ) : null}
                     </div>
-                  ) : null}
-                </div>
-              </section>
-
-              <section className={`${cardClass} p-4`}>
-                <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">
-                  Locked defaults
-                </div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {Object.entries(catalog.lockedDefaults).map(([key, value]) => (
-                    <span key={key} className={pillClass}>
-                      {key}: {value}
-                    </span>
-                  ))}
-                </div>
-              </section>
-
-              {showJson ? (
-                <>
-                  <section className={`${cardClass} p-4`}>
-                    <div className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500">
-                      Strategis shell JSON
-                    </div>
-                    <pre className="max-h-[280px] overflow-auto rounded-xl bg-neutral-100 p-3 text-xs text-neutral-800">
-                      {JSON.stringify(strategistPreview, null, 2)}
-                    </pre>
-                  </section>
-                  <section className={`${cardClass} p-4`}>
-                    <div className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500">
-                      Facebook shell JSON
-                    </div>
-                    <pre className="max-h-[280px] overflow-auto rounded-xl bg-neutral-100 p-3 text-xs text-neutral-800">
-                      {JSON.stringify(facebookPreview, null, 2)}
-                    </pre>
-                  </section>
-                </>
-              ) : null}
+                    {(setupResult.result.warnings || []).length > 0 ? (
+                      <ul className="mt-2 space-y-1 text-xs text-[#0a7d2e]">
+                        {setupResult.result.warnings?.map((warning) => (
+                          <li key={warning}>• {warning}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
             </aside>
-          </div>
+            </div>
+
+            {/* Footer — collapsed JSON shells */}
+            <details className="group border-t border-black/[0.05]">
+              <summary className="flex cursor-pointer list-none items-center justify-between px-6 py-3 text-xs font-medium uppercase tracking-[0.14em] text-neutral-500 transition hover:bg-neutral-50">
+                <span>JSON shells</span>
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="transition-transform group-open:rotate-180"
+                >
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </summary>
+              <div className="grid gap-4 px-6 pb-6 pt-2 lg:grid-cols-2">
+                <div>
+                  <div className={sectionLabel}>Strategis</div>
+                  <pre className="mt-2 max-h-[280px] overflow-auto rounded-xl bg-neutral-100 p-3 text-xs text-neutral-800">
+                    {JSON.stringify(strategistPreview, null, 2)}
+                  </pre>
+                </div>
+                <div>
+                  <div className={sectionLabel}>Facebook</div>
+                  <pre className="mt-2 max-h-[280px] overflow-auto rounded-xl bg-neutral-100 p-3 text-xs text-neutral-800">
+                    {JSON.stringify(facebookPreview, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            </details>
+          </article>
         </div>
       </main>
 
