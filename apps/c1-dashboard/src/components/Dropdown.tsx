@@ -1,0 +1,111 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { inputClass } from "@/lib/ui";
+
+export type DropdownOption = { value: string; label: string };
+
+export function Dropdown({
+  value,
+  onChange,
+  options,
+  placeholder,
+  className,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: DropdownOption[];
+  placeholder?: string;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = options.find((o) => o.value === value);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} className={`relative ${open ? "z-[140]" : "z-10"} ${className || ""}`}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`${inputClass} flex w-full items-center justify-between text-left`}
+      >
+        <span className={`truncate ${selected ? "" : "text-neutral-400"}`}>
+          {selected?.label || placeholder || "Select…"}
+        </span>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={`ml-2 shrink-0 text-neutral-500 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
+        >
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+      {open ? (
+        <div
+          role="listbox"
+          className="absolute left-0 right-0 z-[160] mt-1.5 max-h-72 overflow-auto rounded-lg bg-white p-1 ring-1 ring-black/[0.08] shadow-[0_12px_32px_-8px_rgba(0,0,0,0.18),0_4px_8px_-4px_rgba(0,0,0,0.08)]"
+        >
+          {options.map((option) => {
+            const isSelected = option.value === value;
+            return (
+              <button
+                key={option.value || "__empty__"}
+                type="button"
+                role="option"
+                aria-selected={isSelected}
+                onClick={() => {
+                  onChange(option.value);
+                  setOpen(false);
+                }}
+                className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition ${
+                  isSelected
+                    ? "bg-neutral-100 text-neutral-900"
+                    : "text-neutral-700 hover:bg-neutral-100"
+                }`}
+              >
+                <span className="truncate">{option.label}</span>
+                {isSelected ? (
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="ml-2 shrink-0 text-[#0071e3]"
+                  >
+                    <path d="M5 12l5 5L20 7" />
+                  </svg>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}

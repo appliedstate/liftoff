@@ -4,7 +4,20 @@ import { C1Chat, useThreadListManager } from "@thesysai/genui-sdk";
 import "@crayonai/react-ui/styles/index.css";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  buttonGhost,
+  buttonOutline,
+  buttonPrimary,
+  buttonSecondary,
+  cardClass,
+  fieldLabel,
+  inputClass,
+  pillClass,
+  sectionLabel,
+  subCardClass,
+} from "@/lib/ui";
+import { Dropdown } from "@/components/Dropdown";
 
 type SelectorTargeting = {
   ageMin: number | null;
@@ -293,26 +306,6 @@ function copyJson(value: unknown) {
   return navigator.clipboard.writeText(JSON.stringify(value, null, 2));
 }
 
-// Framer-inspired: borderless fields, soft fills, tinted cards on a light background.
-const inputClass =
-  "w-full rounded-lg bg-neutral-100 px-3.5 py-2.5 text-sm text-neutral-900 outline-none transition placeholder:text-neutral-400 hover:bg-neutral-200/60 focus:bg-white focus:ring-2 focus:ring-[#0071e3]";
-const selectClass = inputClass;
-const cardClass =
-  "rounded-xl bg-white ring-1 ring-black/5 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_32px_-16px_rgba(0,0,0,0.10)]";
-const subCardClass = "rounded-xl bg-neutral-50/80 ring-1 ring-black/[0.04]";
-const sectionLabel = "text-lg font-semibold text-neutral-900";
-const fieldLabel = "mb-1.5 block text-[13px] font-semibold text-neutral-900";
-const pillClass =
-  "inline-flex items-center rounded-full bg-[#0071e3]/[0.06] px-2.5 py-1 text-xs font-semibold text-[#0071e3]";
-const buttonGhost =
-  "rounded-lg bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-700 transition hover:bg-neutral-200";
-const buttonPrimary =
-  "rounded-lg bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300";
-const buttonSecondary =
-  "rounded-lg bg-[#0071e3] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#0077ed] disabled:cursor-not-allowed disabled:bg-[#0071e3]/30";
-const buttonOutline =
-  "rounded-lg bg-white px-3 py-2 text-xs font-semibold text-neutral-700 ring-1 ring-inset ring-neutral-200 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-neutral-400";
-
 type SetupMode = "strategis" | "facebook" | "both";
 
 type SetupResponse = {
@@ -329,113 +322,6 @@ type SetupResponse = {
     warnings?: string[];
   };
 };
-
-type DropdownOption = { value: string; label: string };
-
-function Dropdown({
-  value,
-  onChange,
-  options,
-  placeholder,
-  className,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  options: DropdownOption[];
-  placeholder?: string;
-  className?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const selected = options.find((o) => o.value === value);
-
-  useEffect(() => {
-    if (!open) return;
-    function onDocClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("mousedown", onDocClick);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDocClick);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  return (
-    <div ref={ref} className={`relative ${open ? "z-[140]" : "z-10"} ${className || ""}`}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={`${inputClass} flex w-full items-center justify-between text-left`}
-      >
-        <span className={`truncate ${selected ? "" : "text-neutral-400"}`}>
-          {selected?.label || placeholder || "Select…"}
-        </span>
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className={`ml-2 shrink-0 text-neutral-500 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
-        >
-          <path d="M6 9l6 6 6-6" />
-        </svg>
-      </button>
-      {open ? (
-        <div
-          role="listbox"
-          className="absolute left-0 right-0 z-[160] mt-1.5 max-h-72 overflow-auto rounded-lg bg-white p-1 ring-1 ring-black/[0.08] shadow-[0_12px_32px_-8px_rgba(0,0,0,0.18),0_4px_8px_-4px_rgba(0,0,0,0.08)]"
-        >
-          {options.map((option) => {
-            const isSelected = option.value === value;
-            return (
-              <button
-                key={option.value || "__empty__"}
-                type="button"
-                role="option"
-                aria-selected={isSelected}
-                onClick={() => {
-                  onChange(option.value);
-                  setOpen(false);
-                }}
-                className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition ${
-                  isSelected
-                    ? "bg-neutral-100 text-neutral-900"
-                    : "text-neutral-700 hover:bg-neutral-100"
-                }`}
-              >
-                <span className="truncate">{option.label}</span>
-                {isSelected ? (
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="ml-2 shrink-0 text-[#0071e3]"
-                  >
-                    <path d="M5 12l5 5L20 7" />
-                  </svg>
-                ) : null}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 const THREADS_STORAGE_KEY = "ben-launch-threads-v1";
 
