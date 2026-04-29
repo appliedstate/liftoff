@@ -928,7 +928,7 @@ export default function BenLaunchWorkbench() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-white text-neutral-600">
+      <div className="flex min-h-screen items-center justify-center bg-white dark:bg-neutral-950 text-neutral-600 dark:text-neutral-400">
         <div className={`${cardClass} px-6 py-4 text-sm`}>Loading {buyerLabel} preset catalog…</div>
       </div>
     );
@@ -936,13 +936,13 @@ export default function BenLaunchWorkbench() {
 
   if (error || !catalog) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-white px-6 text-neutral-700">
+      <div className="flex min-h-screen items-center justify-center bg-white dark:bg-neutral-950 px-6 text-neutral-700 dark:text-neutral-200">
         <div className={`${cardClass} max-w-lg p-6`}>
-          <p className="text-base font-semibold text-neutral-900">Could not load buyer workbench</p>
-          <p className="mt-2 text-xs text-neutral-600">{error || "Unknown error"}</p>
+          <p className="text-base font-semibold text-neutral-900 dark:text-neutral-50">Could not load buyer workbench</p>
+          <p className="mt-2 text-xs text-neutral-600 dark:text-neutral-400">{error || "Unknown error"}</p>
           <Link
             href="/"
-            className="mt-5 inline-flex rounded-lg bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-700 transition hover:bg-neutral-200"
+            className="mt-5 inline-flex rounded-lg bg-neutral-100 dark:bg-neutral-800 px-3 py-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-200 transition hover:bg-neutral-200 dark:hover:bg-neutral-700"
           >
             Back to dashboard
           </Link>
@@ -952,17 +952,17 @@ export default function BenLaunchWorkbench() {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-white text-neutral-900">
+    <div className="flex h-screen w-screen overflow-hidden bg-white dark:bg-neutral-950 text-neutral-900 dark:text-neutral-50">
       {/* Dashboard pane */}
       <main className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[1180px] space-y-10 px-6 py-12">
           {/* Header — flat text on page bg, mirrors the form/rail grid below */}
           <header className="grid grid-cols-1 items-end gap-x-8 gap-y-4 xl:grid-cols-[minmax(0,1fr)_320px]">
             <div>
-              <div className="inline-flex h-6 items-center rounded-md bg-[#0071e3]/12 px-2 text-[11px] font-semibold uppercase tracking-wider text-[#0071e3] ring-1 ring-inset ring-[#0071e3]/15">
+              <div className="inline-flex h-6 items-center rounded-md bg-[#0071e3]/12 dark:bg-[#0071e3]/[0.20] px-2 text-[11px] font-semibold uppercase tracking-wider text-[#0071e3] dark:text-[#4a9fff] ring-1 ring-inset ring-[#0071e3]/15 dark:ring-[#0071e3]/30">
                 Liftoff
               </div>
-              <p className="mt-3 text-xs text-neutral-600">
+              <p className="mt-3 text-xs text-neutral-600 dark:text-neutral-400">
                 {buyerLabel} · {catalog.profiles.length} presets ·{" "}
                 {Object.keys(catalog.lockedDefaults).length} locked defaults ·{" "}
                 {catalog.manualFields.length} manual fields · {readyCount}/5 ready
@@ -993,7 +993,7 @@ export default function BenLaunchWorkbench() {
 
           {Object.entries(catalog.lockedDefaults).length > 0 ? (
             <div className="flex flex-wrap items-center gap-2 xl:max-w-[calc(100%-352px)]">
-              <span className="text-xs font-medium uppercase tracking-[0.14em] text-neutral-500">
+              <span className="text-xs font-medium uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
                 Locked defaults
               </span>
               {Object.entries(catalog.lockedDefaults).map(([key, value]) => (
@@ -1064,7 +1064,7 @@ export default function BenLaunchWorkbench() {
                             })),
                           ]}
                         />
-                        <div className="mt-1.5 text-xs text-neutral-500">
+                        <div className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">
                           {campaignItems.length > 0
                             ? `${campaignItems.length} ${buyerLabel} campaigns available for cloning`
                             : campaignCatalog?.notes?.[0] || "Campaign clone catalog unavailable"}
@@ -1073,16 +1073,16 @@ export default function BenLaunchWorkbench() {
                     </div>
 
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-xl bg-neutral-100 px-3.5 py-2.5">
-                        <div className="text-xs text-neutral-500">Current preset</div>
-                        <div className="mt-1 font-semibold text-neutral-900">{selectedProfile.label}</div>
-                        <div className="mt-1 text-xs text-neutral-500">
+                      <div className="rounded-xl bg-neutral-100 dark:bg-neutral-800 px-3.5 py-2.5">
+                        <div className="text-xs text-neutral-500 dark:text-neutral-400">Current preset</div>
+                        <div className="mt-1 font-semibold text-neutral-900 dark:text-neutral-50">{selectedProfile.label}</div>
+                        <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
                           {selectedProfile.category.split(" > ").slice(0, -1).join(" • ") || "Category"}
                         </div>
                       </div>
-                      <div className="rounded-xl bg-neutral-100 px-3.5 py-2.5">
-                        <div className="text-xs text-neutral-500">Naming family</div>
-                        <div className="mt-1 font-mono text-xs text-neutral-700">
+                      <div className="rounded-xl bg-neutral-100 dark:bg-neutral-800 px-3.5 py-2.5">
+                        <div className="text-xs text-neutral-500 dark:text-neutral-400">Naming family</div>
+                        <div className="mt-1 font-mono text-xs text-neutral-700 dark:text-neutral-200">
                           {selectedProfile.strategist.namingFamily?.value || "No dominant family"}
                         </div>
                       </div>
@@ -1108,14 +1108,14 @@ export default function BenLaunchWorkbench() {
                     </div>
                   </div>
 
-                  <div className="h-px bg-black/[0.06]" />
+                  <div className="h-px bg-black/[0.06] dark:bg-white/[0.10]" />
 
                   {/* Content inputs */}
                   <div className="space-y-4">
                     <div className={sectionLabel}>Content inputs</div>
 
                       {selectedCampaign ? (
-                        <div className="mb-3 rounded-xl bg-[#0071e3]/[0.06] px-3 py-2.5 text-xs text-neutral-900">
+                        <div className="mb-3 rounded-xl bg-[#0071e3]/[0.06] px-3 py-2.5 text-xs text-neutral-900 dark:text-neutral-50">
                           Cloning shell from{" "}
                           <span className="font-semibold">{selectedCampaign.campaignName}</span>. Article, headline,
                           forcekeys, redirect, page, and account are copied. Creatives are out of scope.
@@ -1150,20 +1150,20 @@ export default function BenLaunchWorkbench() {
                             }))}
                             placeholder="Select an article…"
                           />
-                          <div className="mt-1.5 text-xs text-neutral-500">
+                          <div className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">
                             Showing all {buyerLabel} articles with this category ranked first.
                           </div>
                         </div>
 
-                        <div className="rounded-xl bg-white px-3 py-2.5 text-xs text-neutral-600 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-                          <div className="text-neutral-500">Article details</div>
-                          <div className="mt-1 text-sm font-semibold text-neutral-900">
+                        <div className="rounded-xl bg-white dark:bg-neutral-900 px-3 py-2.5 text-xs text-neutral-600 dark:text-neutral-400 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+                          <div className="text-neutral-500 dark:text-neutral-400">Article details</div>
+                          <div className="mt-1 text-sm font-semibold text-neutral-900 dark:text-neutral-50">
                             {selectedArticle?.label || "No article selected"}
                           </div>
-                          <div className="mt-1 text-neutral-500">
+                          <div className="mt-1 text-neutral-500 dark:text-neutral-400">
                             {selectedArticle?.articleSlug || "No slug"}
                           </div>
-                          <div className="mt-2 text-neutral-500">
+                          <div className="mt-2 text-neutral-500 dark:text-neutral-400">
                             Used in {selectedArticle?.campaignCount || 0} {buyerLabel} campaign
                             {selectedArticle?.campaignCount === 1 ? "" : "s"}
                           </div>
@@ -1178,7 +1178,7 @@ export default function BenLaunchWorkbench() {
                           placeholder="Article URL or path"
                           className={inputClass}
                         />
-                        <div className="mt-1.5 text-xs text-neutral-500">
+                        <div className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">
                           This is the final Strategis article value. The selector above pre-fills it, and you can override it manually here.
                         </div>
                       </label>
@@ -1197,11 +1197,11 @@ export default function BenLaunchWorkbench() {
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
                             <div className={sectionLabel}>Forcekey selector</div>
-                            <div className="mt-1 text-xs text-neutral-500">
+                            <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
                               {forcekeySelector?.dateWindow.label ||
                                 `Trailing 14 complete days: ${forcekeyWindow.startDate} - ${forcekeyWindow.endDate}`}
                             </div>
-                            <div className="mt-1 text-xs text-neutral-400">
+                            <div className="mt-1 text-xs text-neutral-400 dark:text-neutral-500 dark:text-neutral-400">
                               Excludes the current partial day.
                             </div>
                           </div>
@@ -1235,7 +1235,7 @@ export default function BenLaunchWorkbench() {
                           </div>
                         </div>
 
-                        <div className="flex flex-wrap gap-2 text-xs text-neutral-500">
+                        <div className="flex flex-wrap gap-2 text-xs text-neutral-500 dark:text-neutral-400">
                           <span className={pillClass}>Category: {selectedProfile.category}</span>
                           {forcekeySelector ? (
                             <>
@@ -1250,15 +1250,15 @@ export default function BenLaunchWorkbench() {
                         </div>
 
                         {forcekeySelectorLoading ? (
-                          <div className="text-sm text-neutral-500">
+                          <div className="text-sm text-neutral-500 dark:text-neutral-400">
                             Loading forcekey analysis…
                           </div>
                         ) : forcekeySelectorError ? (
-                          <div className="rounded-xl bg-[#ff3b30]/[0.08] px-3 py-3 text-sm text-[#a32018]">
+                          <div className="rounded-xl bg-[#ff3b30]/[0.08] px-3 py-3 text-sm text-[#a32018] dark:text-[#ff7066]">
                             {forcekeySelectorError}
                           </div>
                         ) : forcekeySelector?.options?.length ? (
-                          <div className="divide-y divide-black/[0.06]">
+                          <div className="divide-y divide-black/[0.06] dark:divide-white/[0.10]">
                             {forcekeySelector.options.slice(0, 8).map((option) => {
                               const alreadySelected = form.forcekeys.some(
                                 (value) => value.trim().toLowerCase() === option.forcekey.trim().toLowerCase()
@@ -1266,12 +1266,12 @@ export default function BenLaunchWorkbench() {
                               return (
                                 <details
                                   key={option.normalizedForcekey}
-                                  className="group px-1 py-3 transition hover:bg-neutral-50 [&_summary::-webkit-details-marker]:hidden"
+                                  className="group px-1 py-3 transition hover:bg-neutral-50 dark:hover:bg-neutral-800 [&_summary::-webkit-details-marker]:hidden"
                                 >
                                   <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
                                     <div className="min-w-0">
                                       <div className="flex flex-wrap items-center gap-2">
-                                        <span className="text-sm font-semibold text-neutral-900">
+                                        <span className="text-sm font-semibold text-neutral-900 dark:text-neutral-50">
                                           {option.forcekey}
                                         </span>
                                         <span className={pillClass}>{option.type}</span>
@@ -1280,7 +1280,7 @@ export default function BenLaunchWorkbench() {
                                         </span>
                                         <span className={pillClass}>{option.score.confidence}</span>
                                       </div>
-                                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-500">
+                                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-500 dark:text-neutral-400">
                                         <span>{option.metrics.searches} searches</span>
                                         <span>{option.metrics.clicks} clicks</span>
                                         <span>{moneyLabel(option.metrics.revenue)} revenue</span>
@@ -1301,40 +1301,40 @@ export default function BenLaunchWorkbench() {
                                       {alreadySelected ? "Selected" : "Add"}
                                     </button>
                                   </summary>
-                                  <div className="mt-3 space-y-3 text-sm text-neutral-700">
-                                    <div className="h-px bg-black/[0.06]" />
+                                  <div className="mt-3 space-y-3 text-sm text-neutral-700 dark:text-neutral-200">
+                                    <div className="h-px bg-black/[0.06] dark:bg-white/[0.10]" />
                                     <div className="grid gap-x-6 gap-y-2 md:grid-cols-3">
                                       <div>
-                                        <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500">
+                                        <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
                                           Ranking score
                                         </div>
-                                        <div className="mt-0.5 font-semibold text-neutral-900">
+                                        <div className="mt-0.5 font-semibold text-neutral-900 dark:text-neutral-50">
                                           {option.score.rankingScore.toFixed(2)}
                                         </div>
                                       </div>
                                       <div>
-                                        <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500">
+                                        <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
                                           Network RPS lift
                                         </div>
-                                        <div className="mt-0.5 font-semibold text-neutral-900">
+                                        <div className="mt-0.5 font-semibold text-neutral-900 dark:text-neutral-50">
                                           {pctLabel(option.comparison.networkRpsLiftPct)}
                                         </div>
                                       </div>
                                       <div>
-                                        <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500">
+                                        <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
                                           Network RPC lift
                                         </div>
-                                        <div className="mt-0.5 font-semibold text-neutral-900">
+                                        <div className="mt-0.5 font-semibold text-neutral-900 dark:text-neutral-50">
                                           {pctLabel(option.comparison.networkRpcLiftPct)}
                                         </div>
                                       </div>
                                     </div>
                                     {option.geo ? (
                                       <div>
-                                        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500">
+                                        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
                                           Geo analysis
                                         </div>
-                                        <div className="mt-2 text-xs text-neutral-600">
+                                        <div className="mt-2 text-xs text-neutral-600 dark:text-neutral-400">
                                           {option.geo.rationale}
                                         </div>
                                         <div className="mt-2 flex flex-wrap gap-2">
@@ -1347,7 +1347,7 @@ export default function BenLaunchWorkbench() {
                                       </div>
                                     ) : null}
                                     {option.observedKeywordVariants.length > 0 ? (
-                                      <div className="text-xs text-neutral-500">
+                                      <div className="text-xs text-neutral-500 dark:text-neutral-400">
                                         Observed variants: {option.observedKeywordVariants.slice(0, 3).join(" · ")}
                                         {option.observedKeywordVariants.length > 3
                                           ? ` +${option.observedKeywordVariants.length - 3} more`
@@ -1360,13 +1360,13 @@ export default function BenLaunchWorkbench() {
                             })}
                           </div>
                         ) : (
-                          <div className="text-sm text-neutral-500">
+                          <div className="text-sm text-neutral-500 dark:text-neutral-400">
                             No trailing 14-day forcekey analysis is available for this category yet.
                           </div>
                         )}
 
                         {forcekeySelector?.notes?.length ? (
-                          <div className="space-y-1 text-xs text-neutral-500">
+                          <div className="space-y-1 text-xs text-neutral-500 dark:text-neutral-400">
                             {forcekeySelector.notes.slice(0, 4).map((note, index) => (
                               <div key={`${note}-${index}`}>{note}</div>
                             ))}
@@ -1406,7 +1406,7 @@ export default function BenLaunchWorkbench() {
                               ))}
                             </div>
                             <div className="mt-2 flex items-center justify-between text-xs">
-                              <span className="text-neutral-500">
+                              <span className="text-neutral-500 dark:text-neutral-400">
                                 Active forcekeys: {activeForcekeys.length}.
                               </span>
                               {canToggle ? (
@@ -1424,7 +1424,7 @@ export default function BenLaunchWorkbench() {
                       })()}
                     </div>
 
-                    <div className="h-px bg-black/[0.06]" />
+                    <div className="h-px bg-black/[0.06] dark:bg-white/[0.10]" />
 
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
@@ -1500,8 +1500,8 @@ export default function BenLaunchWorkbench() {
                         </div>
                       ) : null}
 
-                      <div className="rounded-xl bg-neutral-100/80 px-3 py-3">
-                        <div className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-neutral-500">
+                      <div className="rounded-xl bg-neutral-100/80 dark:bg-neutral-800/60 px-3 py-3">
+                        <div className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
                           Setup actions
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -1530,7 +1530,7 @@ export default function BenLaunchWorkbench() {
                             {runningSetup === "both" ? "Setting up…" : "Setup in Both"}
                           </button>
                         </div>
-                        <div className="mt-2 text-xs text-neutral-500">
+                        <div className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
                           Strategis creates the tracking shell only. Facebook creates the campaign and ad set shell
                           only. Both attempts both sides and stores the mapping when database access is available.
                         </div>
@@ -1555,7 +1555,7 @@ export default function BenLaunchWorkbench() {
               <div className="space-y-6">
                 <div>
                   <div className={sectionLabel}>Strategis</div>
-                  <div className="mt-2 space-y-1 text-xs text-neutral-600">
+                  <div className="mt-2 space-y-1 text-xs text-neutral-600 dark:text-neutral-400">
                     <div>Article: {selectedCampaign?.articleSlug || selectedArticle?.label || form.article || "—"}</div>
                     <div>Site: {strategistPreview?.rsocSite || "—"}</div>
                     <div>Subdirectory: {strategistPreview?.subdirectory || "—"}</div>
@@ -1571,11 +1571,11 @@ export default function BenLaunchWorkbench() {
                   </button>
                 </div>
 
-                <div className="h-px bg-black/[0.06]" />
+                <div className="h-px bg-black/[0.06] dark:bg-white/[0.10]" />
 
                 <div>
                   <div className={sectionLabel}>Facebook</div>
-                  <div className="mt-2 space-y-1 text-xs text-neutral-600">
+                  <div className="mt-2 space-y-1 text-xs text-neutral-600 dark:text-neutral-400">
                     <div>Ad account: {facebookPreview?.adAccountId || "—"}</div>
                     <div>Page: {facebookPreview?.pageId || "—"}</div>
                     <div>Pixel: {facebookPreview?.pixelId || "—"}</div>
@@ -1591,7 +1591,7 @@ export default function BenLaunchWorkbench() {
                   </button>
                 </div>
 
-                <div className="h-px bg-black/[0.06]" />
+                <div className="h-px bg-black/[0.06] dark:bg-white/[0.10]" />
 
                 <div>
                   <div className={sectionLabel}>Readiness</div>
@@ -1599,14 +1599,14 @@ export default function BenLaunchWorkbench() {
                     {readyChecks.map((check) => (
                       <div
                         key={check.label}
-                        className="flex items-center justify-between text-xs text-neutral-600"
+                        className="flex items-center justify-between text-xs text-neutral-600 dark:text-neutral-400"
                       >
                         <span>{check.label}</span>
                         <span
                           className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
                             check.ok
-                              ? "bg-[#34c759]/[0.08] text-[#0a7d2e]"
-                              : "bg-[#ff9500]/[0.08] text-[#a55a00]"
+                              ? "bg-[#34c759]/[0.08] text-[#0a7d2e] dark:text-[#5dd680]"
+                              : "bg-[#ff9500]/[0.08] text-[#a55a00] dark:text-[#ffb84a]"
                           }`}
                         >
                           {check.ok ? "Ready" : "Missing"}
@@ -1619,8 +1619,8 @@ export default function BenLaunchWorkbench() {
                 {(selectedProfile?.notes || []).length > 0 ||
                 (selectedCampaign?.notes || []).length > 0 ? (
                   <div className="rounded-xl bg-[#ff9500]/[0.08] px-3 py-3">
-                    <div className="text-xs font-medium uppercase tracking-wide text-[#a55a00]">Warnings</div>
-                    <ul className="mt-1.5 space-y-1 text-sm text-[#a55a00]">
+                    <div className="text-xs font-medium uppercase tracking-wide text-[#a55a00] dark:text-[#ffb84a]">Warnings</div>
+                    <ul className="mt-1.5 space-y-1 text-sm text-[#a55a00] dark:text-[#ffb84a]">
                       {[
                         ...(selectedCampaign?.notes || []),
                         ...(selectedProfile?.notes || []),
@@ -1633,17 +1633,17 @@ export default function BenLaunchWorkbench() {
 
                 {setupError ? (
                   <div className="rounded-xl bg-[#ff3b30]/[0.08] px-3 py-3">
-                    <div className="text-xs font-medium uppercase tracking-wide text-[#a32018]">Setup error</div>
-                    <div className="mt-1.5 text-sm text-[#a32018]">{setupError}</div>
+                    <div className="text-xs font-medium uppercase tracking-wide text-[#a32018] dark:text-[#ff7066]">Setup error</div>
+                    <div className="mt-1.5 text-sm text-[#a32018] dark:text-[#ff7066]">{setupError}</div>
                   </div>
                 ) : null}
 
                 {setupResult ? (
                   <div className="rounded-xl bg-[#34c759]/[0.08] px-3 py-3">
-                    <div className="text-xs font-medium uppercase tracking-wide text-[#0a7d2e]">
+                    <div className="text-xs font-medium uppercase tracking-wide text-[#0a7d2e] dark:text-[#5dd680]">
                       {setupResult.mode} created
                     </div>
-                    <div className="mt-1.5 space-y-1 text-sm text-[#063d15]">
+                    <div className="mt-1.5 space-y-1 text-sm text-[#063d15] dark:text-[#a3e8b8]">
                       <div>Request: {setupResult.result.requestId}</div>
                       <div>Campaign: {setupResult.result.campaignName}</div>
                       {setupResult.result.facebookCampaign?.id ? (
@@ -1659,7 +1659,7 @@ export default function BenLaunchWorkbench() {
                       ) : null}
                     </div>
                     {(setupResult.result.warnings || []).length > 0 ? (
-                      <ul className="mt-2 space-y-1 text-xs text-[#0a7d2e]">
+                      <ul className="mt-2 space-y-1 text-xs text-[#0a7d2e] dark:text-[#5dd680]">
                         {setupResult.result.warnings?.map((warning) => (
                           <li key={warning}>• {warning}</li>
                         ))}
@@ -1673,7 +1673,7 @@ export default function BenLaunchWorkbench() {
 
           {/* Footer — collapsed JSON shells */}
           <details className="group">
-            <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-medium uppercase tracking-[0.14em] text-neutral-500 transition hover:text-neutral-700">
+            <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-medium uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400 transition hover:text-neutral-700 dark:text-neutral-200">
               <span>JSON shells</span>
               <svg
                 width="14"
@@ -1692,13 +1692,13 @@ export default function BenLaunchWorkbench() {
             <div className="mt-3 grid gap-4 lg:grid-cols-2">
               <div>
                 <div className={sectionLabel}>Strategis</div>
-                <pre className="mt-2 max-h-[280px] overflow-auto rounded-xl bg-neutral-100 p-3 text-xs text-neutral-800">
+                <pre className="mt-2 max-h-[280px] overflow-auto rounded-xl bg-neutral-100 dark:bg-neutral-800 p-3 text-xs text-neutral-800 dark:text-neutral-200">
                   {JSON.stringify(strategistPreview, null, 2)}
                 </pre>
               </div>
               <div>
                 <div className={sectionLabel}>Facebook</div>
-                <pre className="mt-2 max-h-[280px] overflow-auto rounded-xl bg-neutral-100 p-3 text-xs text-neutral-800">
+                <pre className="mt-2 max-h-[280px] overflow-auto rounded-xl bg-neutral-100 dark:bg-neutral-800 p-3 text-xs text-neutral-800 dark:text-neutral-200">
                   {JSON.stringify(facebookPreview, null, 2)}
                 </pre>
               </div>
@@ -1709,12 +1709,12 @@ export default function BenLaunchWorkbench() {
 
       {/* Companion chat — ChatGPT-style with multi-thread sidebar */}
       {chatOpen ? (
-        <aside className="relative flex h-screen w-[560px] shrink-0 flex-col bg-white shadow-[-8px_0_24px_-12px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
+        <aside className="relative flex h-screen w-[560px] shrink-0 flex-col bg-white dark:bg-neutral-900 shadow-[-8px_0_24px_-12px_rgba(0,0,0,0.08)] ring-1 ring-black/5 dark:ring-white/10">
           <button
             type="button"
             onClick={() => setChatOpen(false)}
             aria-label="Close assistant"
-            className="absolute right-3 top-3 z-30 inline-flex h-7 w-7 items-center justify-center rounded-full bg-neutral-100 text-neutral-600 transition hover:bg-neutral-200"
+            className="absolute right-3 top-3 z-30 inline-flex h-7 w-7 items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 transition hover:bg-neutral-200 dark:hover:bg-neutral-700"
           >
             <svg
               width="12"

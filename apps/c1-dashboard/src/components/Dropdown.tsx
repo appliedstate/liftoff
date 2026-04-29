@@ -45,7 +45,7 @@ export function Dropdown({
         onClick={() => setOpen((v) => !v)}
         className={`${inputClass} flex w-full items-center justify-between text-left`}
       >
-        <span className={`truncate ${selected ? "" : "text-neutral-400"}`}>
+        <span className={`truncate ${selected ? "" : "text-neutral-400 dark:text-neutral-500"}`}>
           {selected?.label || placeholder || "Select…"}
         </span>
         <svg
@@ -57,7 +57,7 @@ export function Dropdown({
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className={`ml-2 shrink-0 text-neutral-500 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
+          className={`ml-2 shrink-0 text-neutral-500 dark:text-neutral-400 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
         >
           <path d="M6 9l6 6 6-6" />
         </svg>
@@ -65,7 +65,7 @@ export function Dropdown({
       {open ? (
         <div
           role="listbox"
-          className="absolute left-0 right-0 z-[160] mt-1.5 max-h-72 overflow-auto rounded-lg bg-white p-1 ring-1 ring-black/[0.08] shadow-[0_12px_32px_-8px_rgba(0,0,0,0.18),0_4px_8px_-4px_rgba(0,0,0,0.08)]"
+          className="absolute left-0 right-0 z-[160] mt-1.5 max-h-72 overflow-auto rounded-lg bg-white dark:bg-neutral-900 p-1 ring-1 ring-black/[0.08] dark:ring-white/[0.10] shadow-[0_12px_32px_-8px_rgba(0,0,0,0.18),0_4px_8px_-4px_rgba(0,0,0,0.08)] dark:shadow-[0_12px_32px_-8px_rgba(0,0,0,0.6),0_4px_8px_-4px_rgba(0,0,0,0.4)]"
         >
           {options.map((option) => {
             const isSelected = option.value === value;
@@ -81,8 +81,8 @@ export function Dropdown({
                 }}
                 className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition ${
                   isSelected
-                    ? "bg-neutral-100 text-neutral-900"
-                    : "text-neutral-700 hover:bg-neutral-100"
+                    ? "bg-neutral-100 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-50"
+                    : "text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800"
                 }`}
               >
                 <span className="truncate">{option.label}</span>
@@ -96,7 +96,7 @@ export function Dropdown({
                     strokeWidth="2.5"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="ml-2 shrink-0 text-[#0071e3]"
+                    className="ml-2 shrink-0 text-[#0071e3] dark:text-[#4a9fff]"
                   >
                     <path d="M5 12l5 5L20 7" />
                   </svg>
