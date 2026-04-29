@@ -1193,7 +1193,7 @@ export default function BenLaunchWorkbench() {
                         />
                       </label>
 
-                      <div className="space-y-3 rounded-2xl bg-neutral-50/80 px-4 py-4 ring-1 ring-black/[0.05]">
+                      <div className="space-y-4">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
                             <div className={sectionLabel}>Forcekey selector</div>
@@ -1250,7 +1250,7 @@ export default function BenLaunchWorkbench() {
                         </div>
 
                         {forcekeySelectorLoading ? (
-                          <div className="rounded-xl bg-white px-3 py-3 text-sm text-neutral-500 ring-1 ring-black/[0.04]">
+                          <div className="text-sm text-neutral-500">
                             Loading forcekey analysis…
                           </div>
                         ) : forcekeySelectorError ? (
@@ -1258,7 +1258,7 @@ export default function BenLaunchWorkbench() {
                             {forcekeySelectorError}
                           </div>
                         ) : forcekeySelector?.options?.length ? (
-                          <div className="space-y-2">
+                          <div className="divide-y divide-black/[0.06]">
                             {forcekeySelector.options.slice(0, 8).map((option) => {
                               const alreadySelected = form.forcekeys.some(
                                 (value) => value.trim().toLowerCase() === option.forcekey.trim().toLowerCase()
@@ -1266,7 +1266,7 @@ export default function BenLaunchWorkbench() {
                               return (
                                 <details
                                   key={option.normalizedForcekey}
-                                  className="rounded-xl bg-white px-3 py-3 ring-1 ring-black/[0.04]"
+                                  className="group px-1 py-3 transition hover:bg-neutral-50 [&_summary::-webkit-details-marker]:hidden"
                                 >
                                   <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
                                     <div className="min-w-0">
@@ -1301,23 +1301,30 @@ export default function BenLaunchWorkbench() {
                                       {alreadySelected ? "Selected" : "Add"}
                                     </button>
                                   </summary>
-                                  <div className="mt-3 space-y-3 border-t border-black/[0.05] pt-3 text-sm text-neutral-700">
-                                    <div className="grid gap-2 md:grid-cols-3">
-                                      <div className={`${subCardClass} px-3 py-2`}>
-                                        <div className="text-xs text-neutral-500">Ranking score</div>
-                                        <div className="mt-1 font-semibold text-neutral-900">
+                                  <div className="mt-3 space-y-3 text-sm text-neutral-700">
+                                    <div className="h-px bg-black/[0.06]" />
+                                    <div className="grid gap-x-6 gap-y-2 md:grid-cols-3">
+                                      <div>
+                                        <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500">
+                                          Ranking score
+                                        </div>
+                                        <div className="mt-0.5 font-semibold text-neutral-900">
                                           {option.score.rankingScore.toFixed(2)}
                                         </div>
                                       </div>
-                                      <div className={`${subCardClass} px-3 py-2`}>
-                                        <div className="text-xs text-neutral-500">Network RPS lift</div>
-                                        <div className="mt-1 font-semibold text-neutral-900">
+                                      <div>
+                                        <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500">
+                                          Network RPS lift
+                                        </div>
+                                        <div className="mt-0.5 font-semibold text-neutral-900">
                                           {pctLabel(option.comparison.networkRpsLiftPct)}
                                         </div>
                                       </div>
-                                      <div className={`${subCardClass} px-3 py-2`}>
-                                        <div className="text-xs text-neutral-500">Network RPC lift</div>
-                                        <div className="mt-1 font-semibold text-neutral-900">
+                                      <div>
+                                        <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500">
+                                          Network RPC lift
+                                        </div>
+                                        <div className="mt-0.5 font-semibold text-neutral-900">
                                           {pctLabel(option.comparison.networkRpcLiftPct)}
                                         </div>
                                       </div>
@@ -1353,7 +1360,7 @@ export default function BenLaunchWorkbench() {
                             })}
                           </div>
                         ) : (
-                          <div className="rounded-xl bg-white px-3 py-3 text-sm text-neutral-500 ring-1 ring-black/[0.04]">
+                          <div className="text-sm text-neutral-500">
                             No trailing 14-day forcekey analysis is available for this category yet.
                           </div>
                         )}
