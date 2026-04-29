@@ -946,7 +946,7 @@ export default function BenLaunchWorkbench() {
           <p className="mt-2 text-xs text-neutral-600 dark:text-neutral-400">{error || "Unknown error"}</p>
           <Link
             href="/"
-            className="mt-5 inline-flex rounded-lg bg-neutral-100 dark:bg-neutral-800 px-3 py-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-200 transition hover:bg-neutral-200 dark:hover:bg-neutral-700"
+            className="mt-6 inline-flex rounded-lg bg-neutral-100 dark:bg-neutral-800 px-3 py-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-200 transition hover:bg-neutral-200 dark:hover:bg-neutral-700"
           >
             Back to dashboard
           </Link>
@@ -959,7 +959,7 @@ export default function BenLaunchWorkbench() {
     <div className="flex h-screen w-screen overflow-hidden bg-white dark:bg-neutral-950 text-neutral-900 dark:text-neutral-50">
       {/* Dashboard pane */}
       <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[1180px] space-y-10 px-6 py-12">
+        <div className="mx-auto max-w-[1180px] space-y-12 px-6 py-12">
           {/* Header — flat text on page bg, mirrors the form/rail grid below */}
           <header className="grid grid-cols-1 items-end gap-x-8 gap-y-4 xl:grid-cols-[minmax(0,1fr)_320px]">
             <div>
@@ -1078,16 +1078,16 @@ export default function BenLaunchWorkbench() {
                     </div>
 
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-xl bg-neutral-100 dark:bg-neutral-800 px-3.5 py-2.5">
+                      <div className="space-y-1 rounded-xl bg-neutral-100 dark:bg-neutral-800 px-3.5 py-2.5">
                         <div className="text-xs text-neutral-500 dark:text-neutral-400">Current preset</div>
-                        <div className="mt-1 font-semibold text-neutral-900 dark:text-neutral-50">{selectedProfile.label}</div>
-                        <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                        <div className="font-semibold text-neutral-900 dark:text-neutral-50">{selectedProfile.label}</div>
+                        <div className="text-xs text-neutral-500 dark:text-neutral-400">
                           {selectedProfile.category.split(" > ").slice(0, -1).join(" • ") || "Category"}
                         </div>
                       </div>
-                      <div className="rounded-xl bg-neutral-100 dark:bg-neutral-800 px-3.5 py-2.5">
+                      <div className="space-y-1 rounded-xl bg-neutral-100 dark:bg-neutral-800 px-3.5 py-2.5">
                         <div className="text-xs text-neutral-500 dark:text-neutral-400">Naming family</div>
-                        <div className="mt-1 font-mono text-xs text-neutral-700 dark:text-neutral-200">
+                        <div className="font-mono text-xs text-neutral-700 dark:text-neutral-200">
                           {selectedProfile.strategist.namingFamily?.value || "No dominant family"}
                         </div>
                       </div>
@@ -1557,7 +1557,7 @@ export default function BenLaunchWorkbench() {
 
             {/* Summary rail — flat sections divided by hairlines */}
             <aside>
-              <div className="space-y-6">
+              <div className="space-y-8">
                 <div>
                   <div className={sectionLabel}>Strategis</div>
                   <div className="mt-2 space-y-1 text-xs text-neutral-600 dark:text-neutral-400">
@@ -1623,9 +1623,9 @@ export default function BenLaunchWorkbench() {
 
                 {(selectedProfile?.notes || []).length > 0 ||
                 (selectedCampaign?.notes || []).length > 0 ? (
-                  <div className="rounded-xl bg-[#ff9500]/[0.08] px-3 py-3">
+                  <div className="space-y-1.5 rounded-xl bg-[#ff9500]/[0.08] px-3 py-3">
                     <div className="text-xs font-medium uppercase tracking-wide text-[#a55a00] dark:text-[#ffb84a]">Warnings</div>
-                    <ul className="mt-1.5 space-y-1 text-sm text-[#a55a00] dark:text-[#ffb84a]">
+                    <ul className="space-y-1 text-sm text-[#a55a00] dark:text-[#ffb84a]">
                       {[
                         ...(selectedCampaign?.notes || []),
                         ...(selectedProfile?.notes || []),
@@ -1637,9 +1637,9 @@ export default function BenLaunchWorkbench() {
                 ) : null}
 
                 {setupError ? (
-                  <div className="rounded-xl bg-[#ff3b30]/[0.08] px-3 py-3">
+                  <div className="space-y-1.5 rounded-xl bg-[#ff3b30]/[0.08] px-3 py-3">
                     <div className="text-xs font-medium uppercase tracking-wide text-[#a32018] dark:text-[#ff7066]">Setup error</div>
-                    <div className="mt-1.5 text-sm text-[#a32018] dark:text-[#ff7066]">{setupError}</div>
+                    <div className="text-sm text-[#a32018] dark:text-[#ff7066]">{setupError}</div>
                   </div>
                 ) : null}
 
