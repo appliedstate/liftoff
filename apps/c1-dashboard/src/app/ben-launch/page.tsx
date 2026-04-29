@@ -188,23 +188,23 @@ function copyJson(value: unknown) {
 
 // Framer-inspired: borderless fields, soft fills, tinted cards on a light background.
 const inputClass =
-  "w-full rounded-xl bg-neutral-100 px-3.5 py-2.5 text-sm text-neutral-900 outline-none transition placeholder:text-neutral-400 hover:bg-neutral-200/60 focus:bg-white focus:ring-2 focus:ring-[#0071e3]/25";
+  "w-full rounded-lg bg-neutral-100 px-3.5 py-2.5 text-sm text-neutral-900 outline-none transition placeholder:text-neutral-400 hover:bg-neutral-200/60 focus:bg-white focus:ring-2 focus:ring-[#0071e3]";
 const selectClass = inputClass;
 const cardClass =
   "rounded-xl bg-white ring-1 ring-black/5 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_32px_-16px_rgba(0,0,0,0.10)]";
 const subCardClass = "rounded-xl bg-neutral-50/80 ring-1 ring-black/[0.04]";
-const sectionLabel = "text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-500";
-const fieldLabel = "mb-1.5 block text-xs font-medium text-neutral-600";
+const sectionLabel = "text-lg font-semibold text-neutral-900";
+const fieldLabel = "mb-1.5 block text-[13px] font-semibold text-neutral-900";
 const pillClass =
   "inline-flex items-center rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-600";
 const buttonGhost =
-  "rounded-xl bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-700 transition hover:bg-neutral-200";
+  "rounded-lg bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-700 transition hover:bg-neutral-200";
 const buttonPrimary =
-  "rounded-xl bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300";
+  "rounded-lg bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300";
 const buttonSecondary =
-  "rounded-xl bg-[#0071e3] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#0077ed] disabled:cursor-not-allowed disabled:bg-[#0071e3]/30";
+  "rounded-lg bg-[#0071e3] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#0077ed] disabled:cursor-not-allowed disabled:bg-[#0071e3]/30";
 const buttonOutline =
-  "rounded-xl bg-white px-3 py-2 text-xs font-semibold text-neutral-700 ring-1 ring-inset ring-neutral-200 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-neutral-400";
+  "rounded-lg bg-white px-3 py-2 text-xs font-semibold text-neutral-700 ring-1 ring-inset ring-neutral-200 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-neutral-400";
 
 type SetupMode = "strategis" | "facebook" | "both";
 
@@ -259,7 +259,7 @@ function Dropdown({
   }, [open]);
 
   return (
-    <div ref={ref} className={`relative ${className || ""}`}>
+    <div ref={ref} className={`relative ${open ? "z-[140]" : "z-10"} ${className || ""}`}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -285,7 +285,7 @@ function Dropdown({
       {open ? (
         <div
           role="listbox"
-          className="absolute left-0 right-0 z-30 mt-1.5 max-h-72 overflow-auto rounded-xl bg-white p-1 ring-1 ring-black/[0.08] shadow-[0_12px_32px_-8px_rgba(0,0,0,0.18),0_4px_8px_-4px_rgba(0,0,0,0.08)]"
+          className="absolute left-0 right-0 z-[160] mt-1.5 max-h-72 overflow-auto rounded-lg bg-white p-1 ring-1 ring-black/[0.08] shadow-[0_12px_32px_-8px_rgba(0,0,0,0.18),0_4px_8px_-4px_rgba(0,0,0,0.08)]"
         >
           {options.map((option) => {
             const isSelected = option.value === value;
@@ -299,7 +299,7 @@ function Dropdown({
                   onChange(option.value);
                   setOpen(false);
                 }}
-                className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${
+                className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition ${
                   isSelected
                     ? "bg-neutral-100 text-neutral-900"
                     : "text-neutral-700 hover:bg-neutral-100"
@@ -374,6 +374,7 @@ export default function BenLaunchWorkbench() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [copied, setCopied] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showAllForcekeys, setShowAllForcekeys] = useState(false);
   const [chatOpen, setChatOpen] = useState(true);
 
   const threadListManager = useThreadListManager({
@@ -717,18 +718,52 @@ export default function BenLaunchWorkbench() {
     window.setTimeout(() => setCopied(null), 1200);
   }
 
-  const canRunSetup =
+  const canRunStrategisSetup =
     Boolean(selectedProfile) &&
     Boolean(strategistPreview?.templateId) &&
     Boolean(strategistPreview?.rsocSite) &&
     Boolean(form.article.trim()) &&
     Boolean(form.headline.trim()) &&
+    activeForcekeys.length >= 1;
+
+  const canRunFacebookSetup =
+    Boolean(selectedProfile) &&
     Boolean(facebookPreview?.adAccountId) &&
+    Boolean(facebookPreview?.pageId) &&
+    Boolean(facebookPreview?.pixelId) &&
     Boolean(facebookPreview?.targeting) &&
     activeForcekeys.length >= 1;
 
+  const canRunBothSetup = canRunStrategisSetup && canRunFacebookSetup;
+
   async function handleSetup(mode: SetupMode) {
-    if (!selectedProfile || !strategistPreview || !facebookPreview) return;
+    if (!selectedProfile || !strategistPreview) return;
+    if (mode !== "strategis" && !facebookPreview) return;
+
+    const setupFacebookPayload = facebookPreview
+      ? {
+          adAccountId: facebookPreview.adAccountId,
+          pageId: facebookPreview.pageId,
+          pixelId: facebookPreview.pixelId,
+          objective: facebookPreview.objective,
+          customEventType: facebookPreview.customEventType,
+          bidStrategy: facebookPreview.bidStrategy,
+          bidAmount: facebookPreview.bidAmount,
+          budgetPerAdSet: facebookPreview.budgetPerAdSet,
+          targeting: facebookPreview.targeting,
+        }
+      : {
+          adAccountId: form.adAccountId.trim(),
+          pageId: form.pageId.trim(),
+          pixelId: "",
+          objective: "",
+          customEventType: "",
+          bidStrategy: "",
+          bidAmount: form.bidCap.trim(),
+          budgetPerAdSet: form.budgetAmount.trim(),
+          targeting: {},
+        };
+
     try {
       setRunningSetup(mode);
       setSetupError(null);
@@ -754,17 +789,7 @@ export default function BenLaunchWorkbench() {
             networkAccountId: strategistPreview.networkAccountId,
             namingFamilyHint: strategistPreview.namingFamilyHint,
           },
-          facebook: {
-            adAccountId: facebookPreview.adAccountId,
-            pageId: facebookPreview.pageId,
-            pixelId: facebookPreview.pixelId,
-            objective: facebookPreview.objective,
-            customEventType: facebookPreview.customEventType,
-            bidStrategy: facebookPreview.bidStrategy,
-            bidAmount: facebookPreview.bidAmount,
-            budgetPerAdSet: facebookPreview.budgetPerAdSet,
-            targeting: facebookPreview.targeting,
-          },
+          facebook: setupFacebookPayload,
           cloneSource: selectedCampaign
             ? {
                 campaignId: selectedCampaign.campaignId,
@@ -787,7 +812,7 @@ export default function BenLaunchWorkbench() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f5f5f7] text-neutral-600">
+      <div className="flex min-h-screen items-center justify-center bg-white text-neutral-600">
         <div className={`${cardClass} px-6 py-4 text-sm`}>Loading {buyerLabel} preset catalog…</div>
       </div>
     );
@@ -795,13 +820,13 @@ export default function BenLaunchWorkbench() {
 
   if (error || !catalog) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f5f5f7] px-6 text-neutral-700">
+      <div className="flex min-h-screen items-center justify-center bg-white px-6 text-neutral-700">
         <div className={`${cardClass} max-w-lg p-6`}>
           <p className="text-base font-semibold text-neutral-900">Could not load buyer workbench</p>
-          <p className="mt-2 text-sm text-neutral-600">{error || "Unknown error"}</p>
+          <p className="mt-2 text-xs text-neutral-600">{error || "Unknown error"}</p>
           <Link
             href="/"
-            className="mt-5 inline-flex rounded-xl bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-700 transition hover:bg-neutral-200"
+            className="mt-5 inline-flex rounded-lg bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-700 transition hover:bg-neutral-200"
           >
             Back to dashboard
           </Link>
@@ -811,24 +836,24 @@ export default function BenLaunchWorkbench() {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#f5f5f7] text-neutral-900">
+    <div className="flex h-screen w-screen overflow-hidden bg-white text-neutral-900">
       {/* Dashboard pane */}
       <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[1180px] px-6 py-6">
-          {/* Header — flat text on page bg */}
-          <header className="mb-5 flex flex-wrap items-end justify-between gap-4">
+        <div className="mx-auto max-w-[1180px] space-y-10 px-6 py-8">
+          {/* Header — flat text on page bg, mirrors the form/rail grid below */}
+          <header className="grid grid-cols-1 items-end gap-x-10 gap-y-4 xl:grid-cols-[minmax(0,1fr)_320px]">
             <div>
-              <div className="inline-flex h-6 items-center rounded-md bg-[#0071e3]/10 px-2 text-[11px] font-semibold uppercase tracking-wider text-[#0071e3]">
+              <div className="inline-flex h-6 items-center rounded-md bg-[#0071e3]/12 px-2 text-[11px] font-semibold uppercase tracking-wider text-[#0071e3] ring-1 ring-inset ring-[#0071e3]/15">
                 Liftoff
               </div>
-              <p className="mt-3 text-sm text-neutral-600">
+              <p className="mt-3 text-xs text-neutral-600">
                 {buyerLabel} · {catalog.profiles.length} presets ·{" "}
                 {Object.keys(catalog.lockedDefaults).length} locked defaults ·{" "}
                 {catalog.manualFields.length} manual fields · {readyCount}/5 ready
               </p>
             </div>
             <div className="flex items-end gap-3">
-              <div className="min-w-[220px]">
+              <div className="flex-1 min-w-0">
                 <label className={fieldLabel}>Buyer profile</label>
                 <Dropdown
                   value={buyer}
@@ -851,7 +876,7 @@ export default function BenLaunchWorkbench() {
           </header>
 
           {Object.entries(catalog.lockedDefaults).length > 0 ? (
-            <div className="mb-5 flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 xl:max-w-[calc(100%-360px)]">
               <span className="text-xs font-medium uppercase tracking-[0.14em] text-neutral-500">
                 Locked defaults
               </span>
@@ -863,13 +888,12 @@ export default function BenLaunchWorkbench() {
             </div>
           ) : null}
 
-          {/* Single canvas — form on the left, summary rail on the right */}
-          <article className={cardClass}>
-            <div className="grid xl:grid-cols-[minmax(0,1fr)_320px] xl:divide-x xl:divide-black/[0.05]">
+          {/* Flow layout — no canvas card; form and rail sit on the page bg */}
+          <div className="grid gap-x-10 gap-y-8 xl:grid-cols-[minmax(0,1fr)_320px]">
               {/* Form column */}
-              <section className="p-6">
+              <section>
               {!selectedProfile ? null : (
-                <div className="space-y-6">
+                <div className="space-y-8">
                   {/* Preset row */}
                   <div>
                     <div className={sectionLabel}>Launch preset</div>
@@ -975,7 +999,7 @@ export default function BenLaunchWorkbench() {
                     <div className={sectionLabel}>Content inputs</div>
 
                       {selectedCampaign ? (
-                        <div className="mb-3 rounded-xl bg-[#0071e3]/10 px-3 py-2.5 text-xs text-neutral-900">
+                        <div className="mb-3 rounded-xl bg-[#0071e3]/[0.06] px-3 py-2.5 text-xs text-neutral-900">
                           Cloning shell from{" "}
                           <span className="font-semibold">{selectedCampaign.campaignName}</span>. Article, headline,
                           forcekeys, redirect, page, and account are copied. Creatives are out of scope.
@@ -1027,7 +1051,7 @@ export default function BenLaunchWorkbench() {
                         </div>
                       </div>
 
-                      <label className="mt-4 block">
+                      <label className="block">
                         <div className={fieldLabel}>Selected article URL or path</div>
                         <input
                           value={form.article}
@@ -1037,7 +1061,7 @@ export default function BenLaunchWorkbench() {
                         />
                       </label>
 
-                      <label className="mt-3 block">
+                      <label className="block">
                         <div className={fieldLabel}>Headline</div>
                         <input
                           value={form.headline}
@@ -1047,29 +1071,54 @@ export default function BenLaunchWorkbench() {
                         />
                       </label>
 
-                      <div className="mt-3">
-                        <div className={fieldLabel}>Forcekeys</div>
-                        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                          {form.forcekeys.map((value, index) => (
-                            <input
-                              key={index}
-                              value={value}
-                              onChange={(e) =>
-                                setForm((current) => {
-                                  const next = [...current.forcekeys];
-                                  next[index] = e.target.value;
-                                  return { ...current, forcekeys: next };
-                                })
-                              }
-                              placeholder={`forcekey${String.fromCharCode(65 + index)}`}
-                              className={inputClass}
-                            />
-                          ))}
-                        </div>
-                        <div className="mt-2 text-xs text-neutral-500">
-                          Active forcekeys: {activeForcekeys.length}.
-                        </div>
-                      </div>
+                      {(() => {
+                        const lastFilledIndex = form.forcekeys.reduce(
+                          (max, v, i) => (v.trim() ? i : max),
+                          -1
+                        );
+                        const naturalVisibleCount = Math.min(
+                          12,
+                          Math.max(5, lastFilledIndex + 2)
+                        );
+                        const visibleCount = showAllForcekeys ? 12 : naturalVisibleCount;
+                        const canToggle = naturalVisibleCount < 12;
+                        return (
+                          <div>
+                            <div className={fieldLabel}>Forcekeys</div>
+                            <div className="space-y-2">
+                              {form.forcekeys.slice(0, visibleCount).map((value, index) => (
+                                <input
+                                  key={index}
+                                  value={value}
+                                  onChange={(e) =>
+                                    setForm((current) => {
+                                      const next = [...current.forcekeys];
+                                      next[index] = e.target.value;
+                                      return { ...current, forcekeys: next };
+                                    })
+                                  }
+                                  placeholder={`forcekey${String.fromCharCode(65 + index)}`}
+                                  className={inputClass}
+                                />
+                              ))}
+                            </div>
+                            <div className="mt-2 flex items-center justify-between text-xs">
+                              <span className="text-neutral-500">
+                                Active forcekeys: {activeForcekeys.length}.
+                              </span>
+                              {canToggle ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setShowAllForcekeys((v) => !v)}
+                                  className="font-medium text-[#0071e3] hover:underline"
+                                >
+                                  {showAllForcekeys ? "Show fewer fields" : "Show all 12 fields"}
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     <div className="h-px bg-black/[0.06]" />
@@ -1120,7 +1169,7 @@ export default function BenLaunchWorkbench() {
                       </div>
 
                       {showAdvanced ? (
-                        <div className="mt-4 grid gap-3 pt-4 md:grid-cols-3">
+                        <div className="grid gap-3 md:grid-cols-3">
                           <label className="block">
                             <div className={fieldLabel}>Redirect domain</div>
                             <input
@@ -1148,7 +1197,7 @@ export default function BenLaunchWorkbench() {
                         </div>
                       ) : null}
 
-                      <div className="mt-4 rounded-xl bg-neutral-100/80 px-3 py-3">
+                      <div className="rounded-xl bg-neutral-100/80 px-3 py-3">
                         <div className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-neutral-500">
                           Setup actions
                         </div>
@@ -1156,7 +1205,7 @@ export default function BenLaunchWorkbench() {
                           <button
                             type="button"
                             onClick={() => handleSetup("strategis")}
-                            disabled={!canRunSetup || runningSetup !== null}
+                            disabled={!canRunStrategisSetup || runningSetup !== null}
                             className={buttonOutline}
                           >
                             {runningSetup === "strategis" ? "Setting up…" : "Setup in Strategis"}
@@ -1164,7 +1213,7 @@ export default function BenLaunchWorkbench() {
                           <button
                             type="button"
                             onClick={() => handleSetup("facebook")}
-                            disabled={!canRunSetup || runningSetup !== null}
+                            disabled={!canRunFacebookSetup || runningSetup !== null}
                             className={buttonSecondary}
                           >
                             {runningSetup === "facebook" ? "Setting up…" : "Setup in Facebook"}
@@ -1172,7 +1221,7 @@ export default function BenLaunchWorkbench() {
                           <button
                             type="button"
                             onClick={() => handleSetup("both")}
-                            disabled={!canRunSetup || runningSetup !== null}
+                            disabled={!canRunBothSetup || runningSetup !== null}
                             className={buttonPrimary}
                           >
                             {runningSetup === "both" ? "Setting up…" : "Setup in Both"}
@@ -1184,7 +1233,7 @@ export default function BenLaunchWorkbench() {
                         </div>
                       </div>
 
-                      <label className="mt-4 block">
+                      <label className="block">
                         <div className={fieldLabel}>Creative handoff notes</div>
                         <textarea
                           value={form.creativeNotes}
@@ -1199,11 +1248,11 @@ export default function BenLaunchWorkbench() {
             </section>
 
             {/* Summary rail — flat sections divided by hairlines */}
-            <aside className="p-6">
-              <div className="space-y-5">
+            <aside>
+              <div className="space-y-6">
                 <div>
                   <div className={sectionLabel}>Strategis</div>
-                  <div className="mt-2 space-y-1 text-sm text-neutral-800">
+                  <div className="mt-2 space-y-1 text-xs text-neutral-600">
                     <div>Article: {selectedCampaign?.articleSlug || selectedArticle?.label || form.article || "—"}</div>
                     <div>Site: {strategistPreview?.rsocSite || "—"}</div>
                     <div>Subdirectory: {strategistPreview?.subdirectory || "—"}</div>
@@ -1223,7 +1272,7 @@ export default function BenLaunchWorkbench() {
 
                 <div>
                   <div className={sectionLabel}>Facebook</div>
-                  <div className="mt-2 space-y-1 text-sm text-neutral-800">
+                  <div className="mt-2 space-y-1 text-xs text-neutral-600">
                     <div>Ad account: {facebookPreview?.adAccountId || "—"}</div>
                     <div>Page: {facebookPreview?.pageId || "—"}</div>
                     <div>Pixel: {facebookPreview?.pixelId || "—"}</div>
@@ -1247,14 +1296,14 @@ export default function BenLaunchWorkbench() {
                     {readyChecks.map((check) => (
                       <div
                         key={check.label}
-                        className="flex items-center justify-between text-sm text-neutral-800"
+                        className="flex items-center justify-between text-xs text-neutral-600"
                       >
                         <span>{check.label}</span>
                         <span
                           className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
                             check.ok
-                              ? "bg-[#34c759]/12 text-[#0a7d2e]"
-                              : "bg-[#ff9500]/12 text-[#a55a00]"
+                              ? "bg-[#34c759]/[0.08] text-[#0a7d2e]"
+                              : "bg-[#ff9500]/[0.08] text-[#a55a00]"
                           }`}
                         >
                           {check.ok ? "Ready" : "Missing"}
@@ -1266,7 +1315,7 @@ export default function BenLaunchWorkbench() {
 
                 {(selectedProfile?.notes || []).length > 0 ||
                 (selectedCampaign?.notes || []).length > 0 ? (
-                  <div className="rounded-xl bg-[#ff9500]/12 px-3 py-3">
+                  <div className="rounded-xl bg-[#ff9500]/[0.08] px-3 py-3">
                     <div className="text-xs font-medium uppercase tracking-wide text-[#a55a00]">Warnings</div>
                     <ul className="mt-1.5 space-y-1 text-sm text-[#a55a00]">
                       {[
@@ -1280,14 +1329,14 @@ export default function BenLaunchWorkbench() {
                 ) : null}
 
                 {setupError ? (
-                  <div className="rounded-xl bg-[#ff3b30]/10 px-3 py-3">
+                  <div className="rounded-xl bg-[#ff3b30]/[0.08] px-3 py-3">
                     <div className="text-xs font-medium uppercase tracking-wide text-[#a32018]">Setup error</div>
                     <div className="mt-1.5 text-sm text-[#a32018]">{setupError}</div>
                   </div>
                 ) : null}
 
                 {setupResult ? (
-                  <div className="rounded-xl bg-[#34c759]/12 px-3 py-3">
+                  <div className="rounded-xl bg-[#34c759]/[0.08] px-3 py-3">
                     <div className="text-xs font-medium uppercase tracking-wide text-[#0a7d2e]">
                       {setupResult.mode} created
                     </div>
@@ -1317,42 +1366,41 @@ export default function BenLaunchWorkbench() {
                 ) : null}
               </div>
             </aside>
-            </div>
+          </div>
 
-            {/* Footer — collapsed JSON shells */}
-            <details className="group border-t border-black/[0.05]">
-              <summary className="flex cursor-pointer list-none items-center justify-between px-6 py-3 text-xs font-medium uppercase tracking-[0.14em] text-neutral-500 transition hover:bg-neutral-50">
-                <span>JSON shells</span>
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="transition-transform group-open:rotate-180"
-                >
-                  <path d="M6 9l6 6 6-6" />
-                </svg>
-              </summary>
-              <div className="grid gap-4 px-6 pb-6 pt-2 lg:grid-cols-2">
-                <div>
-                  <div className={sectionLabel}>Strategis</div>
-                  <pre className="mt-2 max-h-[280px] overflow-auto rounded-xl bg-neutral-100 p-3 text-xs text-neutral-800">
-                    {JSON.stringify(strategistPreview, null, 2)}
-                  </pre>
-                </div>
-                <div>
-                  <div className={sectionLabel}>Facebook</div>
-                  <pre className="mt-2 max-h-[280px] overflow-auto rounded-xl bg-neutral-100 p-3 text-xs text-neutral-800">
-                    {JSON.stringify(facebookPreview, null, 2)}
-                  </pre>
-                </div>
+          {/* Footer — collapsed JSON shells */}
+          <details className="group">
+            <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-medium uppercase tracking-[0.14em] text-neutral-500 transition hover:text-neutral-700">
+              <span>JSON shells</span>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="transition-transform group-open:rotate-180"
+              >
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </summary>
+            <div className="mt-3 grid gap-4 lg:grid-cols-2">
+              <div>
+                <div className={sectionLabel}>Strategis</div>
+                <pre className="mt-2 max-h-[280px] overflow-auto rounded-xl bg-neutral-100 p-3 text-xs text-neutral-800">
+                  {JSON.stringify(strategistPreview, null, 2)}
+                </pre>
               </div>
-            </details>
-          </article>
+              <div>
+                <div className={sectionLabel}>Facebook</div>
+                <pre className="mt-2 max-h-[280px] overflow-auto rounded-xl bg-neutral-100 p-3 text-xs text-neutral-800">
+                  {JSON.stringify(facebookPreview, null, 2)}
+                </pre>
+              </div>
+            </div>
+          </details>
         </div>
       </main>
 
