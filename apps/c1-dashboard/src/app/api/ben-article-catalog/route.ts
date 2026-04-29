@@ -32,7 +32,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(
       {
-        error: "Failed to load Ben article catalog",
+        error: "Failed to load buyer article catalog",
         message: lastError,
       },
       { status: 500 }

@@ -35,7 +35,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(
       {
-        error: "Failed to load Ben campaign catalog",
+        error: "Failed to load buyer campaign catalog",
         message: lastError,
       },
       { status: 500 }

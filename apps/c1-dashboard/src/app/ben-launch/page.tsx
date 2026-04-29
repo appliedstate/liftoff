@@ -151,6 +151,91 @@ type BenCampaignCatalog = {
   notes: string[];
 };
 
+type ForcekeySelectorGeoValue = {
+  token: "state" | "city" | "region";
+  value: string;
+  searches: number;
+  clicks: number;
+  revenue: number;
+  rps: number;
+  rpc: number;
+  upliftPct: number;
+  band: "premium" | "baseline" | "weak";
+};
+
+type ForcekeySelectorOption = {
+  forcekey: string;
+  normalizedForcekey: string;
+  type: "exact" | "templated";
+  category: string;
+  intentPacketId?: string | null;
+  dateWindow: {
+    start: string;
+    end: string;
+    label: string;
+  };
+  metrics: {
+    searches: number;
+    clicks: number;
+    revenue: number;
+    rpc: number;
+    rps: number;
+    ctr: number;
+  };
+  score: {
+    rankingScore: number;
+    conservativeCtr: number;
+    shrunkRpc: number;
+    shrunkRps: number;
+    confidence: "high" | "medium" | "low" | "insufficient_data";
+  };
+  comparison: {
+    categoryRank: number;
+    categoryCount: number;
+    categoryRpsLiftPct: number;
+    networkRpsLiftPct: number;
+    networkRpcLiftPct: number;
+  };
+  geo: {
+    token: "state" | "city" | "region";
+    topValues: ForcekeySelectorGeoValue[];
+    geoOpportunity: boolean;
+    rationale: string;
+  } | null;
+  observedKeywordVariants: string[];
+};
+
+type ForcekeySelectorResponse = {
+  generatedAt: string;
+  buyer: string | null;
+  category: string;
+  intentPacketId?: string | null;
+  dateWindow: {
+    start: string;
+    end: string;
+    label: string;
+    type: "trailing_complete_days";
+  };
+  baselines: {
+    category: {
+      searches: number;
+      clicks: number;
+      revenue: number;
+      rpc: number;
+      rps: number;
+    };
+    network: {
+      searches: number;
+      clicks: number;
+      revenue: number;
+      rpc: number;
+      rps: number;
+    };
+  };
+  options: ForcekeySelectorOption[];
+  notes: string[];
+};
+
 type FormState = {
   article: string;
   headline: string;
@@ -182,6 +267,28 @@ const BUYER_OPTIONS = [
   { value: "Cook", label: "Andrew Cook" },
 ] as const;
 
+function trailingCompleteDayWindow(days: number) {
+  const end = new Date();
+  end.setDate(end.getDate() - 1);
+  const start = new Date(end);
+  start.setDate(end.getDate() - (days - 1));
+  const toYmd = (value: Date) => value.toISOString().slice(0, 10);
+  return {
+    startDate: toYmd(start),
+    endDate: toYmd(end),
+  };
+}
+
+function pctLabel(value: number) {
+  const pct = value * 100;
+  const sign = pct > 0 ? "+" : "";
+  return `${sign}${pct.toFixed(0)}%`;
+}
+
+function moneyLabel(value: number) {
+  return `$${value.toFixed(2)}`;
+}
+
 function copyJson(value: unknown) {
   return navigator.clipboard.writeText(JSON.stringify(value, null, 2));
 }
@@ -196,7 +303,7 @@ const subCardClass = "rounded-xl bg-neutral-50/80 ring-1 ring-black/[0.04]";
 const sectionLabel = "text-lg font-semibold text-neutral-900";
 const fieldLabel = "mb-1.5 block text-[13px] font-semibold text-neutral-900";
 const pillClass =
-  "inline-flex items-center rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-600";
+  "inline-flex items-center rounded-full bg-[#0071e3]/[0.06] px-2.5 py-1 text-xs font-semibold text-[#0071e3]";
 const buttonGhost =
   "rounded-lg bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-700 transition hover:bg-neutral-200";
 const buttonPrimary =
@@ -363,6 +470,9 @@ export default function BenLaunchWorkbench() {
   const [catalog, setCatalog] = useState<BenShellCatalog | null>(null);
   const [articleCatalog, setArticleCatalog] = useState<BenArticleCatalog | null>(null);
   const [campaignCatalog, setCampaignCatalog] = useState<BenCampaignCatalog | null>(null);
+  const [forcekeySelector, setForcekeySelector] = useState<ForcekeySelectorResponse | null>(null);
+  const [forcekeySelectorLoading, setForcekeySelectorLoading] = useState(false);
+  const [forcekeySelectorError, setForcekeySelectorError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -376,6 +486,8 @@ export default function BenLaunchWorkbench() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showAllForcekeys, setShowAllForcekeys] = useState(false);
   const [chatOpen, setChatOpen] = useState(true);
+  const [forcekeyWindow, setForcekeyWindow] = useState(() => trailingCompleteDayWindow(14));
+  const [forcekeyRefreshNonce, setForcekeyRefreshNonce] = useState(0);
 
   const threadListManager = useThreadListManager({
     fetchThreadList: async () => {
@@ -417,6 +529,25 @@ export default function BenLaunchWorkbench() {
   const buyerLabel = BUYER_OPTIONS.find((option) => option.value === buyer)?.label || buyer;
 
   useEffect(() => {
+    function refreshForcekeyWindow() {
+      const next = trailingCompleteDayWindow(14);
+      setForcekeyWindow((current) =>
+        current.startDate === next.startDate && current.endDate === next.endDate ? current : next
+      );
+    }
+
+    const interval = window.setInterval(refreshForcekeyWindow, 5 * 60 * 1000);
+    window.addEventListener("focus", refreshForcekeyWindow);
+    document.addEventListener("visibilitychange", refreshForcekeyWindow);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshForcekeyWindow);
+      document.removeEventListener("visibilitychange", refreshForcekeyWindow);
+    };
+  }, []);
+
+  useEffect(() => {
     const currentParam = searchParams.get("buyer") || "Ben";
     if (currentParam !== buyer) {
       router.replace(`/ben-launch?buyer=${encodeURIComponent(buyer)}`);
@@ -433,6 +564,8 @@ export default function BenLaunchWorkbench() {
     setForm(emptyForm());
     setSetupResult(null);
     setSetupError(null);
+    setForcekeySelector(null);
+    setForcekeySelectorError(null);
   }, [buyer]);
 
   useEffect(() => {
@@ -523,6 +656,57 @@ export default function BenLaunchWorkbench() {
   const selectedProfile =
     profiles.find((profile) => profile.profileId === selectedProfileId) || filteredProfiles[0] || null;
 
+  useEffect(() => {
+    let isMounted = true;
+    async function loadForcekeySelector() {
+      if (!selectedProfile?.category) {
+        if (isMounted) {
+          setForcekeySelector(null);
+          setForcekeySelectorError(null);
+        }
+        return;
+      }
+
+      try {
+        if (isMounted) {
+          setForcekeySelectorLoading(true);
+          setForcekeySelectorError(null);
+        }
+        const response = await fetch(
+          `/api/forcekey-selector?buyer=${encodeURIComponent(buyer)}&category=${encodeURIComponent(
+            selectedProfile.category
+          )}&startDate=${encodeURIComponent(forcekeyWindow.startDate)}&endDate=${encodeURIComponent(
+            forcekeyWindow.endDate
+          )}&limit=18`,
+          { cache: "no-store" }
+        );
+        const json = await response.json();
+        if (!response.ok) {
+          throw new Error(json?.message || json?.error || "Failed to load forcekey selector");
+        }
+        if (!isMounted) return;
+        setForcekeySelector(json);
+      } catch (error) {
+        if (!isMounted) return;
+        setForcekeySelector(null);
+        setForcekeySelectorError(error instanceof Error ? error.message : String(error));
+      } finally {
+        if (isMounted) setForcekeySelectorLoading(false);
+      }
+    }
+
+    loadForcekeySelector();
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    buyer,
+    selectedProfile?.category,
+    forcekeyRefreshNonce,
+    forcekeyWindow.endDate,
+    forcekeyWindow.startDate,
+  ]);
+
   const campaignItems = campaignCatalog?.items || [];
 
   const filteredCampaigns = useMemo(() => {
@@ -544,28 +728,49 @@ export default function BenLaunchWorkbench() {
   const selectedCampaign =
     campaignItems.find((campaign) => campaign.campaignId === selectedCampaignId) || null;
 
-  const categoryArticles = useMemo(() => {
+  const rankedArticles = useMemo(() => {
     const items = articleCatalog?.items || [];
     if (!selectedProfile) return items;
-    return items.filter((item) => item.category === selectedProfile.category);
+    return [...items].sort((a, b) => {
+      const aMatch = a.category === selectedProfile.category ? 0 : 1;
+      const bMatch = b.category === selectedProfile.category ? 0 : 1;
+      if (aMatch !== bMatch) return aMatch - bMatch;
+      if (a.campaignCount !== b.campaignCount) return b.campaignCount - a.campaignCount;
+      return a.label.localeCompare(b.label);
+    });
   }, [articleCatalog, selectedProfile]);
 
   const filteredArticles = useMemo(() => {
     const lowered = articleQuery.trim().toLowerCase();
-    if (!lowered) return categoryArticles;
-    return categoryArticles.filter((item) =>
+    if (!lowered) return rankedArticles;
+    return rankedArticles.filter((item) =>
       [item.label, item.articleSlug, item.articleUrl, item.articlePath, ...item.headlineHints]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(lowered))
     );
-  }, [categoryArticles, articleQuery]);
+  }, [rankedArticles, articleQuery]);
 
   const selectedArticle =
     filteredArticles.find((item) => item.articleKey === selectedArticleKey) ||
-    categoryArticles.find((item) => item.articleKey === selectedArticleKey) ||
     filteredArticles[0] ||
-    categoryArticles[0] ||
+    rankedArticles.find((item) => item.articleKey === selectedArticleKey) ||
+    rankedArticles[0] ||
     null;
+
+  useEffect(() => {
+    if (!articleQuery.trim()) return;
+    if (filteredArticles.length === 0) return;
+    const currentStillVisible = filteredArticles.some((item) => item.articleKey === selectedArticleKey);
+    if (!currentStillVisible) {
+      const nextArticle = filteredArticles[0];
+      setSelectedArticleKey(nextArticle.articleKey);
+      setForm((current) => ({
+        ...current,
+        article: nextArticle.articleUrl || nextArticle.articlePath || current.article,
+        headline: nextArticle.headlineHints?.[0] || current.headline,
+      }));
+    }
+  }, [articleQuery, filteredArticles, selectedArticleKey]);
 
   useEffect(() => {
     if (!selectedProfile) return;
@@ -589,15 +794,13 @@ export default function BenLaunchWorkbench() {
 
   useEffect(() => {
     if (!selectedProfile) return;
-    const inCategory = (articleCatalog?.items || []).filter(
-      (item) => item.category === selectedProfile.category
-    );
-    const currentStillValid = inCategory.some((item) => item.articleKey === selectedArticleKey);
+    const availableArticles = articleCatalog?.items || [];
+    const currentStillValid = availableArticles.some((item) => item.articleKey === selectedArticleKey);
     if (!currentStillValid) {
-      setSelectedArticleKey(inCategory[0]?.articleKey || "");
+      setSelectedArticleKey(rankedArticles[0]?.articleKey || "");
       setArticleQuery("");
     }
-  }, [selectedProfileId, selectedProfile, articleCatalog, selectedArticleKey]);
+  }, [selectedProfileId, selectedProfile, articleCatalog, rankedArticles, selectedArticleKey]);
 
   const selectorOptions = useMemo(() => {
     if (!selectedProfile) return [];
@@ -716,6 +919,33 @@ export default function BenLaunchWorkbench() {
     await copyJson(value);
     setCopied(section);
     window.setTimeout(() => setCopied(null), 1200);
+  }
+
+  function addForcekeyToNextOpenSlot(forcekey: string) {
+    setForm((current) => {
+      const next = [...current.forcekeys];
+      const existingIndex = next.findIndex(
+        (value) => value.trim().toLowerCase() === forcekey.trim().toLowerCase()
+      );
+      if (existingIndex >= 0) return current;
+      const targetIndex = next.findIndex((value) => !value.trim());
+      if (targetIndex >= 0) {
+        next[targetIndex] = forcekey;
+      } else {
+        next[next.length - 1] = forcekey;
+      }
+      return { ...current, forcekeys: next };
+    });
+  }
+
+  function applyTopForcekeys(count: number) {
+    if (!forcekeySelector?.options?.length) return;
+    const top = forcekeySelector.options.slice(0, count).map((option) => option.forcekey);
+    setForm((current) => {
+      const next = Array.from({ length: 12 }, (_, index) => top[index] || "");
+      return { ...current, forcekeys: next };
+    });
+    setShowAllForcekeys(count > 5);
   }
 
   const canRunStrategisSetup =
@@ -839,9 +1069,9 @@ export default function BenLaunchWorkbench() {
     <div className="flex h-screen w-screen overflow-hidden bg-white text-neutral-900">
       {/* Dashboard pane */}
       <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[1180px] space-y-10 px-6 py-8">
+        <div className="mx-auto max-w-[1180px] space-y-10 px-6 py-12">
           {/* Header — flat text on page bg, mirrors the form/rail grid below */}
-          <header className="grid grid-cols-1 items-end gap-x-10 gap-y-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <header className="grid grid-cols-1 items-end gap-x-8 gap-y-4 xl:grid-cols-[minmax(0,1fr)_320px]">
             <div>
               <div className="inline-flex h-6 items-center rounded-md bg-[#0071e3]/12 px-2 text-[11px] font-semibold uppercase tracking-wider text-[#0071e3] ring-1 ring-inset ring-[#0071e3]/15">
                 Liftoff
@@ -876,7 +1106,7 @@ export default function BenLaunchWorkbench() {
           </header>
 
           {Object.entries(catalog.lockedDefaults).length > 0 ? (
-            <div className="flex flex-wrap items-center gap-2 xl:max-w-[calc(100%-360px)]">
+            <div className="flex flex-wrap items-center gap-2 xl:max-w-[calc(100%-352px)]">
               <span className="text-xs font-medium uppercase tracking-[0.14em] text-neutral-500">
                 Locked defaults
               </span>
@@ -889,7 +1119,7 @@ export default function BenLaunchWorkbench() {
           ) : null}
 
           {/* Flow layout — no canvas card; form and rail sit on the page bg */}
-          <div className="grid gap-x-10 gap-y-8 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid gap-x-8 gap-y-8 xl:grid-cols-[minmax(0,1fr)_320px]">
               {/* Form column */}
               <section>
               {!selectedProfile ? null : (
@@ -1034,6 +1264,9 @@ export default function BenLaunchWorkbench() {
                             }))}
                             placeholder="Select an article…"
                           />
+                          <div className="mt-1.5 text-xs text-neutral-500">
+                            Showing all {buyerLabel} articles with this category ranked first.
+                          </div>
                         </div>
 
                         <div className="rounded-xl bg-white px-3 py-2.5 text-xs text-neutral-600 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
@@ -1059,6 +1292,9 @@ export default function BenLaunchWorkbench() {
                           placeholder="Article URL or path"
                           className={inputClass}
                         />
+                        <div className="mt-1.5 text-xs text-neutral-500">
+                          This is the final Strategis article value. The selector above pre-fills it, and you can override it manually here.
+                        </div>
                       </label>
 
                       <label className="block">
@@ -1070,6 +1306,180 @@ export default function BenLaunchWorkbench() {
                           className={inputClass}
                         />
                       </label>
+
+                      <div className="space-y-3 rounded-2xl bg-neutral-50/80 px-4 py-4 ring-1 ring-black/[0.05]">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className={sectionLabel}>Forcekey selector</div>
+                            <div className="mt-1 text-xs text-neutral-500">
+                              {forcekeySelector?.dateWindow.label ||
+                                `Trailing 14 complete days: ${forcekeyWindow.startDate} - ${forcekeyWindow.endDate}`}
+                            </div>
+                            <div className="mt-1 text-xs text-neutral-400">
+                              Excludes the current partial day.
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setForcekeyWindow(trailingCompleteDayWindow(14));
+                                setForcekeyRefreshNonce((value) => value + 1);
+                              }}
+                              className={buttonGhost}
+                            >
+                              Refresh stats
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => applyTopForcekeys(6)}
+                              disabled={!forcekeySelector?.options?.length}
+                              className={buttonGhost}
+                            >
+                              Autofill top 6
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => applyTopForcekeys(12)}
+                              disabled={!forcekeySelector?.options?.length}
+                              className={buttonGhost}
+                            >
+                              Autofill top 12
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 text-xs text-neutral-500">
+                          <span className={pillClass}>Category: {selectedProfile.category}</span>
+                          {forcekeySelector ? (
+                            <>
+                              <span className={pillClass}>
+                                Category baseline RPS {forcekeySelector.baselines.category.rps.toFixed(2)}
+                              </span>
+                              <span className={pillClass}>
+                                Network baseline RPS {forcekeySelector.baselines.network.rps.toFixed(2)}
+                              </span>
+                            </>
+                          ) : null}
+                        </div>
+
+                        {forcekeySelectorLoading ? (
+                          <div className="rounded-xl bg-white px-3 py-3 text-sm text-neutral-500 ring-1 ring-black/[0.04]">
+                            Loading forcekey analysis…
+                          </div>
+                        ) : forcekeySelectorError ? (
+                          <div className="rounded-xl bg-[#ff3b30]/[0.08] px-3 py-3 text-sm text-[#a32018]">
+                            {forcekeySelectorError}
+                          </div>
+                        ) : forcekeySelector?.options?.length ? (
+                          <div className="space-y-2">
+                            {forcekeySelector.options.slice(0, 8).map((option) => {
+                              const alreadySelected = form.forcekeys.some(
+                                (value) => value.trim().toLowerCase() === option.forcekey.trim().toLowerCase()
+                              );
+                              return (
+                                <details
+                                  key={option.normalizedForcekey}
+                                  className="rounded-xl bg-white px-3 py-3 ring-1 ring-black/[0.04]"
+                                >
+                                  <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <span className="text-sm font-semibold text-neutral-900">
+                                          {option.forcekey}
+                                        </span>
+                                        <span className={pillClass}>{option.type}</span>
+                                        <span className={pillClass}>
+                                          rank #{option.comparison.categoryRank}
+                                        </span>
+                                        <span className={pillClass}>{option.score.confidence}</span>
+                                      </div>
+                                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-500">
+                                        <span>{option.metrics.searches} searches</span>
+                                        <span>{option.metrics.clicks} clicks</span>
+                                        <span>{moneyLabel(option.metrics.revenue)} revenue</span>
+                                        <span>RPC {option.metrics.rpc.toFixed(2)}</span>
+                                        <span>RPS {option.metrics.rps.toFixed(2)}</span>
+                                        <span>vs category {pctLabel(option.comparison.categoryRpsLiftPct)}</span>
+                                      </div>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        addForcekeyToNextOpenSlot(option.forcekey);
+                                      }}
+                                      className={alreadySelected ? buttonOutline : buttonSecondary}
+                                    >
+                                      {alreadySelected ? "Selected" : "Add"}
+                                    </button>
+                                  </summary>
+                                  <div className="mt-3 space-y-3 border-t border-black/[0.05] pt-3 text-sm text-neutral-700">
+                                    <div className="grid gap-2 md:grid-cols-3">
+                                      <div className={`${subCardClass} px-3 py-2`}>
+                                        <div className="text-xs text-neutral-500">Ranking score</div>
+                                        <div className="mt-1 font-semibold text-neutral-900">
+                                          {option.score.rankingScore.toFixed(2)}
+                                        </div>
+                                      </div>
+                                      <div className={`${subCardClass} px-3 py-2`}>
+                                        <div className="text-xs text-neutral-500">Network RPS lift</div>
+                                        <div className="mt-1 font-semibold text-neutral-900">
+                                          {pctLabel(option.comparison.networkRpsLiftPct)}
+                                        </div>
+                                      </div>
+                                      <div className={`${subCardClass} px-3 py-2`}>
+                                        <div className="text-xs text-neutral-500">Network RPC lift</div>
+                                        <div className="mt-1 font-semibold text-neutral-900">
+                                          {pctLabel(option.comparison.networkRpcLiftPct)}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    {option.geo ? (
+                                      <div>
+                                        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500">
+                                          Geo analysis
+                                        </div>
+                                        <div className="mt-2 text-xs text-neutral-600">
+                                          {option.geo.rationale}
+                                        </div>
+                                        <div className="mt-2 flex flex-wrap gap-2">
+                                          {option.geo.topValues.slice(0, 3).map((geo) => (
+                                            <span key={`${geo.token}-${geo.value}`} className={pillClass}>
+                                              {geo.value} · RPS {geo.rps.toFixed(2)} · {geo.band}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    ) : null}
+                                    {option.observedKeywordVariants.length > 0 ? (
+                                      <div className="text-xs text-neutral-500">
+                                        Observed variants: {option.observedKeywordVariants.slice(0, 3).join(" · ")}
+                                        {option.observedKeywordVariants.length > 3
+                                          ? ` +${option.observedKeywordVariants.length - 3} more`
+                                          : ""}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                </details>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="rounded-xl bg-white px-3 py-3 text-sm text-neutral-500 ring-1 ring-black/[0.04]">
+                            No trailing 14-day forcekey analysis is available for this category yet.
+                          </div>
+                        )}
+
+                        {forcekeySelector?.notes?.length ? (
+                          <div className="space-y-1 text-xs text-neutral-500">
+                            {forcekeySelector.notes.slice(0, 4).map((note, index) => (
+                              <div key={`${note}-${index}`}>{note}</div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
 
                       {(() => {
                         const lastFilledIndex = form.forcekeys.reduce(

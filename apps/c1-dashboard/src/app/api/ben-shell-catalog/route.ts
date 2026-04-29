@@ -32,7 +32,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(
       {
-        error: "Failed to load Ben shell catalog",
+        error: "Failed to load buyer shell catalog",
         message: lastError,
       },
       { status: 500 }
