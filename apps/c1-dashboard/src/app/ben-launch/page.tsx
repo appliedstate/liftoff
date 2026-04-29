@@ -1,9 +1,10 @@
 "use client";
 
-import { C1Chat } from "@thesysai/genui-sdk";
+import { C1Chat, useThreadListManager } from "@thesysai/genui-sdk";
 import "@crayonai/react-ui/styles/index.css";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type SelectorTargeting = {
   ageMin: number | null;
@@ -176,24 +177,189 @@ const emptyForm = (): FormState => ({
   adAccountId: "",
 });
 
+const BUYER_OPTIONS = [
+  { value: "Ben", label: "Ben Holley" },
+  { value: "Cook", label: "Andrew Cook" },
+] as const;
+
 function copyJson(value: unknown) {
   return navigator.clipboard.writeText(JSON.stringify(value, null, 2));
 }
 
-// Shared Tailwind class fragments — keeps the markup readable and the palette consistent.
+// Framer-inspired: borderless fields, soft fills, tinted cards on a light background.
 const inputClass =
-  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 placeholder:text-slate-400";
+  "w-full rounded-xl bg-neutral-100 px-3.5 py-2.5 text-sm text-neutral-900 outline-none transition placeholder:text-neutral-400 hover:bg-neutral-200/60 focus:bg-white focus:ring-2 focus:ring-[#0071e3]/25";
 const selectClass = inputClass;
-const cardClass = "rounded-2xl border border-slate-200 bg-white shadow-sm";
-const subCardClass = "rounded-xl border border-slate-200 bg-slate-50";
-const sectionLabel = "text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500";
-const fieldLabel = "mb-1.5 block text-xs font-medium text-slate-600";
+const cardClass =
+  "rounded-xl bg-white ring-1 ring-black/5 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_32px_-16px_rgba(0,0,0,0.10)]";
+const subCardClass = "rounded-xl bg-neutral-50/80 ring-1 ring-black/[0.04]";
+const sectionLabel = "text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-500";
+const fieldLabel = "mb-1.5 block text-xs font-medium text-neutral-600";
 const pillClass =
-  "inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-600";
+  "inline-flex items-center rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-600";
 const buttonGhost =
-  "rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50";
+  "rounded-xl bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-700 transition hover:bg-neutral-200";
+const buttonPrimary =
+  "rounded-xl bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-300";
+const buttonSecondary =
+  "rounded-xl bg-[#0071e3] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#0077ed] disabled:cursor-not-allowed disabled:bg-[#0071e3]/30";
+const buttonOutline =
+  "rounded-xl bg-white px-3 py-2 text-xs font-semibold text-neutral-700 ring-1 ring-inset ring-neutral-200 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-neutral-400";
+
+type SetupMode = "strategis" | "facebook" | "both";
+
+type SetupResponse = {
+  mode: SetupMode;
+  result: {
+    requestId: string;
+    campaignName: string;
+    adSetNames: string[];
+    facebookCampaign?: { id: string; name: string } | null;
+    facebookAdSets?: Array<{ id: string; name: string }>;
+    strategisCampaigns?: Array<{ id: string; name: string; trackingUrl: string }>;
+    mappingStored?: boolean;
+    mappingId?: string | null;
+    warnings?: string[];
+  };
+};
+
+type DropdownOption = { value: string; label: string };
+
+function Dropdown({
+  value,
+  onChange,
+  options,
+  placeholder,
+  className,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: DropdownOption[];
+  placeholder?: string;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = options.find((o) => o.value === value);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} className={`relative ${className || ""}`}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`${inputClass} flex w-full items-center justify-between text-left`}
+      >
+        <span className={`truncate ${selected ? "" : "text-neutral-400"}`}>
+          {selected?.label || placeholder || "Select…"}
+        </span>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={`ml-2 shrink-0 text-neutral-500 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
+        >
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+      {open ? (
+        <div
+          role="listbox"
+          className="absolute left-0 right-0 z-30 mt-1.5 max-h-72 overflow-auto rounded-xl bg-white p-1 ring-1 ring-black/[0.08] shadow-[0_12px_32px_-8px_rgba(0,0,0,0.18),0_4px_8px_-4px_rgba(0,0,0,0.08)]"
+        >
+          {options.map((option) => {
+            const isSelected = option.value === value;
+            return (
+              <button
+                key={option.value || "__empty__"}
+                type="button"
+                role="option"
+                aria-selected={isSelected}
+                onClick={() => {
+                  onChange(option.value);
+                  setOpen(false);
+                }}
+                className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${
+                  isSelected
+                    ? "bg-neutral-100 text-neutral-900"
+                    : "text-neutral-700 hover:bg-neutral-100"
+                }`}
+              >
+                <span className="truncate">{option.label}</span>
+                {isSelected ? (
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="ml-2 shrink-0 text-[#0071e3]"
+                  >
+                    <path d="M5 12l5 5L20 7" />
+                  </svg>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+const THREADS_STORAGE_KEY = "ben-launch-threads-v1";
+
+type StoredThread = { threadId: string; title: string; createdAt: string };
+
+function readStoredThreads(): StoredThread[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(THREADS_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as StoredThread[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredThreads(threads: StoredThread[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(THREADS_STORAGE_KEY, JSON.stringify(threads));
+}
+
+function newThreadId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  return `t-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 export default function BenLaunchWorkbench() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const buyerParam = searchParams.get("buyer");
+  const initialBuyer = BUYER_OPTIONS.find((option) => option.value === buyerParam)?.value || "Ben";
+  const [buyer, setBuyer] = useState<string>(initialBuyer);
   const [catalog, setCatalog] = useState<BenShellCatalog | null>(null);
   const [articleCatalog, setArticleCatalog] = useState<BenArticleCatalog | null>(null);
   const [campaignCatalog, setCampaignCatalog] = useState<BenCampaignCatalog | null>(null);
@@ -211,12 +377,73 @@ export default function BenLaunchWorkbench() {
   const [showJson, setShowJson] = useState(false);
   const [chatOpen, setChatOpen] = useState(true);
 
+  const threadListManager = useThreadListManager({
+    fetchThreadList: async () => {
+      return readStoredThreads().map((t) => ({
+        threadId: t.threadId,
+        title: t.title,
+        createdAt: new Date(t.createdAt),
+      }));
+    },
+    createThread: async (firstMessage) => {
+      const raw = (firstMessage as { message?: string; content?: string }) || {};
+      const text = (raw.message || raw.content || "").toString().trim();
+      const title = text ? text.slice(0, 60) : "New chat";
+      const id = newThreadId();
+      const createdAt = new Date();
+      const stored: StoredThread = { threadId: id, title, createdAt: createdAt.toISOString() };
+      writeStoredThreads([stored, ...readStoredThreads()]);
+      return { threadId: id, title, createdAt };
+    },
+    deleteThread: async (id) => {
+      writeStoredThreads(readStoredThreads().filter((t) => t.threadId !== id));
+    },
+    updateThread: async (updated) => {
+      writeStoredThreads(
+        readStoredThreads().map((t) =>
+          t.threadId === updated.threadId
+            ? { ...t, title: updated.title, createdAt: (updated.createdAt as Date).toISOString() }
+            : t
+        )
+      );
+      return updated;
+    },
+    onSwitchToNew: () => {},
+    onSelectThread: () => {},
+  });
+  const [runningSetup, setRunningSetup] = useState<SetupMode | null>(null);
+  const [setupResult, setSetupResult] = useState<SetupResponse | null>(null);
+  const [setupError, setSetupError] = useState<string | null>(null);
+  const buyerLabel = BUYER_OPTIONS.find((option) => option.value === buyer)?.label || buyer;
+
+  useEffect(() => {
+    const currentParam = searchParams.get("buyer") || "Ben";
+    if (currentParam !== buyer) {
+      router.replace(`/ben-launch?buyer=${encodeURIComponent(buyer)}`);
+    }
+  }, [buyer, router, searchParams]);
+
+  useEffect(() => {
+    setSelectedProfileId("");
+    setSelectedArticleKey("");
+    setSelectedCampaignId("");
+    setQuery("");
+    setArticleQuery("");
+    setCampaignQuery("");
+    setForm(emptyForm());
+    setSetupResult(null);
+    setSetupError(null);
+  }, [buyer]);
+
   useEffect(() => {
     let isMounted = true;
     async function load() {
       try {
         setLoading(true);
-        const response = await fetch("/api/ben-shell-catalog?buyer=Ben", { cache: "no-store" });
+        setError(null);
+        const response = await fetch(`/api/ben-shell-catalog?buyer=${encodeURIComponent(buyer)}`, {
+          cache: "no-store",
+        });
         const json = await response.json();
         if (!response.ok) {
           throw new Error(json?.message || json?.error || "Failed to load catalog");
@@ -227,13 +454,15 @@ export default function BenLaunchWorkbench() {
         if (firstProfile) setSelectedProfileId(firstProfile.profileId);
 
         try {
-          const articleResponse = await fetch("/api/ben-article-catalog?buyer=Ben", { cache: "no-store" });
+          const articleResponse = await fetch(`/api/ben-article-catalog?buyer=${encodeURIComponent(buyer)}`, {
+            cache: "no-store",
+          });
           const articleJson = await articleResponse.json();
           if (articleResponse.ok && isMounted) setArticleCatalog(articleJson);
         } catch {
           if (isMounted) {
             setArticleCatalog({
-              scope: { buyer: "Ben", campaignsAnalyzed: 0, articles: 0 },
+              scope: { buyer, campaignsAnalyzed: 0, articles: 0 },
               generatedAt: new Date().toISOString(),
               items: [],
               notes: ["Article catalog is temporarily unavailable."],
@@ -242,13 +471,15 @@ export default function BenLaunchWorkbench() {
         }
 
         try {
-          const campaignResponse = await fetch("/api/ben-campaign-catalog?buyer=Ben", { cache: "no-store" });
+          const campaignResponse = await fetch(`/api/ben-campaign-catalog?buyer=${encodeURIComponent(buyer)}`, {
+            cache: "no-store",
+          });
           const campaignJson = await campaignResponse.json();
           if (campaignResponse.ok && isMounted) {
             setCampaignCatalog(campaignJson);
           } else if (isMounted) {
             setCampaignCatalog({
-              scope: { buyer: "Ben", organization: "Interlincx", campaigns: 0 },
+              scope: { buyer, organization: "Interlincx", campaigns: 0 },
               generatedAt: new Date().toISOString(),
               items: [],
               notes: [campaignJson?.message || campaignJson?.error || "Campaign clone catalog is unavailable."],
@@ -257,7 +488,7 @@ export default function BenLaunchWorkbench() {
         } catch {
           if (isMounted) {
             setCampaignCatalog({
-              scope: { buyer: "Ben", organization: "Interlincx", campaigns: 0 },
+              scope: { buyer, organization: "Interlincx", campaigns: 0 },
               generatedAt: new Date().toISOString(),
               items: [],
               notes: ["Campaign clone catalog is temporarily unavailable."],
@@ -275,7 +506,7 @@ export default function BenLaunchWorkbench() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [buyer]);
 
   const profiles = catalog?.profiles || [];
 
@@ -408,7 +639,7 @@ export default function BenLaunchWorkbench() {
 
   const strategistPreview = selectedProfile
     ? {
-        buyer: catalog?.lockedDefaults.buyer || "ben",
+        buyer: catalog?.lockedDefaults.buyer || buyer.toLowerCase(),
         networkName: catalog?.lockedDefaults.networkName || "facebook",
         country: catalog?.lockedDefaults.country || "US - United States of America",
         organization: catalog?.lockedDefaults.organization || "Interlincx",
@@ -487,23 +718,91 @@ export default function BenLaunchWorkbench() {
     window.setTimeout(() => setCopied(null), 1200);
   }
 
+  const canRunSetup =
+    Boolean(selectedProfile) &&
+    Boolean(strategistPreview?.templateId) &&
+    Boolean(strategistPreview?.rsocSite) &&
+    Boolean(form.article.trim()) &&
+    Boolean(form.headline.trim()) &&
+    Boolean(facebookPreview?.adAccountId) &&
+    Boolean(facebookPreview?.targeting) &&
+    activeForcekeys.length >= 1;
+
+  async function handleSetup(mode: SetupMode) {
+    if (!selectedProfile || !strategistPreview || !facebookPreview) return;
+    try {
+      setRunningSetup(mode);
+      setSetupError(null);
+      setSetupResult(null);
+      const response = await fetch("/api/ben-setup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          mode,
+          buyer,
+          category: selectedProfile.category,
+          article: form.article.trim(),
+          headline: form.headline.trim(),
+          forcekeys: activeForcekeys,
+          strategist: {
+            rsocSite: strategistPreview.rsocSite,
+            subdirectory: strategistPreview.subdirectory,
+            templateId: strategistPreview.templateId,
+            redirectDomain: strategistPreview.redirectDomain,
+            language: strategistPreview.language,
+            networkAccountId: strategistPreview.networkAccountId,
+            namingFamilyHint: strategistPreview.namingFamilyHint,
+          },
+          facebook: {
+            adAccountId: facebookPreview.adAccountId,
+            pageId: facebookPreview.pageId,
+            pixelId: facebookPreview.pixelId,
+            objective: facebookPreview.objective,
+            customEventType: facebookPreview.customEventType,
+            bidStrategy: facebookPreview.bidStrategy,
+            bidAmount: facebookPreview.bidAmount,
+            budgetPerAdSet: facebookPreview.budgetPerAdSet,
+            targeting: facebookPreview.targeting,
+          },
+          cloneSource: selectedCampaign
+            ? {
+                campaignId: selectedCampaign.campaignId,
+                campaignName: selectedCampaign.campaignName,
+              }
+            : null,
+        }),
+      });
+      const json = await response.json();
+      if (!response.ok) {
+        throw new Error(json?.message || json?.error || "Setup failed");
+      }
+      setSetupResult(json);
+    } catch (error) {
+      setSetupError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setRunningSetup(null);
+    }
+  }
+
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-600">
-        <div className={`${cardClass} px-6 py-4 text-sm`}>Loading Ben preset catalog…</div>
+      <div className="flex min-h-screen items-center justify-center bg-[#f5f5f7] text-neutral-600">
+        <div className={`${cardClass} px-6 py-4 text-sm`}>Loading {buyerLabel} preset catalog…</div>
       </div>
     );
   }
 
   if (error || !catalog) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-slate-700">
+      <div className="flex min-h-screen items-center justify-center bg-[#f5f5f7] px-6 text-neutral-700">
         <div className={`${cardClass} max-w-lg p-6`}>
-          <p className="text-base font-semibold text-slate-900">Could not load Ben workbench</p>
-          <p className="mt-2 text-sm text-slate-600">{error || "Unknown error"}</p>
+          <p className="text-base font-semibold text-neutral-900">Could not load buyer workbench</p>
+          <p className="mt-2 text-sm text-neutral-600">{error || "Unknown error"}</p>
           <Link
             href="/"
-            className="mt-5 inline-flex rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            className="mt-5 inline-flex rounded-xl bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-700 transition hover:bg-neutral-200"
           >
             Back to dashboard
           </Link>
@@ -513,7 +812,7 @@ export default function BenLaunchWorkbench() {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-50 text-slate-900">
+    <div className="flex h-screen w-screen overflow-hidden bg-[#f5f5f7] text-neutral-900">
       {/* Dashboard pane */}
       <main className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[1180px] px-6 py-6">
@@ -522,27 +821,41 @@ export default function BenLaunchWorkbench() {
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="inline-flex h-6 items-center rounded-md bg-indigo-50 px-2 text-[11px] font-semibold uppercase tracking-wider text-indigo-700">
-                    Ben Launch
+                  <span className="inline-flex h-6 items-center rounded-md bg-[#0071e3]/10 px-2 text-[11px] font-semibold uppercase tracking-wider text-[#0071e3]">
+                    Buyer Launch
                   </span>
                   <span className={pillClass}>one-screen shell</span>
                 </div>
-                <h1 className="mt-3 max-w-3xl text-2xl font-semibold tracking-tight text-slate-900">
+                <h1 className="mt-3 max-w-3xl text-2xl font-semibold tracking-tight text-neutral-900">
                   Pick a proven launch shape, fill the content fields, and hand Facebook only the creative work.
                 </h1>
-                <p className="mt-2 max-w-2xl text-sm text-slate-600">
+                <p className="mt-2 max-w-2xl text-sm text-neutral-600">
+                  {buyerLabel}.{" "}
                   {catalog.scope.strategistCampaigns} Strategis campaigns and{" "}
                   {catalog.scope.matchedFacebookAdSets} matched Facebook ad sets distilled into reusable presets.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setChatOpen((v) => !v)}
-                className={buttonGhost}
-                aria-label="Toggle assistant"
-              >
-                {chatOpen ? "Hide assistant" : "Show assistant"}
-              </button>
+              <div className="flex items-end gap-3">
+                <div className="min-w-[220px]">
+                  <label className={fieldLabel}>Buyer profile</label>
+                  <Dropdown
+                    value={buyer}
+                    onChange={(nextBuyer) => setBuyer(nextBuyer)}
+                    options={BUYER_OPTIONS.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                    }))}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setChatOpen((v) => !v)}
+                  className={buttonGhost}
+                  aria-label="Toggle assistant"
+                >
+                  {chatOpen ? "Hide assistant" : "Show assistant"}
+                </button>
+              </div>
             </div>
 
             <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -553,8 +866,8 @@ export default function BenLaunchWorkbench() {
                 { label: "Readiness", value: `${readyCount}/5` },
               ].map((stat) => (
                 <div key={stat.label} className={`${subCardClass} px-4 py-3`}>
-                  <div className="text-xs text-slate-500">{stat.label}</div>
-                  <div className="mt-1 text-xl font-semibold text-slate-900">{stat.value}</div>
+                  <div className="text-xs text-neutral-500">{stat.label}</div>
+                  <div className="mt-1 text-xl font-semibold text-neutral-900">{stat.value}</div>
                 </div>
               ))}
             </div>
@@ -566,7 +879,7 @@ export default function BenLaunchWorkbench() {
               {!selectedProfile ? null : (
                 <>
                   {/* Preset row */}
-                  <div className="border-b border-slate-100 pb-5">
+                  <div className="pb-5">
                     <div className={sectionLabel}>Launch preset</div>
                     <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                       <div>
@@ -577,21 +890,19 @@ export default function BenLaunchWorkbench() {
                           placeholder="Search categories…"
                           className={`${inputClass} mb-2`}
                         />
-                        <select
+                        <Dropdown
                           value={selectedProfile.profileId}
-                          onChange={(e) => {
-                            setSelectedProfileId(e.target.value);
+                          onChange={(v) => {
+                            setSelectedProfileId(v);
                             setSelectedCampaignId("");
                             setForm(emptyForm());
                           }}
-                          className={selectClass}
-                        >
-                          {filteredProfiles.map((profile) => (
-                            <option key={profile.profileId} value={profile.profileId}>
-                              {profile.category}
-                            </option>
-                          ))}
-                        </select>
+                          options={filteredProfiles.map((p) => ({
+                            value: p.profileId,
+                            label: p.category,
+                          }))}
+                          placeholder="Select preset…"
+                        />
                       </div>
 
                       <div>
@@ -599,33 +910,31 @@ export default function BenLaunchWorkbench() {
                         <input
                           value={campaignQuery}
                           onChange={(e) => setCampaignQuery(e.target.value)}
-                          placeholder="Search Ben campaigns…"
+                          placeholder={`Search ${buyerLabel} campaigns…`}
                           className={`${inputClass} mb-2`}
                         />
-                        <select
+                        <Dropdown
                           value={selectedCampaignId}
-                          onChange={(e) => {
-                            const nextId = e.target.value;
-                            if (!nextId) {
+                          onChange={(v) => {
+                            if (!v) {
                               setSelectedCampaignId("");
                               setForm(emptyForm());
                               return;
                             }
-                            const nextCampaign = campaignItems.find((c) => c.campaignId === nextId);
+                            const nextCampaign = campaignItems.find((c) => c.campaignId === v);
                             if (nextCampaign) hydrateFromCampaign(nextCampaign);
                           }}
-                          className={selectClass}
-                        >
-                          <option value="">Start from preset only</option>
-                          {filteredCampaigns.map((campaign) => (
-                            <option key={campaign.campaignId} value={campaign.campaignId}>
-                              {campaign.campaignName}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="mt-1.5 text-xs text-slate-500">
+                          options={[
+                            { value: "", label: "Start from preset only" },
+                            ...filteredCampaigns.map((c) => ({
+                              value: c.campaignId,
+                              label: c.campaignName,
+                            })),
+                          ]}
+                        />
+                        <div className="mt-1.5 text-xs text-neutral-500">
                           {campaignItems.length > 0
-                            ? `${campaignItems.length} Ben campaigns available for cloning`
+                            ? `${campaignItems.length} ${buyerLabel} campaigns available for cloning`
                             : campaignCatalog?.notes?.[0] || "Campaign clone catalog unavailable"}
                         </div>
                       </div>
@@ -633,15 +942,15 @@ export default function BenLaunchWorkbench() {
 
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       <div className={`${subCardClass} px-4 py-3`}>
-                        <div className="text-xs text-slate-500">Current preset</div>
-                        <div className="mt-1 font-semibold text-slate-900">{selectedProfile.label}</div>
-                        <div className="mt-1 text-xs text-slate-500">
+                        <div className="text-xs text-neutral-500">Current preset</div>
+                        <div className="mt-1 font-semibold text-neutral-900">{selectedProfile.label}</div>
+                        <div className="mt-1 text-xs text-neutral-500">
                           {selectedProfile.category.split(" > ").slice(0, -1).join(" • ") || "Category"}
                         </div>
                       </div>
                       <div className={`${subCardClass} px-4 py-3`}>
-                        <div className="text-xs text-slate-500">Naming family</div>
-                        <div className="mt-1 font-mono text-xs text-slate-700">
+                        <div className="text-xs text-neutral-500">Naming family</div>
+                        <div className="mt-1 font-mono text-xs text-neutral-700">
                           {selectedProfile.strategist.namingFamily?.value || "No dominant family"}
                         </div>
                       </div>
@@ -673,7 +982,7 @@ export default function BenLaunchWorkbench() {
                       <div className={`${sectionLabel} mb-3`}>Content inputs</div>
 
                       {selectedCampaign ? (
-                        <div className="mb-3 rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-xs text-indigo-900">
+                        <div className="mb-3 rounded-xl bg-[#0071e3]/10 px-3 py-2.5 text-xs text-neutral-900">
                           Cloning shell from{" "}
                           <span className="font-semibold">{selectedCampaign.campaignName}</span>. Article, headline,
                           forcekeys, redirect, page, and account are copied. Creatives are out of scope.
@@ -686,16 +995,15 @@ export default function BenLaunchWorkbench() {
                           <input
                             value={articleQuery}
                             onChange={(e) => setArticleQuery(e.target.value)}
-                            placeholder="Search Ben's articles for this category…"
+                            placeholder={`Search ${buyerLabel}'s articles for this category…`}
                             className={`${inputClass} mb-2`}
                           />
-                          <select
+                          <Dropdown
                             value={selectedArticle?.articleKey || ""}
-                            onChange={(e) => {
-                              const nextKey = e.target.value;
-                              setSelectedArticleKey(nextKey);
+                            onChange={(v) => {
+                              setSelectedArticleKey(v);
                               const nextArticle = (articleCatalog?.items || []).find(
-                                (item) => item.articleKey === nextKey
+                                (item) => item.articleKey === v
                               );
                               setForm((current) => ({
                                 ...current,
@@ -703,26 +1011,24 @@ export default function BenLaunchWorkbench() {
                                 headline: nextArticle?.headlineHints?.[0] || current.headline,
                               }));
                             }}
-                            className={selectClass}
-                          >
-                            {filteredArticles.map((item) => (
-                              <option key={item.articleKey} value={item.articleKey}>
-                                {item.label} ({item.campaignCount})
-                              </option>
-                            ))}
-                          </select>
+                            options={filteredArticles.map((item) => ({
+                              value: item.articleKey,
+                              label: `${item.label} (${item.campaignCount})`,
+                            }))}
+                            placeholder="Select an article…"
+                          />
                         </div>
 
-                        <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-                          <div className="text-slate-500">Article details</div>
-                          <div className="mt-1 text-sm font-semibold text-slate-900">
+                        <div className="rounded-xl bg-white px-3 py-2.5 text-xs text-neutral-600 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+                          <div className="text-neutral-500">Article details</div>
+                          <div className="mt-1 text-sm font-semibold text-neutral-900">
                             {selectedArticle?.label || "No article selected"}
                           </div>
-                          <div className="mt-1 text-slate-500">
+                          <div className="mt-1 text-neutral-500">
                             {selectedArticle?.articleSlug || "No slug"}
                           </div>
-                          <div className="mt-2 text-slate-500">
-                            Used in {selectedArticle?.campaignCount || 0} campaign
+                          <div className="mt-2 text-neutral-500">
+                            Used in {selectedArticle?.campaignCount || 0} {buyerLabel} campaign
                             {selectedArticle?.campaignCount === 1 ? "" : "s"}
                           </div>
                         </div>
@@ -743,7 +1049,7 @@ export default function BenLaunchWorkbench() {
                         <input
                           value={form.headline}
                           onChange={(e) => setForm((c) => ({ ...c, headline: e.target.value }))}
-                          placeholder="Headline Ben wants attached to this launch"
+                          placeholder={`Headline ${buyerLabel} wants attached to this launch`}
                           className={inputClass}
                         />
                       </label>
@@ -767,7 +1073,7 @@ export default function BenLaunchWorkbench() {
                             />
                           ))}
                         </div>
-                        <div className="mt-2 text-xs text-slate-500">
+                        <div className="mt-2 text-xs text-neutral-500">
                           Active forcekeys: {activeForcekeys.length}.
                         </div>
                       </div>
@@ -786,20 +1092,17 @@ export default function BenLaunchWorkbench() {
                       </div>
 
                       <div className="grid gap-3 md:grid-cols-3">
-                        <label className="block">
+                        <div>
                           <div className={fieldLabel}>Selector variant</div>
-                          <select
+                          <Dropdown
                             value={form.selectorVariant}
-                            onChange={(e) => setForm((c) => ({ ...c, selectorVariant: e.target.value }))}
-                            className={selectClass}
-                          >
-                            {selectorOptions.map((entry) => (
-                              <option key={entry.key} value={entry.key}>
-                                {entry.option.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
+                            onChange={(v) => setForm((c) => ({ ...c, selectorVariant: v }))}
+                            options={selectorOptions.map((entry) => ({
+                              value: entry.key,
+                              label: entry.option.label,
+                            }))}
+                          />
+                        </div>
 
                         <label className="block">
                           <div className={fieldLabel}>Budget per ad set ($)</div>
@@ -822,7 +1125,7 @@ export default function BenLaunchWorkbench() {
                       </div>
 
                       {showAdvanced ? (
-                        <div className="mt-4 grid gap-3 border-t border-slate-200 pt-4 md:grid-cols-3">
+                        <div className="mt-4 grid gap-3 pt-4 md:grid-cols-3">
                           <label className="block">
                             <div className={fieldLabel}>Redirect domain</div>
                             <input
@@ -850,6 +1153,42 @@ export default function BenLaunchWorkbench() {
                         </div>
                       ) : null}
 
+                      <div className="mt-4 rounded-xl bg-neutral-100/80 px-3 py-3">
+                        <div className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-neutral-500">
+                          Setup actions
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleSetup("strategis")}
+                            disabled={!canRunSetup || runningSetup !== null}
+                            className={buttonOutline}
+                          >
+                            {runningSetup === "strategis" ? "Setting up…" : "Setup in Strategis"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSetup("facebook")}
+                            disabled={!canRunSetup || runningSetup !== null}
+                            className={buttonSecondary}
+                          >
+                            {runningSetup === "facebook" ? "Setting up…" : "Setup in Facebook"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSetup("both")}
+                            disabled={!canRunSetup || runningSetup !== null}
+                            className={buttonPrimary}
+                          >
+                            {runningSetup === "both" ? "Setting up…" : "Setup in Both"}
+                          </button>
+                        </div>
+                        <div className="mt-2 text-xs text-neutral-500">
+                          Strategis creates the tracking shell only. Facebook creates the campaign and ad set shell
+                          only. Both attempts both sides and stores the mapping when database access is available.
+                        </div>
+                      </div>
+
                       <label className="mt-4 block">
                         <div className={fieldLabel}>Creative handoff notes</div>
                         <textarea
@@ -869,7 +1208,7 @@ export default function BenLaunchWorkbench() {
             <aside className="space-y-4">
               <section className={`${cardClass} p-4`}>
                 <div className="mb-3 flex items-center justify-between">
-                  <h2 className="text-base font-semibold text-slate-900">Launch summary</h2>
+                  <h2 className="text-base font-semibold text-neutral-900">Launch summary</h2>
                   <button
                     type="button"
                     onClick={() => setShowJson((v) => !v)}
@@ -881,8 +1220,8 @@ export default function BenLaunchWorkbench() {
 
                 <div className="space-y-3">
                   <div className={`${subCardClass} px-3 py-3`}>
-                    <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Strategis</div>
-                    <div className="mt-2 space-y-1 text-sm text-slate-800">
+                    <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">Strategis</div>
+                    <div className="mt-2 space-y-1 text-sm text-neutral-800">
                       <div>Article: {selectedCampaign?.articleSlug || selectedArticle?.label || form.article || "—"}</div>
                       <div>Site: {strategistPreview?.rsocSite || "—"}</div>
                       <div>Subdirectory: {strategistPreview?.subdirectory || "—"}</div>
@@ -899,8 +1238,8 @@ export default function BenLaunchWorkbench() {
                   </div>
 
                   <div className={`${subCardClass} px-3 py-3`}>
-                    <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Facebook</div>
-                    <div className="mt-2 space-y-1 text-sm text-slate-800">
+                    <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">Facebook</div>
+                    <div className="mt-2 space-y-1 text-sm text-neutral-800">
                       <div>Ad account: {facebookPreview?.adAccountId || "—"}</div>
                       <div>Page: {facebookPreview?.pageId || "—"}</div>
                       <div>Pixel: {facebookPreview?.pixelId || "—"}</div>
@@ -917,19 +1256,19 @@ export default function BenLaunchWorkbench() {
                   </div>
 
                   <div className={`${subCardClass} px-3 py-3`}>
-                    <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Readiness</div>
+                    <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">Readiness</div>
                     <div className="mt-2 space-y-1.5">
                       {readyChecks.map((check) => (
                         <div
                           key={check.label}
-                          className="flex items-center justify-between text-sm text-slate-800"
+                          className="flex items-center justify-between text-sm text-neutral-800"
                         >
                           <span>{check.label}</span>
                           <span
                             className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
                               check.ok
-                                ? "bg-emerald-50 text-emerald-700"
-                                : "bg-amber-50 text-amber-700"
+                                ? "bg-[#34c759]/12 text-[#0a7d2e]"
+                                : "bg-[#ff9500]/12 text-[#a55a00]"
                             }`}
                           >
                             {check.ok ? "Ready" : "Missing"}
@@ -941,9 +1280,9 @@ export default function BenLaunchWorkbench() {
 
                   {(selectedProfile?.notes || []).length > 0 ||
                   (selectedCampaign?.notes || []).length > 0 ? (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3">
-                      <div className="text-xs font-medium uppercase tracking-wide text-amber-800">Warnings</div>
-                      <ul className="mt-1.5 space-y-1 text-sm text-amber-900">
+                    <div className="rounded-xl bg-[#ff9500]/12 px-3 py-3">
+                      <div className="text-xs font-medium uppercase tracking-wide text-[#a55a00]">Warnings</div>
+                      <ul className="mt-1.5 space-y-1 text-sm text-[#a55a00]">
                         {[
                           ...(selectedCampaign?.notes || []),
                           ...(selectedProfile?.notes || []),
@@ -953,11 +1292,48 @@ export default function BenLaunchWorkbench() {
                       </ul>
                     </div>
                   ) : null}
+
+                  {setupError ? (
+                    <div className="rounded-xl bg-[#ff3b30]/10 px-3 py-3">
+                      <div className="text-xs font-medium uppercase tracking-wide text-[#a32018]">Setup error</div>
+                      <div className="mt-1.5 text-sm text-[#a32018]">{setupError}</div>
+                    </div>
+                  ) : null}
+
+                  {setupResult ? (
+                    <div className="rounded-xl bg-[#34c759]/12 px-3 py-3">
+                      <div className="text-xs font-medium uppercase tracking-wide text-[#0a7d2e]">
+                        {setupResult.mode} created
+                      </div>
+                      <div className="mt-1.5 space-y-1 text-sm text-[#063d15]">
+                        <div>Request: {setupResult.result.requestId}</div>
+                        <div>Campaign: {setupResult.result.campaignName}</div>
+                        {setupResult.result.facebookCampaign?.id ? (
+                          <div>Facebook campaign: {setupResult.result.facebookCampaign.id}</div>
+                        ) : null}
+                        {setupResult.result.strategisCampaigns?.[0]?.id ? (
+                          <div>Strategis campaign: {setupResult.result.strategisCampaigns[0].id}</div>
+                        ) : null}
+                        {setupResult.mode === "both" ? (
+                          <div>
+                            Mapping: {setupResult.result.mappingStored ? setupResult.result.mappingId || "stored" : "not stored"}
+                          </div>
+                        ) : null}
+                      </div>
+                      {(setupResult.result.warnings || []).length > 0 ? (
+                        <ul className="mt-2 space-y-1 text-xs text-[#0a7d2e]">
+                          {setupResult.result.warnings?.map((warning) => (
+                            <li key={warning}>• {warning}</li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               </section>
 
               <section className={`${cardClass} p-4`}>
-                <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                <div className="text-xs font-medium uppercase tracking-wide text-neutral-500">
                   Locked defaults
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -972,18 +1348,18 @@ export default function BenLaunchWorkbench() {
               {showJson ? (
                 <>
                   <section className={`${cardClass} p-4`}>
-                    <div className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+                    <div className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500">
                       Strategis shell JSON
                     </div>
-                    <pre className="max-h-[280px] overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-800">
+                    <pre className="max-h-[280px] overflow-auto rounded-xl bg-neutral-100 p-3 text-xs text-neutral-800">
                       {JSON.stringify(strategistPreview, null, 2)}
                     </pre>
                   </section>
                   <section className={`${cardClass} p-4`}>
-                    <div className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+                    <div className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500">
                       Facebook shell JSON
                     </div>
-                    <pre className="max-h-[280px] overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-800">
+                    <pre className="max-h-[280px] overflow-auto rounded-xl bg-neutral-100 p-3 text-xs text-neutral-800">
                       {JSON.stringify(facebookPreview, null, 2)}
                     </pre>
                   </section>
@@ -994,27 +1370,34 @@ export default function BenLaunchWorkbench() {
         </div>
       </main>
 
-      {/* Companion chat */}
+      {/* Companion chat — ChatGPT-style with multi-thread sidebar */}
       {chatOpen ? (
-        <aside className="flex h-screen w-[420px] shrink-0 flex-col border-l border-slate-200 bg-white">
-          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-wider text-indigo-700">
-                Launch Assistant
-              </div>
-              <div className="text-xs text-slate-500">Powered by Thesys C1</div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setChatOpen(false)}
-              className={buttonGhost}
-              aria-label="Close assistant"
+        <aside className="relative flex h-screen w-[560px] shrink-0 flex-col bg-white shadow-[-8px_0_24px_-12px_rgba(0,0,0,0.08)] ring-1 ring-black/5">
+          <button
+            type="button"
+            onClick={() => setChatOpen(false)}
+            aria-label="Close assistant"
+            className="absolute right-3 top-3 z-30 inline-flex h-7 w-7 items-center justify-center rounded-full bg-neutral-100 text-neutral-600 transition hover:bg-neutral-200"
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             >
-              Close
-            </button>
-          </div>
-          <div className="min-h-0 flex-1">
-            <C1Chat apiUrl="/api/ben-launch" theme={{ mode: "light" }} agentName="Ben Launch Assistant" />
+              <path d="M6 6l12 12M6 18L18 6" />
+            </svg>
+          </button>
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <C1Chat
+              apiUrl={`/api/ben-launch?buyer=${encodeURIComponent(buyer)}`}
+              formFactor="full-page"
+              threadListManager={threadListManager}
+            />
           </div>
         </aside>
       ) : null}

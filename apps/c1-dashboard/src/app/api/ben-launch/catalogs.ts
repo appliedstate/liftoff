@@ -23,13 +23,17 @@ export type CompactCatalogs = {
   errors: string[];
 };
 
-export async function loadBenCatalogs(): Promise<CompactCatalogs> {
+export async function loadBenCatalogs(buyer = "Ben"): Promise<CompactCatalogs> {
   const errors: string[] = [];
 
   const [shell, articles, campaigns] = await Promise.all([
-    fetchFromBackend(`/api/campaign-factory/ben-shell-catalog?buyer=Ben`),
-    fetchFromBackend(`/api/campaign-factory/ben-article-catalog?buyer=Ben`),
-    fetchFromBackend(`/api/campaign-factory/ben-campaign-catalog?buyer=Ben&organization=Interlincx`),
+    fetchFromBackend(`/api/campaign-factory/ben-shell-catalog?buyer=${encodeURIComponent(buyer)}`),
+    fetchFromBackend(`/api/campaign-factory/ben-article-catalog?buyer=${encodeURIComponent(buyer)}`),
+    fetchFromBackend(
+      `/api/campaign-factory/ben-campaign-catalog?buyer=${encodeURIComponent(
+        buyer
+      )}&organization=Interlincx`
+    ),
   ]);
 
   if (!shell) errors.push("Shell preset catalog unavailable");
@@ -44,7 +48,7 @@ export async function loadBenCatalogs(): Promise<CompactCatalogs> {
   };
 }
 
-export function buildSystemPrompt(catalogs: CompactCatalogs): string {
+export function buildSystemPrompt(catalogs: CompactCatalogs, buyer = "Ben"): string {
   const shell = catalogs.shell as {
     profiles?: Array<Record<string, unknown>>;
     lockedDefaults?: Record<string, string>;
@@ -55,11 +59,11 @@ export function buildSystemPrompt(catalogs: CompactCatalogs): string {
   const campaigns = catalogs.campaigns as { items?: Array<Record<string, unknown>> };
 
   return [
-    "You are the Ben Launch Workbench — an interactive assistant that helps Ben build Facebook ad campaign shells from proven templates.",
+    `You are the ${buyer} Launch Workbench — an interactive assistant that helps ${buyer} build Facebook ad campaign shells from proven templates.`,
     "",
     "WORKFLOW:",
-    "1. Help Ben pick a preset profile (by category) OR clone an existing campaign.",
-    "2. Help Ben select an article from the catalog scoped to that category.",
+    `1. Help ${buyer} pick a preset profile (by category) OR clone an existing campaign.`,
+    `2. Help ${buyer} select an article from the catalog scoped to that category.`,
     "3. Collect: headline, up to 12 forcekeys, budget per ad set ($30 default), optional bid cap, and creative handoff notes.",
     "4. Surface advanced overrides only when asked: redirect domain, Facebook page, ad account.",
     "5. Track readiness against these 5 checks: preset selected, article entered, headline entered, ≥5 forcekeys, creative notes.",
@@ -79,7 +83,7 @@ export function buildSystemPrompt(catalogs: CompactCatalogs): string {
     JSON.stringify(shell.lockedDefaults ?? {}, null, 2),
     "```",
     "",
-    `MANUAL FIELDS Ben must provide each launch: ${(shell.manualFields ?? []).join(", ")}`,
+    `MANUAL FIELDS ${buyer} must provide each launch: ${(shell.manualFields ?? []).join(", ")}`,
     "",
     `PRESET PROFILES (${shell.profiles?.length ?? 0}):`,
     "```json",
@@ -91,7 +95,7 @@ export function buildSystemPrompt(catalogs: CompactCatalogs): string {
     JSON.stringify(articles.items ?? [], null, 2),
     "```",
     "",
-    `EXISTING BEN CAMPAIGNS FOR CLONING (${campaigns.items?.length ?? 0}):`,
+    `EXISTING ${buyer.toUpperCase()} CAMPAIGNS FOR CLONING (${campaigns.items?.length ?? 0}):`,
     "```json",
     JSON.stringify(campaigns.items ?? [], null, 2),
     "```",

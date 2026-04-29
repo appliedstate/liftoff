@@ -5,6 +5,7 @@ import { DBMessage, getMessageStore } from "./messageStore";
 import { buildSystemPrompt, loadBenCatalogs } from "./catalogs";
 
 export async function POST(req: NextRequest) {
+  const buyer = req.nextUrl.searchParams.get("buyer") || "Ben";
   const { prompt, threadId, responseId } = (await req.json()) as {
     prompt: DBMessage;
     threadId: string;
@@ -18,8 +19,8 @@ export async function POST(req: NextRequest) {
   const messageStore = getMessageStore(threadId);
 
   if (messageStore.needsCatalogs()) {
-    const catalogs = await loadBenCatalogs();
-    messageStore.prependSystem(buildSystemPrompt(catalogs));
+    const catalogs = await loadBenCatalogs(buyer);
+    messageStore.prependSystem(buildSystemPrompt(catalogs, buyer));
   }
 
   messageStore.addMessage(prompt);
