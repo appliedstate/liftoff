@@ -31,17 +31,20 @@ type GenerateTextInput = {
   prompt: string;
   temperature?: number;
   maxTokens?: number;
+  model?: string;
+  textFormat?: any;
 };
 
-export async function generateText({ system, prompt, temperature = 0.2, maxTokens }: GenerateTextInput): Promise<string> {
+export async function generateText({ system, prompt, temperature = 0.2, maxTokens, model: requestedModel, textFormat }: GenerateTextInput): Promise<string> {
   const c = getClient();
   const input = system ? `System:\n${system}\n\nUser:\n${prompt}` : prompt;
 
-  const model = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
+  const model = requestedModel || process.env.OPENAI_MODEL || 'gpt-4.1-mini';
   // Some models error on temperature; send only when defined and supported
   const base: any = { model, input };
   if (typeof temperature === 'number' && !/^gpt-5($|-)/.test(model)) base.temperature = temperature;
   if (typeof maxTokens === 'number') base.max_output_tokens = maxTokens;
+  if (textFormat) base.text = { format: textFormat };
 
   let resp;
   try {
@@ -56,8 +59,16 @@ export async function generateText({ system, prompt, temperature = 0.2, maxToken
     }
   }
 
-  const text = (resp as any)?.output_text || '';
-  return String(text).trim();
+  const payload = resp as any;
+  const direct = payload?.output_text;
+  if (typeof direct === 'string' && direct.trim()) {
+    return direct.trim();
+  }
+
+  const contentText = payload?.output
+    ?.flatMap((item: any) => item?.content || [])
+    ?.map((item: any) => item?.text)
+    ?.find((value: unknown) => typeof value === 'string' && String(value).trim());
+
+  return String(contentText || '').trim();
 }
-
-

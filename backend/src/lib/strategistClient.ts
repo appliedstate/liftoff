@@ -4,6 +4,7 @@ import https from 'https';
 type StrategistClientOptions = {
   apiBaseUrl?: string;
   ixIdBaseUrl?: string;
+  authToken?: string;
   email?: string;
   password?: string;
   allowSelfSigned?: boolean;
@@ -34,11 +35,18 @@ export class StrategistClient {
 
   constructor(opts: StrategistClientOptions = {}) {
     this.apiBaseUrl = opts.apiBaseUrl || process.env.STRATEGIST_API_BASE_URL || 'https://strategist.lincx.la';
-    this.ixIdBaseUrl = opts.ixIdBaseUrl || process.env.IX_ID_BASE_URL || 'https://ix-id.lincx.la';
-    this.email = opts.email || process.env.IX_ID_EMAIL || '';
-    this.password = opts.password || process.env.IX_ID_PASSWORD || '';
-    if (!this.email || !this.password) {
-      throw new Error('IX_ID_EMAIL and IX_ID_PASSWORD must be set (env or options) to use StrategistClient');
+    this.ixIdBaseUrl =
+      opts.ixIdBaseUrl ||
+      process.env.STRATEGIS_AUTH_BASE_URL ||
+      process.env.IX_ID_BASE_URL ||
+      'https://ix-id.lincx.la';
+    this.email = opts.email || process.env.STRATEGIS_EMAIL || process.env.IX_ID_EMAIL || '';
+    this.password = opts.password || process.env.STRATEGIS_PASSWORD || process.env.IX_ID_PASSWORD || '';
+    const injectedAuthToken = opts.authToken || process.env.STRATEGIS_AUTH_TOKEN || process.env.STRATEGIST_AUTH_TOKEN || '';
+    if (!injectedAuthToken && (!this.email || !this.password)) {
+      throw new Error(
+        'Strategis authentication is required. Set STRATEGIS_AUTH_TOKEN or STRATEGIST_AUTH_TOKEN, or set STRATEGIS_EMAIL/STRATEGIS_PASSWORD or IX_ID_EMAIL/IX_ID_PASSWORD.'
+      );
     }
     const allowSelfSigned =
       typeof opts.allowSelfSigned === 'boolean'
@@ -49,6 +57,10 @@ export class StrategistClient {
       timeout: 120000,
       httpsAgent: allowSelfSigned ? new https.Agent({ rejectUnauthorized: false }) : undefined,
     });
+    if (injectedAuthToken) {
+      this.authToken = injectedAuthToken;
+      this.authExpiry = decodeJwtExpiration(injectedAuthToken);
+    }
   }
 
   private isTokenValid(): boolean {
@@ -60,7 +72,18 @@ export class StrategistClient {
   private async login(): Promise<void> {
     const url = `${this.ixIdBaseUrl}/auth/login`;
     const payload = { email: this.email, password: this.password };
-    const resp = await axios.post(url, payload, { timeout: 60000 });
+    let resp;
+    try {
+      resp = await axios.post(url, payload, { timeout: 60000 });
+    } catch (err: any) {
+      const status = err?.response?.status;
+      if (status === 401) {
+        throw new Error(
+          `Strategis login rejected by ${url}. Verify the email/password used for https://strategis.lincx.la/#/login.`
+        );
+      }
+      throw err;
+    }
     const token = resp.data?.data?.authToken || resp.data?.authToken;
     if (!token || typeof token !== 'string') {
       throw new Error('StrategistClient login failed: authToken missing in response');
@@ -93,17 +116,18 @@ export class StrategistClient {
   }
 }
 
-export function createStrategistClient(): StrategistClient {
-  return new StrategistClient();
+export function createStrategistClient(opts: StrategistClientOptions = {}): StrategistClient {
+  return new StrategistClient(opts);
 }
 
-export function createStrategisApiClient(): StrategistClient {
+export function createStrategisApiClient(opts: StrategistClientOptions = {}): StrategistClient {
   return new StrategistClient({
+    ...opts,
     apiBaseUrl: process.env.STRATEGIS_API_BASE_URL || 'https://strategis.lincx.in',
     ixIdBaseUrl: process.env.STRATEGIS_AUTH_BASE_URL || process.env.IX_ID_BASE_URL || 'https://ix-id.lincx.la',
     allowSelfSigned:
       process.env.STRATEGIS_ALLOW_SELF_SIGNED === '1' ||
-      process.env.STRATEGIST_ALLOW_SELF_SIGNED === '1',
+      process.env.STRATEGIST_ALLOW_SELF_SIGNED === '1' ||
+      opts.allowSelfSigned === true,
   });
 }
-

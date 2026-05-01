@@ -1,20 +1,22 @@
 /**
  * Strategis Facebook API Relay Client
- * 
+ *
  * Client for interacting with Strategis Facebook API relay endpoints:
  * - POST /api/facebook/campaigns/create
  * - POST /api/facebook/adsets/create
  * - POST /api/facebook/adcreatives/create
  * - POST /api/facebook/ads/create
- * 
- * Note: These endpoints need to be built by Strategis engineering first.
  */
 
-import axios from 'axios';
+import { StrategistClient as AuthenticatedStrategistClient } from '../lib/strategistClient';
 
 export interface StrategisFacebookConfig {
   baseUrl: string;
   apiKey?: string;
+  authToken?: string;
+  email?: string;
+  password?: string;
+  ixIdBaseUrl?: string;
 }
 
 export interface CreateCampaignRequest {
@@ -90,11 +92,28 @@ export interface CreateAdResponse {
 
 export class StrategisFacebookClient {
   private baseUrl: string;
-  private apiKey?: string;
+  private client: AuthenticatedStrategistClient;
 
   constructor(config: StrategisFacebookConfig) {
     this.baseUrl = config.baseUrl.replace(/\/$/, ''); // Remove trailing slash
-    this.apiKey = config.apiKey;
+    this.client = new AuthenticatedStrategistClient({
+      apiBaseUrl: this.baseUrl,
+      ixIdBaseUrl:
+        config.ixIdBaseUrl ||
+        process.env.STRATEGIS_AUTH_BASE_URL ||
+        process.env.IX_ID_BASE_URL ||
+        'https://ix-id.lincx.la',
+      authToken:
+        config.authToken ||
+        config.apiKey ||
+        process.env.STRATEGIS_AUTH_TOKEN ||
+        process.env.STRATEGIST_AUTH_TOKEN,
+      email: config.email || process.env.STRATEGIS_EMAIL || process.env.IX_ID_EMAIL,
+      password: config.password || process.env.STRATEGIS_PASSWORD || process.env.IX_ID_PASSWORD,
+      allowSelfSigned:
+        process.env.STRATEGIS_ALLOW_SELF_SIGNED === '1' ||
+        process.env.STRATEGIST_ALLOW_SELF_SIGNED === '1',
+    });
   }
 
   private async request<T>(
@@ -102,21 +121,14 @@ export class StrategisFacebookClient {
     path: string,
     body?: any
   ): Promise<T> {
-    const url = `${this.baseUrl}${path}`;
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-
-    if (this.apiKey) {
-      headers['Authorization'] = `Bearer ${this.apiKey}`;
-    }
-
     try {
-      const response = await axios.request<T>({
+      const response = await this.client.request<T>({
         method: method as any,
-        url,
-        headers,
+        url: path,
         data: body,
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
       return response.data;
     } catch (error: any) {
@@ -184,4 +196,3 @@ export class StrategisFacebookClient {
     );
   }
 }
-

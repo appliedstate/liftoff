@@ -245,17 +245,29 @@ export async function getAllocatorGroundingReport(options: AllocatorGroundingOpt
       reasons.push('owned opportunity backlog is aging without enough follow-through');
       blockers.push('stale pending opportunities should be reviewed before more allocation');
     }
+    if (card.opportunityQuality?.qualityBand === 'red' && posture !== 'protect') {
+      posture = posture === 'observe' ? 'hold' : posture;
+      reasons.push('upstream opportunity supply quality is weak');
+      blockers.push('improve opportunity conversion quality before treating supply volume as growth-ready');
+    }
+    if ((card.opportunityQuality?.stalePendingRate || 0) >= 0.5 && posture !== 'protect') {
+      posture = posture === 'observe' ? 'hold' : posture;
+      reasons.push('too much owned supply is stalling before closure');
+      blockers.push('reduce stale pending supply and raise closed-loop conversion first');
+    }
     if (
       posture === 'observe' &&
       card.band === 'green' &&
       card.performance.netMargin > 0 &&
       card.execution.executionScore >= 85 &&
       card.throughput?.throughputBand === 'green' &&
+      card.opportunityQuality?.qualityBand === 'green' &&
       !['critical', 'high'].includes(String(card.surfaceExposure?.riskBand || 'low'))
     ) {
       posture = 'scale';
       reasons.push('economics and execution are both currently strong');
       promoteWhen.push('keep economics positive and execution score above 85');
+      promoteWhen.push('maintain green opportunity-supply quality while scaling');
       promoteWhen.push('maintain green throughput and avoid new high-risk surface constraints');
     }
     if (

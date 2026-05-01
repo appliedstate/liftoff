@@ -5,6 +5,7 @@ import { getBuyerDailyCommandPacketReport } from '../lib/buyerDailyCommandPacket
 import { getPacketLineageGraphReport } from '../lib/packetLineageGraph';
 import { getSurfacePreservationCommandLayerReport } from '../lib/surfacePreservationCommandLayer';
 import { getBuyerScorecardAttributionAudit } from '../lib/buyerScorecardAttributionAudit';
+import { getCommandOutcomeTelemetryReport } from '../lib/commandOutcomeTelemetry';
 import {
   BoardDecisionReviewInput,
   BoardSessionInput,
@@ -16,7 +17,14 @@ import { getMeetingEntityLinkReport } from '../lib/meetingEntityLinks';
 import { getExecutionGapReport } from '../lib/executionGapTracker';
 import { getIntentPacketOwnershipReport } from '../lib/intentPacketOwnershipQueue';
 import { getLocalMeetingReport, rebuildLocalMeetingReport } from '../lib/localMeetingReport';
+import { getOperatorEscalationReport } from '../lib/operatorEscalationEngine';
+import { getMorningOperatorPacketReport } from '../lib/morningOperatorPacket';
+import { getOperatorStateRollupReport } from '../lib/operatorStateRollup';
 import { getOpportunityOwnershipReport } from '../lib/opportunityOwnershipQueue';
+import { getOperatorCommandQueueReport } from '../lib/operatorCommandQueue';
+import { updateOperatorCommandQueueState } from '../lib/operatorCommandQueueState';
+import { getOvernightSprintScorecardReport, snapshotOvernightSprintScorecards } from '../lib/overnightSprintScorecard';
+import { getOpportunitySupplyQualityLoopReport } from '../lib/opportunitySupplyQualityLoop';
 import { buildMeetingSessionFromMarkdown } from '../lib/meetingMarkdown';
 import { runMeetingIntelligenceAutomation } from '../lib/meetingIntelligenceAutomation';
 import { buildMeetingOperatorPacket } from '../lib/meetingOperatorPacket';
@@ -464,6 +472,179 @@ router.get('/buyer-daily-command-packets', async (req, res) => {
   }
 });
 
+router.get('/operator-command-queue', async (req, res) => {
+  try {
+    const result = await getOperatorCommandQueueReport({
+      lookbackDays: req.query.lookbackDays ? Number(req.query.lookbackDays) : undefined,
+      limitBuyers: req.query.limitBuyers ? Number(req.query.limitBuyers) : undefined,
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error('Error building operator command queue report:', error);
+    return res.status(500).json({
+      error: 'Failed to build operator command queue report',
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+router.patch('/operator-command-queue/:commandKey', async (req, res) => {
+  try {
+    const status = String(req.body?.status || '').trim();
+    if (!['queued', 'seen', 'in_progress', 'cleared', 'promoted', 'deferred'].includes(status)) {
+      return res.status(400).json({
+        error: 'Invalid status',
+        allowed: ['queued', 'seen', 'in_progress', 'cleared', 'promoted', 'deferred'],
+      });
+    }
+
+    const commandKey = decodeURIComponent(String(req.params.commandKey || ''));
+    const ownerKey = String(req.body?.ownerKey || '').trim();
+    if (!commandKey || !ownerKey) {
+      return res.status(400).json({
+        error: 'Missing required fields',
+        required: ['ownerKey'],
+      });
+    }
+
+    const result = await updateOperatorCommandQueueState({
+      commandKey,
+      ownerKey,
+      ownerLabel: req.body?.ownerLabel ? String(req.body.ownerLabel) : null,
+      status: status as any,
+      noteMd: req.body?.noteMd ? String(req.body.noteMd) : null,
+      metadata: req.body?.metadata && typeof req.body.metadata === 'object' ? req.body.metadata : undefined,
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error('Error updating operator command queue state:', error);
+    return res.status(500).json({
+      error: 'Failed to update operator command queue state',
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+router.get('/overnight-sprint-scorecards', async (_req, res) => {
+  try {
+    const result = await getOvernightSprintScorecardReport();
+    return res.json(result);
+  } catch (error) {
+    console.error('Error building overnight sprint scorecards:', error);
+    return res.status(500).json({
+      error: 'Failed to build overnight sprint scorecards',
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+router.post('/overnight-sprint-scorecards/snapshots', async (req, res) => {
+  try {
+    const result = await snapshotOvernightSprintScorecards({
+      capturedAt: req.body?.capturedAt ? String(req.body.capturedAt) : undefined,
+    });
+    return res.status(201).json(result);
+  } catch (error) {
+    console.error('Error snapshotting overnight sprint scorecards:', error);
+    return res.status(500).json({
+      error: 'Failed to snapshot overnight sprint scorecards',
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+router.get('/command-outcomes', async (req, res) => {
+  try {
+    const result = await getCommandOutcomeTelemetryReport({
+      lookbackDays: req.query.lookbackDays ? Number(req.query.lookbackDays) : undefined,
+      limit: req.query.limit ? Number(req.query.limit) : undefined,
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error('Error building command outcome telemetry report:', error);
+    return res.status(500).json({
+      error: 'Failed to build command outcome telemetry report',
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+router.get('/morning-operator-packet', async (_req, res) => {
+  try {
+    const result = await getMorningOperatorPacketReport();
+    return res.json(result);
+  } catch (error) {
+    console.error('Error building morning operator packet:', error);
+    return res.status(500).json({
+      error: 'Failed to build morning operator packet',
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+router.get('/operator-state-rollup', async (req, res) => {
+  try {
+    const result = await getOperatorStateRollupReport({
+      lookbackHours: req.query.lookbackHours ? Number(req.query.lookbackHours) : undefined,
+      limit: req.query.limit ? Number(req.query.limit) : undefined,
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error('Error building operator state rollup:', error);
+    return res.status(500).json({
+      error: 'Failed to build operator state rollup',
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+router.get('/operator-escalations', async (req, res) => {
+  try {
+    const result = await getOperatorEscalationReport({
+      lookbackDays: req.query.lookbackDays ? Number(req.query.lookbackDays) : undefined,
+      limitBuyers: req.query.limitBuyers ? Number(req.query.limitBuyers) : undefined,
+      limit: req.query.limit ? Number(req.query.limit) : undefined,
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error('Error building operator escalation report:', error);
+    return res.status(500).json({
+      error: 'Failed to build operator escalation report',
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+router.get('/operator-escalation-alerts', async (req, res) => {
+  try {
+    const result = await service.listOperatorEscalationAlerts(
+      req.query.limit ? Number(req.query.limit) : undefined
+    );
+    return res.json(result);
+  } catch (error) {
+    console.error('Error listing operator escalation alerts:', error);
+    return res.status(500).json({
+      error: 'Failed to list operator escalation alerts',
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+router.post('/operator-escalation-alerts/sync', async (req, res) => {
+  try {
+    const result = await service.syncOperatorEscalationNotifications(
+      req.body?.limit ? Number(req.body.limit) : undefined
+    );
+    return res.status(201).json(result);
+  } catch (error) {
+    console.error('Error syncing operator escalation alerts:', error);
+    return res.status(500).json({
+      error: 'Failed to sync operator escalation alerts',
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
 router.get('/packet-lineage-graph', async (req, res) => {
   try {
     const result = await getPacketLineageGraphReport({
@@ -502,6 +683,21 @@ router.get('/upstream/opportunities', async (req, res) => {
     console.error('Error building opportunity ownership report:', error);
     return res.status(500).json({
       error: 'Failed to build opportunity ownership report',
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+router.get('/upstream/opportunity-supply-quality', async (req, res) => {
+  try {
+    const result = await getOpportunitySupplyQualityLoopReport({
+      limit: req.query.limit ? Number(req.query.limit) : undefined,
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error('Error building opportunity supply quality loop report:', error);
+    return res.status(500).json({
+      error: 'Failed to build opportunity supply quality loop report',
       message: error instanceof Error ? error.message : String(error),
     });
   }
@@ -573,12 +769,52 @@ router.get('/owner-alert-notifications', async (req, res) => {
     const result = await service.listOwnerAlertNotifications({
       status: req.query.status ? String(req.query.status) : undefined,
       limit: req.query.limit ? Number(req.query.limit) : undefined,
+      alertType: req.query.alertType
+        ? String(req.query.alertType)
+            .split(',')
+            .map((value) => value.trim())
+            .filter(Boolean)
+        : undefined,
     });
     return res.json(result);
   } catch (error) {
     console.error('Error listing owner alert notifications:', error);
     return res.status(500).json({
       error: 'Failed to list owner alert notifications',
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+router.get('/owner-alert-notifications/control-loop-summary', async (req, res) => {
+  try {
+    const result = await service.getOwnerAlertNotificationControlLoopSummary({
+      lookbackHours: req.query.lookbackHours ? Number(req.query.lookbackHours) : undefined,
+      limit: req.query.limit ? Number(req.query.limit) : undefined,
+      operatorEscalationsOnly: req.query.operatorEscalationsOnly === 'true',
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error('Error building owner alert control loop summary:', error);
+    return res.status(500).json({
+      error: 'Failed to build owner alert control loop summary',
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+router.get('/operator-escalation-alerts/control-loop', async (req, res) => {
+  try {
+    const result = await service.getOwnerAlertNotificationControlLoopSummary({
+      lookbackHours: req.query.lookbackHours ? Number(req.query.lookbackHours) : undefined,
+      limit: req.query.limit ? Number(req.query.limit) : undefined,
+      operatorEscalationsOnly: true,
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error('Error building operator escalation control loop summary:', error);
+    return res.status(500).json({
+      error: 'Failed to build operator escalation control loop summary',
       message: error instanceof Error ? error.message : String(error),
     });
   }

@@ -8,6 +8,9 @@ import path from 'path';
 import { latestSnapshotDir, defaultSnapshotsBase, defaultDaySnapshotsBase, listSnapshotDirs, readManifest } from '../lib/snapshots';
 import { recordQueryMetrics, setLastValidateSummary, getEpsilonOverride, getOverlayDisabledOverride, recordAdminAction, setEpsilonOverride, setOverlayDisabledOverride } from '../lib/health';
 import axios from 'axios';
+import { reviewForcekeyRankings } from '../lib/forcekeyReview';
+import { buildForcekeySelector } from '../lib/forcekeySelector';
+import { getSafariStrategisAuthToken } from '../lib/safariStrategisAuth';
 
 const router = express.Router();
 const execFileAsync = promisify(execFile);
@@ -260,6 +263,99 @@ function buildSampleRow(level: 'adset' | 'campaign' = 'adset') {
     ingestion_run_id: 'run_demo_' + Date.now(),
   };
 }
+
+router.get('/forcekey-review', async (req, res) => {
+  try {
+    const organization = String(req.query.organization || process.env.STRATEGIS_ORGANIZATION || 'Interlincx').trim();
+    const buyer = String(req.query.buyer || '').trim() || null;
+    const startDate = String(req.query.startDate || req.query.start_date || '').trim();
+    const endDate = String(req.query.endDate || req.query.end_date || '').trim();
+    const authToken = String(
+      req.query.authToken ||
+      req.query.auth_token ||
+      req.headers['x-strategis-auth-token'] ||
+      process.env.STRATEGIS_AUTH_TOKEN ||
+      process.env.STRATEGIST_AUTH_TOKEN ||
+      ''
+    ).trim() || (await getSafariStrategisAuthToken()) || undefined;
+    const campaignIds = String(req.query.campaignIds || req.query.campaign_ids || '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const hydrateMissing = String(req.query.hydrateMissing || req.query.hydrate_missing || 'true').toLowerCase();
+    const forceRefresh = String(req.query.forceRefresh || req.query.force_refresh || 'false').toLowerCase();
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({
+        error: 'startDate and endDate are required',
+      });
+    }
+
+    const report = await reviewForcekeyRankings({
+      organization,
+      buyer,
+      campaignIds,
+      startDate,
+      endDate,
+      authToken,
+      hydrateMissing: hydrateMissing === '1' || hydrateMissing === 'true' || hydrateMissing === 'yes',
+      forceRefresh: forceRefresh === '1' || forceRefresh === 'true' || forceRefresh === 'yes',
+    });
+
+    return res.json(report);
+  } catch (err: any) {
+    return res.status(500).json({
+      error: err?.message || 'forcekey review failed',
+    });
+  }
+});
+
+router.get('/forcekey-selector', async (req, res) => {
+  try {
+    const organization = String(req.query.organization || process.env.STRATEGIS_ORGANIZATION || 'Interlincx').trim();
+    const buyer = String(req.query.buyer || '').trim() || null;
+    const category = String(req.query.category || '').trim();
+    const startDate = String(req.query.startDate || req.query.start_date || '').trim();
+    const endDate = String(req.query.endDate || req.query.end_date || '').trim();
+    const intentPacketId = String(req.query.intentPacketId || req.query.intent_packet_id || '').trim() || null;
+    const authToken = String(
+      req.query.authToken ||
+      req.query.auth_token ||
+      req.headers['x-strategis-auth-token'] ||
+      process.env.STRATEGIS_AUTH_TOKEN ||
+      process.env.STRATEGIST_AUTH_TOKEN ||
+      ''
+    ).trim() || (await getSafariStrategisAuthToken()) || undefined;
+    const hydrateMissing = String(req.query.hydrateMissing || req.query.hydrate_missing || 'true').toLowerCase();
+    const forceRefresh = String(req.query.forceRefresh || req.query.force_refresh || 'false').toLowerCase();
+    const limit = Math.max(1, parseInt(String(req.query.limit || '24'), 10) || 24);
+
+    if (!category || !startDate || !endDate) {
+      return res.status(400).json({
+        error: 'category, startDate, and endDate are required',
+      });
+    }
+
+    const response = await buildForcekeySelector({
+      organization,
+      buyer,
+      category,
+      intentPacketId,
+      startDate,
+      endDate,
+      authToken,
+      hydrateMissing: hydrateMissing === '1' || hydrateMissing === 'true' || hydrateMissing === 'yes',
+      forceRefresh: forceRefresh === '1' || forceRefresh === 'true' || forceRefresh === 'yes',
+      limit,
+    });
+
+    return res.json(response);
+  } catch (err: any) {
+    return res.status(500).json({
+      error: err?.message || 'forcekey selector failed',
+    });
+  }
+});
 
 function toCsv(rows: Record<string, any>[]): string {
   if (!rows.length) return '';
@@ -1521,5 +1617,3 @@ router.post('/admin/toggle-overlay', authenticateUser, async (req: any, res) => 
 });
 
 export default router;
-
-

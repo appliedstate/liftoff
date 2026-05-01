@@ -1,4 +1,6 @@
 import { getLocalMeetingReport, rebuildLocalMeetingReport } from './localMeetingReport';
+import { getMorningOperatorPacketReport } from './morningOperatorPacket';
+import { snapshotOvernightSprintScorecards } from './overnightSprintScorecard';
 import { postSlackMessage } from './slackNotifier';
 import { getWatchedSlackSources } from './meetingIntelligenceSources';
 import { listPrivateConversationSources, markPrivateConversationSourceIngested } from './privateConversationRegistry';
@@ -12,10 +14,60 @@ function formatMoney(value: number): string {
 
 function buildSlackText(summary: {
   createdNotifications: number;
+  createdEscalationNotifications?: number;
   totalLiveAlerts: number;
+  totalEscalationAlerts?: number;
   snapshotCount: number;
+  sprintSnapshotCount?: number;
   notifications: any[];
   scorecards: any[];
+  sprintScorecards?: {
+    summary?: {
+      activeSprint?: string;
+      activeCurrentValue?: number | null;
+      activeTrendDirection?: string | null;
+    };
+  } | null;
+  morningPacket?: {
+    delivery?: {
+      controlHeadline?: string;
+      digest?: {
+        actFirst?: string;
+        exceptions?: string;
+        movement?: string;
+        sprint?: string;
+      };
+      checklist?: string[];
+      generatedFor?: {
+        packetDate?: string;
+      };
+    };
+    summary?: {
+      topOwner?: string | null;
+      escalationCount?: number;
+      meaningfulMovementCount?: number;
+    };
+    exceptionLoop?: {
+      summary?: {
+        liveExceptions?: number;
+        unresolved?: number;
+        touchedLive?: number;
+        resolvedTotal?: number;
+      };
+      operatorRead?: string | null;
+    };
+  } | null;
+  alertControlLoop?: {
+    summary?: {
+      liveExceptions?: number;
+      unresolved?: number;
+      acknowledgedButLive?: number;
+      dismissedButLive?: number;
+      touchedLive?: number;
+      resolvedTotal?: number;
+    };
+    operatorRead?: string | null;
+  } | null;
   localReport?: {
     summary: {
       recentMeetingCount: number;
@@ -37,8 +89,13 @@ function buildSlackText(summary: {
 }): string {
   const lines: string[] = [];
   lines.push('*Meeting Intelligence Automation*');
-  lines.push(`Alerts synced: ${summary.createdNotifications} new / ${summary.totalLiveAlerts} live`);
+  lines.push(
+    `Alerts synced: ${summary.createdNotifications} owner + ${Number(summary.createdEscalationNotifications || 0)} escalation / ${summary.totalLiveAlerts} owner + ${Number(summary.totalEscalationAlerts || 0)} escalation live`
+  );
   lines.push(`Scorecards snapshotted: ${summary.snapshotCount}`);
+  if (summary.sprintSnapshotCount != null) {
+    lines.push(`Sprint metrics snapshotted: ${summary.sprintSnapshotCount}`);
+  }
 
   if (summary.notifications.length) {
     lines.push('');
@@ -81,6 +138,50 @@ function buildSlackText(summary: {
   } else if (summary.localReportError) {
     lines.push('');
     lines.push(`*Local operator report:* failed to build (${summary.localReportError})`);
+  }
+
+  if (summary.sprintScorecards?.summary?.activeSprint) {
+    lines.push('');
+    lines.push('*Sprint scorecard*');
+    lines.push(
+      `• ${summary.sprintScorecards.summary.activeSprint}: current=${Math.round(Number(summary.sprintScorecards.summary.activeCurrentValue || 0) * 100)}%, trend=${summary.sprintScorecards.summary.activeTrendDirection || 'n/a'}`
+    );
+  }
+
+  if (summary.morningPacket?.delivery) {
+    const delivery = summary.morningPacket.delivery;
+    lines.push('');
+    lines.push('*Morning control brief*');
+    if (delivery.generatedFor?.packetDate) {
+      lines.push(`• Packet date=${delivery.generatedFor.packetDate}`);
+    }
+    if (delivery.controlHeadline) {
+      lines.push(`• ${delivery.controlHeadline}`);
+    }
+    if (delivery.digest?.actFirst) {
+      lines.push(`• Act first: ${delivery.digest.actFirst}`);
+    }
+    if (delivery.digest?.exceptions) {
+      lines.push(`• Exceptions: ${delivery.digest.exceptions}`);
+    }
+    if (delivery.digest?.movement) {
+      lines.push(`• Movement: ${delivery.digest.movement}`);
+    }
+    if (delivery.checklist?.length) {
+      lines.push(`• Checklist: ${delivery.checklist.slice(0, 3).join(' | ')}`);
+    }
+  }
+
+  if (summary.alertControlLoop?.summary) {
+    const loop = summary.alertControlLoop.summary;
+    lines.push('');
+    lines.push('*Exception control loop*');
+    lines.push(
+      `• Live=${Number(loop.liveExceptions || 0)}, unresolved=${Number(loop.unresolved || 0)}, touched-live=${Number(loop.touchedLive || 0)}, resolved=${Number(loop.resolvedTotal || 0)}`
+    );
+    if (summary.alertControlLoop.operatorRead) {
+      lines.push(`• ${summary.alertControlLoop.operatorRead}`);
+    }
   }
 
   return lines.join('\n');
@@ -173,11 +274,21 @@ export async function runMeetingIntelligenceAutomation(options: {
   }
 
   const syncResult = await service.syncOwnerAlertNotifications(alertLimit);
+  const escalationSyncResult = await service.syncOperatorEscalationNotifications(alertLimit);
   const snapshotResult = await service.snapshotBuyerExecutionScorecards({
     lookbackDays,
     limit: scorecardLimit,
   });
+  const sprintSnapshotResult = await snapshotOvernightSprintScorecards({
+    capturedAt: new Date().toISOString(),
+  });
+  const morningPacket = await getMorningOperatorPacketReport();
   const notifications = await service.listOwnerAlertNotifications({ status: 'queued', limit: alertLimit });
+  const alertControlLoop = await service.getOwnerAlertNotificationControlLoopSummary({
+    lookbackHours: 48,
+    limit: Math.max(alertLimit * 4, 24),
+    operatorEscalationsOnly: true,
+  });
   const scorecards = await service.listBuyerExecutionScorecards({ lookbackDays, limit: scorecardLimit });
 
   let localReport: any = null;
@@ -210,10 +321,16 @@ export async function runMeetingIntelligenceAutomation(options: {
 
   const summary = {
     createdNotifications: Number(syncResult.created || 0),
+    createdEscalationNotifications: Number(escalationSyncResult.created || 0),
     totalLiveAlerts: Number(syncResult.totalAlerts || 0),
+    totalEscalationAlerts: Number(escalationSyncResult.totalAlerts || 0),
     snapshotCount: Number(snapshotResult.count || 0),
+    sprintSnapshotCount: Number(sprintSnapshotResult.count || 0),
     notifications,
+    alertControlLoop,
     scorecards,
+    sprintScorecards: sprintSnapshotResult.report,
+    morningPacket,
     ingestedMeetings,
     localBootstrap,
     localReport,

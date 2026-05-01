@@ -2,6 +2,10 @@ import { createHash, randomUUID } from 'crypto';
 import { PoolClient } from 'pg';
 import { getBuyerScorecardAttributionAudit } from '../lib/buyerScorecardAttributionAudit';
 import { getMeetingEntityLinkReport } from '../lib/meetingEntityLinks';
+import { getOperatorEscalationReport } from '../lib/operatorEscalationEngine';
+import { listOperatorCommandQueueStates, updateOperatorCommandQueueState } from '../lib/operatorCommandQueueState';
+import type { OperatorCommandQueueStatus } from '../lib/operatorCommandQueueState';
+import { getOpportunitySupplyQualityLoopReport } from '../lib/opportunitySupplyQualityLoop';
 import { getPgPool } from '../lib/pg';
 import { CAPACITY_CONSTRAINTS, PLATFORM_ACCOUNTS } from '../lib/platformCapacityRegistry';
 import { allRows, closeConnection, createMonitoringConnection, initMonitoringSchema, sqlString } from '../lib/monitoringDb';
@@ -255,6 +259,11 @@ function jsonb(value: JsonValue | undefined): string {
 
 function jsonbArray(value: JsonValue | undefined): string {
   return JSON.stringify(value ?? []);
+}
+
+function asObject(value: any): Record<string, any> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return value as Record<string, any>;
 }
 
 function isMissingRelationError(error: any): boolean {
@@ -829,12 +838,125 @@ export class MeetingIntelligenceService {
     });
   }
 
-  async listOwnerAlertNotifications(filters: { status?: string; limit?: number } = {}): Promise<any[]> {
+  async listOperatorEscalationAlerts(limit = 12): Promise<any[]> {
+    const report = await getOperatorEscalationReport({
+      lookbackDays: 7,
+      limitBuyers: Math.max(limit, 8),
+      limit,
+    });
+
+    return (report.escalations || []).map((item: any) => ({
+      ownerKey: item.ownerKey,
+      ownerLabel: item.ownerLabel,
+      severity: item.severity,
+      reasons: item.reasons || [],
+      primaryMessage: `${item.ownerLabel} has an active ${item.severity} operator escalation: ${(item.reasons || []).join(' ')}`.trim(),
+      recommendedAction: item.recommendedTouch || item.firstAction || item.blockerToClear || 'Review this lane and set the next concrete action.',
+      triggerState: item.triggerState || null,
+      commandState: item.state || null,
+      hoursStale: item.hoursStale ?? null,
+      commandKey: item.commandKey || null,
+      blockerToClear: item.blockerToClear || null,
+      firstAction: item.firstAction || null,
+      capitalAction: item.capitalAction || null,
+      sequenceIndex: Number(item.sequenceIndex || 0),
+      limitContext: limit,
+    }));
+  }
+
+  async syncOperatorEscalationNotifications(limit = 12): Promise<any> {
+    return withTransaction(async (client) => {
+      const alerts = await this.listOperatorEscalationAlerts(limit);
+      let created = 0;
+      const notifications: any[] = [];
+
+      for (const alert of alerts) {
+        const signature = this.buildOwnerAlertSignature({
+          ...alert,
+          reasons: [...(alert.reasons || []), alert.commandKey || '', alert.triggerState || '', alert.commandState || ''],
+        });
+        const existing = await client.query(
+          `
+            SELECT *
+            FROM owner_alert_notifications
+            WHERE alert_signature = $1
+              AND status IN ('queued', 'acknowledged', 'dismissed')
+              AND created_at >= NOW() - INTERVAL '24 hours'
+            ORDER BY created_at DESC
+            LIMIT 1
+          `,
+          [signature]
+        );
+        if (existing.rows[0]) {
+          notifications.push(existing.rows[0]);
+          continue;
+        }
+
+        const inserted = await client.query(
+          `
+            INSERT INTO owner_alert_notifications (
+              id, owner_key, owner_label, severity, alert_type, alert_signature,
+              title, message, recommended_action, status, metadata
+            ) VALUES (
+              $1, $2, $3, $4, $5, $6,
+              $7, $8, $9, $10, $11::jsonb
+            )
+            RETURNING *
+          `,
+          [
+            randomUUID(),
+            alert.ownerKey,
+            alert.ownerLabel,
+            alert.severity,
+            'operator_escalation_alert',
+            signature,
+            `${alert.ownerLabel} ${alert.severity} operator escalation`,
+            alert.primaryMessage,
+            alert.recommendedAction,
+            'queued',
+            jsonb({
+              reasons: alert.reasons,
+              triggerState: alert.triggerState,
+              commandState: alert.commandState,
+              hoursStale: alert.hoursStale,
+              commandKey: alert.commandKey,
+              blockerToClear: alert.blockerToClear,
+              firstAction: alert.firstAction,
+              capitalAction: alert.capitalAction,
+              sequenceIndex: alert.sequenceIndex,
+            }),
+          ]
+        );
+        created += 1;
+        notifications.push(inserted.rows[0]);
+      }
+
+      return {
+        created,
+        totalAlerts: alerts.length,
+        notifications,
+      };
+    });
+  }
+
+  async listOwnerAlertNotifications(filters: { status?: string; limit?: number; alertType?: string | string[] } = {}): Promise<any[]> {
     const params: any[] = [];
     const where: string[] = [];
     if (filters.status) {
       params.push(filters.status);
       where.push(`status = $${params.length}`);
+    }
+    if (filters.alertType) {
+      const alertTypes = Array.isArray(filters.alertType)
+        ? filters.alertType.map((value) => String(value).trim()).filter(Boolean)
+        : [String(filters.alertType).trim()].filter(Boolean);
+      if (alertTypes.length === 1) {
+        params.push(alertTypes[0]);
+        where.push(`alert_type = $${params.length}`);
+      } else if (alertTypes.length > 1) {
+        params.push(alertTypes);
+        where.push(`alert_type = ANY($${params.length})`);
+      }
     }
     params.push(filters.limit || 30);
 
@@ -851,10 +973,186 @@ export class MeetingIntelligenceService {
     return result.rows;
   }
 
+  async getOwnerAlertNotificationControlLoopSummary(filters: { lookbackHours?: number; limit?: number; operatorEscalationsOnly?: boolean } = {}): Promise<any> {
+    const lookbackHours = Math.max(1, Number(filters.lookbackHours || 48));
+    const limit = Math.max(1, Number(filters.limit || 60));
+    const operatorEscalationsOnly = filters.operatorEscalationsOnly === true;
+    const whereClauses = [`created_at >= NOW() - (($1::text || ' hours')::interval)`];
+    const params: any[] = [lookbackHours];
+    if (operatorEscalationsOnly) {
+      params.push('operator_escalation_alert');
+      whereClauses.push(`alert_type = $${params.length}`);
+    }
+    params.push(limit);
+    const [notificationsResult, liveEscalations, queueStateRows] = await Promise.all([
+      getPgPool().query(
+        `
+          SELECT *
+          FROM owner_alert_notifications
+          WHERE ${whereClauses.join(' AND ')}
+          ORDER BY created_at DESC
+          LIMIT $${params.length}
+        `,
+        params
+      ),
+      this.listOperatorEscalationAlerts(Math.max(limit, 12)),
+      listOperatorCommandQueueStates(),
+    ]);
+
+    const liveEscalationByCommandKey = new Map<string, any>();
+    for (const item of liveEscalations || []) {
+      const commandKey = String(item.commandKey || '').trim();
+      if (commandKey) liveEscalationByCommandKey.set(commandKey, item);
+    }
+
+    const queueStateByCommandKey = new Map<string, any>();
+    for (const item of queueStateRows || []) {
+      const commandKey = String(item.command_key || '').trim();
+      if (commandKey) queueStateByCommandKey.set(commandKey, item);
+    }
+
+    const operatorRowsByCommandKey = new Map<string, any>();
+    const nonOperatorRows: any[] = [];
+    for (const row of notificationsResult.rows) {
+      const metadata = asObject(row.metadata);
+      const commandKey = String(metadata.commandKey || '').trim();
+      if (String(row.alert_type || '') === 'operator_escalation_alert' && commandKey) {
+        const existing = operatorRowsByCommandKey.get(commandKey);
+        if (!existing || new Date(String(row.created_at || 0)).getTime() > new Date(String(existing.created_at || 0)).getTime()) {
+          operatorRowsByCommandKey.set(commandKey, row);
+        }
+      } else {
+        nonOperatorRows.push(row);
+      }
+    }
+
+    const rows = [...operatorRowsByCommandKey.values(), ...nonOperatorRows];
+
+    const items = rows.map((row: any) => {
+      const metadata = asObject(row.metadata);
+      const commandKey = String(metadata.commandKey || '').trim() || null;
+      const liveEscalation = commandKey ? liveEscalationByCommandKey.get(commandKey) || null : null;
+      const queueState = commandKey ? queueStateByCommandKey.get(commandKey) || null : null;
+      const status = String(row.status || 'queued');
+      const alertType = String(row.alert_type || 'owner_execution_alert');
+      let controlState = status;
+      let unresolved = status === 'queued';
+
+      if (alertType === 'operator_escalation_alert') {
+        if (liveEscalation) {
+          unresolved = true;
+          if (status === 'acknowledged') controlState = 'acknowledged_but_live';
+          else if (status === 'dismissed') controlState = 'dismissed_but_live';
+          else controlState = 'unresolved';
+        } else {
+          unresolved = false;
+          if (status === 'acknowledged' || status === 'dismissed') controlState = 'resolved_after_touch';
+          else controlState = 'resolved_without_touch';
+        }
+      } else if (status === 'acknowledged') {
+        controlState = 'acknowledged';
+      } else if (status === 'dismissed') {
+        controlState = 'dismissed';
+      }
+
+      return {
+        id: row.id,
+        ownerKey: row.owner_key,
+        ownerLabel: row.owner_label,
+        severity: row.severity,
+        alertType,
+        status,
+        controlState,
+        unresolved,
+        title: row.title,
+        message: row.message,
+        recommendedAction: row.recommended_action || null,
+        createdAt: row.created_at,
+        acknowledgedAt: row.acknowledged_at,
+        commandKey,
+        queueState: queueState?.status || null,
+        liveEscalationSeverity: liveEscalation?.severity || null,
+        liveEscalationState: liveEscalation?.commandState || liveEscalation?.state || null,
+        metadata,
+      };
+    });
+
+    const summary = {
+      total: items.length,
+      liveExceptions: items.filter((item: any) =>
+        ['unresolved', 'acknowledged_but_live', 'dismissed_but_live'].includes(String(item.controlState || ''))
+      ).length,
+      unresolved: items.filter((item: any) => item.controlState === 'unresolved').length,
+      acknowledgedButLive: items.filter((item: any) => item.controlState === 'acknowledged_but_live').length,
+      dismissedButLive: items.filter((item: any) => item.controlState === 'dismissed_but_live').length,
+      touchedLive: items.filter((item: any) =>
+        ['acknowledged_but_live', 'dismissed_but_live'].includes(String(item.controlState || ''))
+      ).length,
+      resolvedAfterTouch: items.filter((item: any) => item.controlState === 'resolved_after_touch').length,
+      resolvedWithoutTouch: items.filter((item: any) => item.controlState === 'resolved_without_touch').length,
+      resolvedTotal: items.filter((item: any) =>
+        ['resolved_after_touch', 'resolved_without_touch'].includes(String(item.controlState || ''))
+      ).length,
+      queuedNotifications: items.filter((item: any) => item.status === 'queued').length,
+      acknowledgedNotifications: items.filter((item: any) => item.status === 'acknowledged').length,
+      dismissedNotifications: items.filter((item: any) => item.status === 'dismissed').length,
+    };
+
+    let operatorRead =
+      'Alert acknowledgement now has a control-loop lifecycle, so the operator can distinguish live exceptions from notifications that were touched and actually resolved.';
+    if (summary.unresolved > 0 && summary.touchedLive > 0) {
+      operatorRead =
+        `${summary.unresolved} live exceptions are still untouched, while ${summary.touchedLive} touched exceptions remain live and should not be mistaken for resolution.`;
+    } else if (summary.acknowledgedButLive > 0 || summary.dismissedButLive > 0) {
+      operatorRead =
+        `${summary.acknowledgedButLive} acknowledged and ${summary.dismissedButLive} dismissed exceptions are still live, so notification state is no longer being mistaken for resolution.`;
+    } else if (summary.unresolved > 0) {
+      operatorRead =
+        `${summary.unresolved} live exceptions are still unresolved, and the rest of the recent alert stack has either been touched or has fallen out of the active escalation surface.`;
+    }
+
+    return {
+      generatedAt: new Date().toISOString(),
+      window: {
+        lookbackHours,
+        limit,
+        operatorEscalationsOnly,
+      },
+      summary,
+      items,
+      operatorRead,
+    };
+  }
+
   async updateOwnerAlertNotification(
     id: string,
     patch: { status: 'acknowledged' | 'dismissed'; acknowledgedAt?: string | null }
   ): Promise<any | null> {
+    const existing = await getPgPool().query(
+      `
+        SELECT *
+        FROM owner_alert_notifications
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [id]
+    );
+    const current = existing.rows[0] || null;
+    if (!current) return null;
+
+    const bridge = await this.bridgeOwnerAlertNotificationToQueue(current, patch.status);
+    const changedAt = patch.acknowledgedAt || new Date().toISOString();
+    const metadataPatch = {
+      control_loop: {
+        last_status_change: {
+          fromStatus: current.status,
+          toStatus: patch.status,
+          changedAt,
+        },
+        queue_bridge: bridge,
+      },
+    };
+
     const result = await getPgPool().query(
       `
         UPDATE owner_alert_notifications
@@ -863,11 +1161,12 @@ export class MeetingIntelligenceService {
               WHEN $2 = 'acknowledged' THEN COALESCE($3::timestamptz, NOW())
               WHEN $2 = 'dismissed' THEN COALESCE($3::timestamptz, NOW())
               ELSE acknowledged_at
-            END
+            END,
+            metadata = COALESCE(metadata, '{}'::jsonb) || $4::jsonb
         WHERE id = $1
         RETURNING *
       `,
-      [id, patch.status, patch.acknowledgedAt || null]
+      [id, patch.status, patch.acknowledgedAt || null, jsonb(metadataPatch)]
     );
     return result.rows[0] || null;
   }
@@ -902,7 +1201,7 @@ export class MeetingIntelligenceService {
     const lookbackDays = filters.lookbackDays || 7;
     const limit = filters.limit || 20;
     const queues = await this.listOwnerExecutionQueues({ limitOwners: 200 });
-    const [performanceRows, dataQuality, attributionAudit, opportunityMixRows, launchActivityRows, throughputRows, entityLinkReport] = await Promise.all([
+    const [performanceRows, dataQuality, attributionAudit, opportunityMixRows, launchActivityRows, throughputRows, entityLinkReport, opportunitySupplyQuality] = await Promise.all([
       this.queryCanonicalMonitoringBuyerPerformance(lookbackDays),
       this.queryMonitoringDataQuality(lookbackDays),
       this.listBuyerScorecardAttributionAudit({ lookbackDays, limitAmbiguousCampaigns: 12 }),
@@ -910,12 +1209,14 @@ export class MeetingIntelligenceService {
       this.queryBuyerLaunchActivity(lookbackDays),
       this.queryBuyerThroughput(lookbackDays),
       getMeetingEntityLinkReport({ lookbackDays: Math.max(lookbackDays, 30), limitMeetings: 50 }),
+      getOpportunitySupplyQualityLoopReport({ limit: 50 }),
     ]);
     const performanceByOwner = new Map<string, any>();
     const attributionByOwner = new Map<string, any>();
     const opportunityMixByOwner = new Map<string, any>();
     const launchActivityByOwner = new Map<string, any>();
     const throughputByOwner = new Map<string, any>();
+    const opportunityQualityByOwner = new Map<string, any>();
     const linkedAccountsByOwner = new Map<string, Set<string>>();
     const accountRegistryByKey = new Map(PLATFORM_ACCOUNTS.map((account) => [account.accountKey, account]));
     const constraintsByAccountKey = new Map<string, any[]>();
@@ -934,6 +1235,9 @@ export class MeetingIntelligenceService {
     }
     for (const row of throughputRows) {
       throughputByOwner.set(this.normalizeOwnerKey(row.ownerLabel), row);
+    }
+    for (const row of opportunitySupplyQuality.owners || []) {
+      opportunityQualityByOwner.set(this.normalizeOwnerKey(row.ownerLabel), row);
     }
     for (const constraint of CAPACITY_CONSTRAINTS) {
       if (constraint.affectedEntityType !== 'platform_account' || constraint.status === 'resolved') continue;
@@ -959,6 +1263,7 @@ export class MeetingIntelligenceService {
       ...opportunityMixRows.map((row: any) => this.normalizeOwnerKey(row.ownerLabel)),
       ...launchActivityRows.map((row: any) => this.normalizeOwnerKey(row.ownerLabel)),
       ...throughputRows.map((row: any) => this.normalizeOwnerKey(row.ownerLabel)),
+      ...(opportunitySupplyQuality.owners || []).map((row: any) => this.normalizeOwnerKey(row.ownerLabel)),
     ]);
 
     const cards = Array.from(ownerKeys).map((ownerKey) => {
@@ -1036,6 +1341,21 @@ export class MeetingIntelligenceService {
         throughputBand: 'yellow',
         reasons: ['not enough recent movement is grounded yet to classify throughput cleanly'],
       };
+      const opportunityQuality = opportunityQualityByOwner.get(ownerKey) || {
+        ownerLabel: queue?.ownerLabel || perf.ownerLabel,
+        total: 0,
+        pending: 0,
+        launched: 0,
+        rejected: 0,
+        stalePending: 0,
+        avgConfidenceScore: null,
+        pendingPredictedDeltaCm: 0,
+        blueprintCoverage: null,
+        launchRate: null,
+        stalePendingRate: null,
+        qualityBand: 'red',
+        reasons: ['upstream supply quality is not yet grounded for this buyer'],
+      };
       const estimatedExploreLaunches = Math.min(
         Number(opportunityMix.launched || 0),
         Number(launchActivity.recentLaunches || 0)
@@ -1083,13 +1403,18 @@ export class MeetingIntelligenceService {
       );
       const economicBand = this.computeEconomicBand(perf);
       const executionBand = executionScore >= 85 ? 'green' : executionScore >= 65 ? 'yellow' : 'red';
-      const band = this.combineBands(economicBand, executionBand);
+      const opportunityQualityBand =
+        opportunityQuality.total > 0 || opportunityMix.totalOwned > 0
+          ? opportunityQuality.qualityBand
+          : 'green';
+      const band = this.combineBands(economicBand, executionBand, opportunityQualityBand);
       const reasons = this.buildBuyerScorecardReasons({
         performance: perf,
         queue,
         dataQuality,
         attribution,
         opportunityMix,
+        opportunityQuality,
         launchActivity,
         throughput,
         estimatedExploreLaunches,
@@ -1136,6 +1461,20 @@ export class MeetingIntelligenceService {
           topSources: opportunityMix.topSources,
           topCategories: opportunityMix.topCategories,
           reasons: opportunityMix.reasons,
+        },
+        opportunityQuality: {
+          total: opportunityQuality.total,
+          pending: opportunityQuality.pending,
+          launched: opportunityQuality.launched,
+          rejected: opportunityQuality.rejected,
+          stalePending: opportunityQuality.stalePending,
+          avgConfidenceScore: opportunityQuality.avgConfidenceScore,
+          pendingPredictedDeltaCm: opportunityQuality.pendingPredictedDeltaCm,
+          blueprintCoverage: opportunityQuality.blueprintCoverage,
+          launchRate: opportunityQuality.launchRate,
+          stalePendingRate: opportunityQuality.stalePendingRate,
+          qualityBand: opportunityQuality.qualityBand,
+          reasons: opportunityQuality.reasons,
         },
         activity: {
           recentLaunches: launchActivity.recentLaunches,
@@ -1201,6 +1540,7 @@ export class MeetingIntelligenceService {
           performance: perf,
           queue,
           opportunityMix,
+          opportunityQuality,
           launchActivity,
           throughput,
           estimatedExploreLaunches,
@@ -2896,6 +3236,7 @@ export class MeetingIntelligenceService {
     dataQuality: any;
     attribution: any;
     opportunityMix: any;
+    opportunityQuality: any;
     launchActivity: any;
     throughput: any;
     estimatedExploreLaunches: number;
@@ -2909,6 +3250,7 @@ export class MeetingIntelligenceService {
       dataQuality,
       attribution,
       opportunityMix,
+      opportunityQuality,
       launchActivity,
       throughput,
       estimatedExploreLaunches,
@@ -2926,6 +3268,9 @@ export class MeetingIntelligenceService {
     if ((opportunityMix?.stalePending || 0) > 0) reasons.push(`${opportunityMix.stalePending} owned opportunities are stale upstream`);
     if ((opportunityMix?.highConfidencePending || 0) > 0) reasons.push(`${opportunityMix.highConfidencePending} high-confidence opportunities are still waiting upstream`);
     if ((opportunityMix?.totalOwned || 0) === 0) reasons.push('no owned opportunity inventory is attached to this buyer yet');
+    if (opportunityQuality?.qualityBand === 'red' && (opportunityQuality?.total || 0) > 0) reasons.push('upstream opportunity supply quality is weak');
+    if ((opportunityQuality?.stalePendingRate || 0) >= 0.5) reasons.push('too much owned supply is aging before launch or explicit closure');
+    if ((opportunityQuality?.launchRate || 0) <= 0.1 && (opportunityQuality?.pending || 0) > 0) reasons.push('owned opportunity supply is not converting into launches quickly enough');
     if ((launchActivity?.recentLaunches || 0) > 0 && estimatedExploreLaunches === 0) reasons.push('recent launch activity appears entirely exploit-side right now');
     if (estimatedExploitLaunches > estimatedExploreLaunches && (launchActivity?.recentLaunches || 0) > 0) reasons.push('exploit activity is outweighing explore activity in the current window');
     if ((surfaceExposure?.criticalConstraintCount || 0) > 0) reasons.push(`${surfaceExposure.criticalConstraintCount} critical surface constraints are attached to this buyer`);
@@ -2943,6 +3288,7 @@ export class MeetingIntelligenceService {
     performance: any;
     queue: any | null;
     opportunityMix: any;
+    opportunityQuality: any;
     launchActivity: any;
     throughput: any;
     estimatedExploreLaunches: number;
@@ -2955,6 +3301,7 @@ export class MeetingIntelligenceService {
       ownerLabel,
       performance,
       opportunityMix,
+      opportunityQuality,
       launchActivity,
       throughput,
       estimatedExploreLaunches,
@@ -2967,13 +3314,14 @@ export class MeetingIntelligenceService {
     const topSource = opportunityMix?.topSources?.[0]?.label || null;
     const recentLaunches = Number(launchActivity?.recentLaunches || 0);
     const dominantSurface = surfaceExposure?.dominantConstrainedAccount || null;
+    const qualityBand = opportunityQuality?.qualityBand || 'unknown';
     if (band === 'red') {
-      return `${ownerLabel} needs intervention: ${reasons[0]}, with ${topNetwork} carrying the heaviest monitored exposure, ${dominantSurface || 'surface risk still being resolved'} as the key constrained surface, ${recentLaunches} recent launches, ${throughput?.actionsClosedRecently || 0} recently closed actions, and an explore/exploit split of ${estimatedExploreLaunches}/${estimatedExploitLaunches}.`;
+      return `${ownerLabel} needs intervention: ${reasons[0]}, with ${topNetwork} carrying the heaviest monitored exposure, ${dominantSurface || 'surface risk still being resolved'} as the key constrained surface, ${recentLaunches} recent launches, ${throughput?.actionsClosedRecently || 0} recently closed actions, supply quality ${qualityBand}, and an explore/exploit split of ${estimatedExploreLaunches}/${estimatedExploitLaunches}.`;
     }
     if (band === 'yellow') {
-      return `${ownerLabel} is in a watch state: keep ${topNetwork} under review, ${dominantSurface ? `treat ${dominantSurface} as the current constrained surface, and ` : ''}use the owned opportunity mix${topSource ? ` anchored in ${topSource}` : ''}, the recent throughput read of ${throughput?.throughputBand || 'unknown'}, and the explore/exploit split of ${estimatedExploreLaunches}/${estimatedExploitLaunches} to decide whether more allocation would be real growth or just inherited ease.`;
+      return `${ownerLabel} is in a watch state: keep ${topNetwork} under review, ${dominantSurface ? `treat ${dominantSurface} as the current constrained surface, and ` : ''}use the owned opportunity mix${topSource ? ` anchored in ${topSource}` : ''}, supply quality ${qualityBand}, the recent throughput read of ${throughput?.throughputBand || 'unknown'}, and the explore/exploit split of ${estimatedExploreLaunches}/${estimatedExploitLaunches} to decide whether more allocation would be real growth or just inherited ease.`;
     }
-    return `${ownerLabel} is currently healthy enough to observe rather than interrupt, with ${topNetwork} as the strongest monitored network, ${opportunityMix?.totalOwned || 0} owned opportunities in the mix view, ${recentLaunches} recent launches showing current activity, ${throughput?.actionsClosedRecently || 0} recent closures, and ${surfaceExposure?.riskBand || 'low'} current surface pressure.`;
+    return `${ownerLabel} is currently healthy enough to observe rather than interrupt, with ${topNetwork} as the strongest monitored network, ${opportunityMix?.totalOwned || 0} owned opportunities in the mix view, supply quality ${qualityBand}, ${recentLaunches} recent launches showing current activity, ${throughput?.actionsClosedRecently || 0} recent closures, and ${surfaceExposure?.riskBand || 'low'} current surface pressure.`;
   }
 
   private buildExploreExploitReasons(input: {
@@ -3095,6 +3443,86 @@ export class MeetingIntelligenceService {
         ...(alert.reasons || []),
       ].join('|'))
       .digest('hex');
+  }
+
+  private async bridgeOwnerAlertNotificationToQueue(
+    notification: any,
+    targetAlertStatus: 'acknowledged' | 'dismissed'
+  ): Promise<Record<string, any>> {
+    if (String(notification.alert_type || '') !== 'operator_escalation_alert') {
+      return {
+        applied: false,
+        reason: 'Only operator escalation alerts bridge back into operator queue state.',
+      };
+    }
+
+    const metadata = asObject(notification.metadata);
+    const commandKey = String(metadata.commandKey || '').trim();
+    if (!commandKey) {
+      return {
+        applied: false,
+        reason: 'No command key was attached to this operator escalation alert.',
+      };
+    }
+
+    const queueStateRows = await listOperatorCommandQueueStates();
+    const currentQueueState = queueStateRows.find((row) => String(row.command_key || '') === commandKey) || null;
+    const currentStatus = currentQueueState?.status ? String(currentQueueState.status) : null;
+
+    if (currentStatus && ['cleared', 'promoted'].includes(currentStatus)) {
+      return {
+        applied: false,
+        commandKey,
+        fromState: currentStatus,
+        toState: currentStatus,
+        reason: 'The lane is already in a terminal queue state, so the alert acknowledgement does not change queue state.',
+      };
+    }
+
+    let targetQueueStatus: OperatorCommandQueueStatus | null = null;
+    if (targetAlertStatus === 'acknowledged') {
+      if (!currentStatus || currentStatus === 'queued') targetQueueStatus = 'seen';
+    } else if (!currentStatus || ['queued', 'seen'].includes(currentStatus)) {
+      targetQueueStatus = 'deferred';
+    }
+
+    if (!targetQueueStatus) {
+      return {
+        applied: false,
+        commandKey,
+        fromState: currentStatus,
+        toState: currentStatus,
+        reason: 'The lane was already farther along than this alert action, so the queue state was left alone.',
+      };
+    }
+
+    const updated = await updateOperatorCommandQueueState({
+      commandKey,
+      ownerKey: String(notification.owner_key || metadata.ownerKey || 'unassigned'),
+      ownerLabel: String(notification.owner_label || metadata.ownerLabel || ''),
+      status: targetQueueStatus,
+      noteMd:
+        targetAlertStatus === 'acknowledged'
+          ? 'Acknowledged from alert notification; the queue state has been moved to seen.'
+          : 'Dismissed from alert notification; the queue state has been moved to deferred.',
+      metadata: {
+        alertNotificationId: notification.id,
+        alertType: notification.alert_type,
+        alertStatus: targetAlertStatus,
+        bridgedAt: new Date().toISOString(),
+      },
+    });
+
+    return {
+      applied: Boolean(updated),
+      commandKey,
+      fromState: currentStatus,
+      toState: updated?.status || targetQueueStatus,
+      reason:
+        targetAlertStatus === 'acknowledged'
+          ? 'Acknowledged escalation alerts advance untouched lanes to seen so acknowledgement affects the queue.'
+          : 'Dismissed escalation alerts defer untouched lanes so dismissal becomes an explicit queue decision.',
+    };
   }
 
   private async insertExecutionEvent(

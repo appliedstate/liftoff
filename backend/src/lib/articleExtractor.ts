@@ -19,6 +19,11 @@ export type ExtractedArticle = {
   adIndicators: string[];
   // RSOC widget specific extraction
   rsocKeywords: string[]; // Individual keywords/phrases from RSOC widgets
+  rsocKeywordDetails: {
+    source: 'dom_widget' | 'url_forcekeys' | 'both' | 'none';
+    domKeywords: string[];
+    urlParamKeywords: string[];
+  };
   widgetPlacement: {
     firstWidgetPosition: 'above_fold' | 'below_fold' | 'not_found';
     contentBeforeFirstWidget: number; // Word count before first widget
@@ -513,10 +518,19 @@ export async function extractArticleFromUrl(
 
     // Combine DOM-extracted keywords with URL param keywords
     // URL params are more reliable for RSOC widgets in iframes
+    const domRsocKeywords = extracted.rsocKeywords || [];
     const allRsocKeywords = [
       ...urlParamKeywords, // Prioritize URL params (more reliable)
-      ...extracted.rsocKeywords,     // Then DOM-extracted keywords
+      ...domRsocKeywords,     // Then DOM-extracted keywords
     ];
+    const keywordSource =
+      urlParamKeywords.length > 0 && domRsocKeywords.length > 0
+        ? 'both'
+        : urlParamKeywords.length > 0
+          ? 'url_forcekeys'
+          : domRsocKeywords.length > 0
+            ? 'dom_widget'
+            : 'none';
 
     // --- REFERRER PROOF VERIFICATION (Physics/First Principles) ---
     // Rule: IF (Paid/Arbitrage Traffic) THEN (Must Have referrerAdCreative)
@@ -548,6 +562,11 @@ export async function extractArticleFromUrl(
       url,
       ...extracted,
       rsocKeywords: Array.from(new Set(allRsocKeywords)).slice(0, 20), // Dedupe, limit to top 20
+      rsocKeywordDetails: {
+        source: keywordSource,
+        domKeywords: Array.from(new Set(domRsocKeywords)).slice(0, 20),
+        urlParamKeywords: Array.from(new Set(urlParamKeywords)).slice(0, 20),
+      },
       referrerProof: {
         isArbitrage,
         hasReferrerProof,

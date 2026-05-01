@@ -1,4 +1,5 @@
 import { getAllocationExecutionEngineReport } from './allocationExecutionEngine';
+import { evaluateDelegationBoundary } from './delegationReadiness';
 import { getIntentPacketOwnershipReport } from './intentPacketOwnershipQueue';
 import { getOpportunityOwnershipReport } from './opportunityOwnershipQueue';
 import { getSurfacePreservationCommandLayerReport } from './surfacePreservationCommandLayer';
@@ -40,6 +41,13 @@ function prettyLabel(value: string | null | undefined): string {
     .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
+function formatPercentLabel(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) {
+    return 'unknown';
+  }
+  return `${Math.round(value * 100)}%`;
+}
+
 function ownerMatches(ownerName: string | null | undefined, ownerKey: string, ownerLabel: string): boolean {
   const candidate = lower(ownerName);
   return Boolean(candidate) && (candidate === lower(ownerKey) || candidate === lower(ownerLabel));
@@ -47,6 +55,13 @@ function ownerMatches(ownerName: string | null | undefined, ownerKey: string, ow
 
 function buildExploreTasks(card: any, opportunities: any[], packetQueue: any[]): string[] {
   const tasks: string[] = [];
+
+  if (String(card.opportunityQuality?.qualityBand || '') === 'red') {
+    tasks.push('Do not create more upstream inventory until weak supply is either converted, rewritten, or explicitly killed.');
+  }
+  if ((card.opportunityQuality?.blueprintCoverage || 0) < 0.35 && Number(card.opportunityQuality?.total || 0) > 0) {
+    tasks.push('Increase blueprint-backed coverage on owned opportunities so supply becomes actionable rather than speculative.');
+  }
 
   for (const opportunity of opportunities.slice(0, 2)) {
     if (opportunity.queueStatus === 'stalled' || opportunity.ageDays >= 7) {
@@ -148,6 +163,14 @@ function inferTopFocus(card: any, executionItem: any, opportunities: any[], surf
     };
   }
 
+  if (String(card.opportunityQuality?.qualityBand || '') === 'red') {
+    return {
+      focus: 'Repair upstream supply quality before scaling exploration volume',
+      whyNow: `Current supply quality is red with launch rate ${Math.round((Number(card.opportunityQuality?.launchRate || 0)) * 100)}% and stale pending ${Math.round((Number(card.opportunityQuality?.stalePendingRate || 0)) * 100)}%, so more raw opportunity creation would compound noise rather than edge.`,
+      priority: 'high',
+    };
+  }
+
   if ((opportunities[0] && opportunities[0].ageDays >= 7) || Number(card.opportunityMix?.stalePending || 0) > 0) {
     return {
       focus: 'Convert stale opportunity inventory into launched work or explicit kills',
@@ -179,6 +202,83 @@ function inferTopFocus(card: any, executionItem: any, opportunities: any[], surf
   };
 }
 
+function buildCommandOrdering(card: any, executionItem: any, surfaceCommands: any[]): { commandScore: number; orderingReasons: string[] } {
+  let commandScore = 0;
+  const orderingReasons: string[] = [];
+  const priority = String(executionItem?.priority || '');
+  const qualityBand = String(card.opportunityQuality?.qualityBand || '');
+  const throughputBand = String(card.throughput?.throughputBand || '');
+  const activeConstraintCount = Number(card.surfaceExposure?.activeConstraintCount || 0);
+  const overdueActions = Number(card.execution?.overdueActions || 0);
+  const stalePending = Number(card.opportunityMix?.stalePending || 0);
+  const policyAction = String(executionItem?.policyAction || '');
+
+  if (priority === 'critical') {
+    commandScore += 120;
+    orderingReasons.push('Critical allocation posture is active on this buyer lane.');
+  } else if (priority === 'high') {
+    commandScore += 90;
+    orderingReasons.push('High-priority allocation pressure is active on this buyer lane.');
+  } else if (priority === 'medium') {
+    commandScore += 60;
+  } else {
+    commandScore += 35;
+  }
+
+  if (policyAction === 'block_incremental_spend') {
+    commandScore += 20;
+    orderingReasons.push('Incremental spend is blocked, so this lane needs intervention before expansion.');
+  } else if (policyAction === 'hold_current_allocation') {
+    commandScore += 12;
+  } else if (policyAction === 'allow_measured_growth') {
+    commandScore += 8;
+    orderingReasons.push('This lane is close to growth-ready if the remaining blockers are cleared cleanly.');
+  } else if (policyAction === 'allow_scale') {
+    commandScore += 6;
+    orderingReasons.push('This lane is scale-eligible, so the operator can decide whether to press it now.');
+  }
+
+  if (qualityBand === 'red') {
+    commandScore += 25;
+    orderingReasons.push(
+      `Upstream supply quality is red with launch rate ${formatPercentLabel(card.opportunityQuality?.launchRate)} and blueprint coverage ${formatPercentLabel(card.opportunityQuality?.blueprintCoverage)}.`
+    );
+  } else if (qualityBand === 'yellow') {
+    commandScore += 12;
+  }
+
+  if (throughputBand === 'red') {
+    commandScore += 15;
+    orderingReasons.push('Follow-through is weak enough that work is at risk of stalling mid-stream.');
+  }
+
+  if (activeConstraintCount > 0) {
+    commandScore += Math.min(activeConstraintCount * 5, 20);
+    if (priorityRank(String(card.surfaceExposure?.riskBand || 'low')) <= 1) {
+      orderingReasons.push('Constrained execution surfaces are materially affecting buyer output.');
+    }
+  }
+
+  if (overdueActions > 0) {
+    commandScore += Math.min(overdueActions * 3, 15);
+    orderingReasons.push(`${overdueActions} overdue actions are still open on this lane.`);
+  }
+
+  if (stalePending > 0) {
+    commandScore += Math.min(stalePending * 2, 12);
+    orderingReasons.push(`${stalePending} owned opportunities are stale pending instead of converting.`);
+  }
+
+  if (surfaceCommands.some((command: any) => priorityRank(String(command.priority || 'low')) <= 1)) {
+    commandScore += 10;
+  }
+
+  return {
+    commandScore,
+    orderingReasons: uniqueStrings(orderingReasons).slice(0, 4),
+  };
+}
+
 export async function getBuyerDailyCommandPacketReport(options: BuyerDailyCommandPacketOptions = {}): Promise<any> {
   const lookbackDays = options.lookbackDays || 7;
   const limitBuyers = options.limitBuyers || 8;
@@ -206,8 +306,12 @@ export async function getBuyerDailyCommandPacketReport(options: BuyerDailyComman
     );
     const relevantSurfaceCommands = inferRelevantSurfaceCommands(card, surfaceLayer.commands || []);
     const focus = inferTopFocus(card, executionItem, ownedOpportunities, relevantSurfaceCommands);
+    const ordering = buildCommandOrdering(card, executionItem, relevantSurfaceCommands);
     const blockers = uniqueStrings([
       ...(executionItem?.blockers || []),
+      ...(String(card.opportunityQuality?.qualityBand || '') === 'red'
+        ? (card.opportunityQuality?.reasons || [])
+        : []),
       ...(card.surfaceExposure?.riskBand === 'critical' || card.surfaceExposure?.riskBand === 'high'
         ? (card.surfaceExposure?.reasons || [])
         : []),
@@ -225,6 +329,22 @@ export async function getBuyerDailyCommandPacketReport(options: BuyerDailyComman
       todayAsks[0] ? `Today start with ${todayAsks[0].replace(/\.$/, '')}.` : null,
       blockers[0] ? `Do not ignore ${blockers[0].replace(/\.$/, '')}.` : null,
     ].filter(Boolean).join(' ');
+    const delegationBoundary = evaluateDelegationBoundary({
+      priority: focus.priority,
+      capitalPriority: executionItem?.priority || null,
+      triggerState: executionItem?.triggerState || 'watch',
+      policyAction: executionItem?.policyAction || 'observe_only',
+      blockers,
+      blockerToClear: executionItem?.blockers?.[0] || null,
+      supplyQualityBand: String(card.opportunityQuality?.qualityBand || 'unknown'),
+      supplyLaunchRate: card.opportunityQuality?.launchRate ?? null,
+      supplyBlueprintCoverage: card.opportunityQuality?.blueprintCoverage ?? null,
+      activeConstraintCount: Number(card.surfaceExposure?.activeConstraintCount || 0),
+      firstAction: todayAsks[0] || null,
+      todayAskCount: todayAsks.length,
+      operatorState: null,
+      previewOnly: true,
+    });
 
     return {
       packetKey: `${card.ownerKey}:daily-command`,
@@ -234,17 +354,24 @@ export async function getBuyerDailyCommandPacketReport(options: BuyerDailyComman
       posture: executionItem?.posture || card.band || 'observe',
       policyAction: executionItem?.policyAction || 'observe_only',
       triggerState: executionItem?.triggerState || 'watch',
+      commandScore: ordering.commandScore,
       previewOnly: true,
       outboundMessagingEnabled: false,
       topFocus: focus.focus,
       whyNow: focus.whyNow,
+      orderingReasons: ordering.orderingReasons,
+      firstAction: todayAsks[0] || null,
       draftPreview,
+      delegationBoundary,
       metrics: {
         netMargin: Number(card.performance?.netMargin || 0),
         executionScore: Number(card.execution?.executionScore || 0),
         recentLaunches: Number(card.activity?.recentLaunches || 0),
         stalePendingOpportunities: Number(card.opportunityMix?.stalePending || 0),
         activeConstraintCount: Number(card.surfaceExposure?.activeConstraintCount || 0),
+        supplyQualityBand: String(card.opportunityQuality?.qualityBand || 'unknown'),
+        supplyLaunchRate: Number(card.opportunityQuality?.launchRate || 0),
+        supplyBlueprintCoverage: Number(card.opportunityQuality?.blueprintCoverage || 0),
       },
       todayAsks,
       blockers,
@@ -259,6 +386,13 @@ export async function getBuyerDailyCommandPacketReport(options: BuyerDailyComman
         objective: command.objective,
       })),
       upstream: {
+        quality: {
+          qualityBand: String(card.opportunityQuality?.qualityBand || 'unknown'),
+          launchRate: card.opportunityQuality?.launchRate ?? null,
+          stalePendingRate: card.opportunityQuality?.stalePendingRate ?? null,
+          blueprintCoverage: card.opportunityQuality?.blueprintCoverage ?? null,
+          reasons: card.opportunityQuality?.reasons || [],
+        },
         opportunities: ownedOpportunities.slice(0, 3).map((item: any) => ({
           opportunityId: item.opportunityId,
           angle: item.angle,
@@ -278,10 +412,14 @@ export async function getBuyerDailyCommandPacketReport(options: BuyerDailyComman
     };
   }).sort((a: any, b: any) => {
     return (
+      b.commandScore - a.commandScore ||
       priorityRank(String(a.priority)) - priorityRank(String(b.priority)) ||
       lower(a.ownerLabel).localeCompare(lower(b.ownerLabel))
     );
-  });
+  }).map((packet: any, index: number) => ({
+    ...packet,
+    sequenceIndex: index + 1,
+  }));
 
   const summary = {
     totalBuyers: packets.length,
@@ -289,9 +427,14 @@ export async function getBuyerDailyCommandPacketReport(options: BuyerDailyComman
     high: packets.filter((packet: any) => packet.priority === 'high').length,
     previewOnly: true,
     outboundMessagingEnabled: false,
+    readyToDelegate: packets.filter((packet: any) => packet.delegationBoundary?.status === 'ready').length,
+    overrideOnly: packets.filter((packet: any) => packet.delegationBoundary?.status === 'needs_operator_work').length,
+    hardBlockedForDelegation: packets.filter((packet: any) => packet.delegationBoundary?.status === 'blocked').length,
     buyersNeedingExplore: packets.filter((packet: any) => packet.exploreTasks.length > 0).length,
     buyersNeedingFollowThrough: packets.filter((packet: any) => packet.followThroughTasks.length > 0).length,
     buyersWithSurfaceWork: packets.filter((packet: any) => packet.surfaceCommands.length > 0).length,
+    buyersWithWeakSupplyQuality: packets.filter((packet: any) => packet.metrics.supplyQualityBand === 'red').length,
+    actFirstCount: packets.filter((packet: any) => packet.commandScore >= 100).length,
   };
 
   let operatorRead =
@@ -302,6 +445,12 @@ export async function getBuyerDailyCommandPacketReport(options: BuyerDailyComman
   } else if (summary.high > 0) {
     operatorRead =
       `${summary.high} buyer packets are high priority, so the operator can now see which lanes need active steering today before deciding what is worth broadcasting outward.`;
+  } else if (summary.buyersWithWeakSupplyQuality > 0) {
+    operatorRead =
+      `${summary.buyersWithWeakSupplyQuality} buyer packets are now explicitly marked with weak upstream supply quality, so the operator can intervene on quality before pushing for more exploration volume.`;
+  } else if (packets[0]) {
+    operatorRead =
+      `The command packets are now rank-ordered, so the operator can start with ${packets[0].ownerLabel} instead of scanning the whole surface to decide where to intervene first.`;
   }
 
   return {

@@ -9,18 +9,37 @@ const DEFAULT_RPC_DAYS = Number(process.env.STRATEGIS_RPC_DAYS || '3');
 const DEFAULT_DB_SOURCE = process.env.STRATEGIS_DB_SOURCE || 'ch';
 
 export class StrategisApi {
-  private readonly client: StrategistClient;
+  // Lazily initialized because some endpoints (e.g. get-session-rev on staging)
+  // do not require authenticated Strategis API access.
+  private strategistClient: StrategistClient | null = null;
   private readonly organization: string;
   private readonly adSource: string;
   private readonly networkId: string;
   private readonly timezone: string;
+  private readonly authToken: string | undefined;
 
-  constructor(opts: { organization?: string; adSource?: string; networkId?: string; timezone?: string } = {}) {
-    this.client = createStrategisApiClient();
+  constructor(opts: { organization?: string; adSource?: string; networkId?: string; timezone?: string; authToken?: string } = {}) {
     this.organization = opts.organization || DEFAULT_ORG;
     this.adSource = opts.adSource || DEFAULT_AD_SOURCE;
     this.networkId = opts.networkId || DEFAULT_NETWORK_ID;
     this.timezone = opts.timezone || DEFAULT_TIMEZONE;
+    this.authToken = opts.authToken;
+  }
+
+  private getClient(): StrategistClient {
+    if (this.strategistClient) return this.strategistClient;
+    try {
+      this.strategistClient = createStrategisApiClient({ authToken: this.authToken });
+      return this.strategistClient;
+    } catch (err: any) {
+      // Provide a more actionable message while preserving original reason.
+      const reason = err?.message || String(err);
+      throw new Error(
+        `StrategisApi authenticated client unavailable. ` +
+          `Set STRATEGIS_AUTH_TOKEN or STRATEGIST_AUTH_TOKEN, or set IX_ID_EMAIL and IX_ID_PASSWORD (or provide opts.email/opts.password via createStrategisApiClient) ` +
+          `to use non-staging Strategis endpoints. Root cause: ${reason}`
+      );
+    }
   }
 
   private singleDayRange(date: string) {
@@ -41,7 +60,7 @@ export class StrategisApi {
       cached: 1,
       dbSource: DEFAULT_DB_SOURCE,
     };
-    const payload = await this.client.get('/api/facebook/report', params);
+    const payload = await this.getClient().get('/api/facebook/report', params);
     return extractRows(payload);
   }
 
@@ -52,7 +71,7 @@ export class StrategisApi {
       adSource: this.adSource,
       dbSource: DEFAULT_DB_SOURCE,
     };
-    const payload = await this.client.get('/api/facebook/campaigns', params);
+    const payload = await this.getClient().get('/api/facebook/campaigns', params);
     return extractRows(payload);
   }
 
@@ -63,7 +82,7 @@ export class StrategisApi {
       adSource: this.adSource,
       dbSource: DEFAULT_DB_SOURCE,
     };
-    const payload = await this.client.get('/api/facebook/adsets/day', params);
+    const payload = await this.getClient().get('/api/facebook/adsets/day', params);
     return extractRows(payload);
   }
 
@@ -82,7 +101,7 @@ export class StrategisApi {
     if (!includeAllNetworks && this.networkId) {
       params.networkId = this.networkId;
     }
-    const payload = await this.client.get('/api/s1/report/daily-v3', params);
+    const payload = await this.getClient().get('/api/s1/report/daily-v3', params);
     return extractRows(payload);
   }
 
@@ -103,7 +122,7 @@ export class StrategisApi {
     if (networkId) {
       params.networkId = networkId;
     }
-    const payload = await this.client.get('/api/s1/report/daily-v3', params);
+    const payload = await this.getClient().get('/api/s1/report/daily-v3', params);
     return extractRows(payload);
   }
 
@@ -123,7 +142,7 @@ export class StrategisApi {
     if (!includeAllNetworks && this.networkId) {
       params.networkId = this.networkId;
     }
-    const payload = await this.client.get('/api/s1/high-level-report', params);
+    const payload = await this.getClient().get('/api/s1/high-level-report', params);
     return extractRows(payload);
   }
 
@@ -141,7 +160,7 @@ export class StrategisApi {
     if (!includeAllNetworks && this.networkId) {
       params.networkId = this.networkId;
     }
-    const payload = await this.client.get('/api/s1/report/hourly-v3', params);
+    const payload = await this.getClient().get('/api/s1/report/hourly-v3', params);
     return extractRows(payload);
   }
 
@@ -159,7 +178,7 @@ export class StrategisApi {
     if (!includeAllNetworks && this.networkId) {
       params.networkId = this.networkId;
     }
-    const payload = await this.client.get('/api/s1/report/hourly-v3', params);
+    const payload = await this.getClient().get('/api/s1/report/hourly-v3', params);
     return extractRows(payload);
   }
 
@@ -204,8 +223,42 @@ export class StrategisApi {
       timezone: this.timezone,
       dimensions: 'strategisCampaignId',
     };
-    const payload = await this.client.get('/api/s1/rpc-average', params);
+    const payload = await this.getClient().get('/api/s1/rpc-average', params);
     return extractRows(payload);
+  }
+
+  async fetchS1KeywordReport(dateStart: string, dateEnd: string): Promise<any[]> {
+    const params = {
+      dateStart,
+      dateEnd,
+      organization: this.organization,
+      networkId: this.networkId,
+      adSource: this.adSource,
+    };
+    const resp = await this.getClient().request({
+      method: 'GET',
+      url: '/api/s1/report/keyword',
+      params,
+      timeout: 30000,
+    });
+    return extractRows(resp.data);
+  }
+
+  async fetchS1DesktopKeywordReport(dateStart: string, dateEnd: string): Promise<any[]> {
+    const params = {
+      dateStart,
+      dateEnd,
+      organization: this.organization,
+      networkId: this.networkId,
+      adSource: this.adSource,
+    };
+    const resp = await this.getClient().request({
+      method: 'GET',
+      url: '/api/s1/report/rsoc-desktop-keyword',
+      params,
+      timeout: 30000,
+    });
+    return extractRows(resp.data);
   }
 
   async fetchFacebookPixelReport(date: string): Promise<any[]> {
@@ -217,7 +270,7 @@ export class StrategisApi {
       dimensions: 'date-strategisCampaignId',
       timezone: this.timezone,
     };
-    const payload = await this.client.get('/api/facebook-pixel-report', params);
+    const payload = await this.getClient().get('/api/facebook-pixel-report', params);
     return extractRows(payload);
   }
 
@@ -232,7 +285,7 @@ export class StrategisApi {
     if (networkName) {
       params.networkName = networkName;
     }
-    const payload = await this.client.get('/api/strategis-report', params);
+    const payload = await this.getClient().get('/api/strategis-report', params);
     return extractRows(payload);
   }
 
@@ -259,7 +312,7 @@ export class StrategisApi {
       adSource: this.adSource,
       cached: 1,
     };
-    const payload = await this.client.get('/api/taboola/campaign-summary-report', params);
+    const payload = await this.getClient().get('/api/taboola/campaign-summary-report', params);
     return extractRows(payload);
   }
 
@@ -269,7 +322,7 @@ export class StrategisApi {
       organization: this.organization,
       adSource: this.adSource,
     };
-    const payload = await this.client.get('/api/outbrain-hourly-report', params);
+    const payload = await this.getClient().get('/api/outbrain-hourly-report', params);
     return extractRows(payload);
   }
 
@@ -279,7 +332,7 @@ export class StrategisApi {
       organization: this.organization,
       dimensions: 'date-strategisCampaignId',
     };
-    const payload = await this.client.get('/api/newsbreak/report', params);
+    const payload = await this.getClient().get('/api/newsbreak/report', params);
     return extractRows(payload);
   }
 
@@ -291,7 +344,7 @@ export class StrategisApi {
       timezone: this.timezone,
       dimensions: 'date-strategisCampaignId',
     };
-    const payload = await this.client.get('/api/mediago/report', params);
+    const payload = await this.getClient().get('/api/mediago/report', params);
     return extractRows(payload);
   }
 
@@ -303,7 +356,7 @@ export class StrategisApi {
       dimensions: 'date-strategisCampaignId',
       dbSource: 'level', // Zemanta uses level DB
     };
-    const payload = await this.client.get('/api/zemanta/reconciled-report', params);
+    const payload = await this.getClient().get('/api/zemanta/reconciled-report', params);
     return extractRows(payload);
   }
 
@@ -313,7 +366,7 @@ export class StrategisApi {
       organization: this.organization,
       dimensions: 'date-strategisCampaignId',
     };
-    const payload = await this.client.get('/api/smartnews/report', params);
+    const payload = await this.getClient().get('/api/smartnews/report', params);
     return extractRows(payload);
   }
 
@@ -325,7 +378,7 @@ export class StrategisApi {
       timezone: this.timezone,
       dimensions: 'date-strategisCampaignId',
     };
-    const payload = await this.client.get('/api/googleads/report', params);
+    const payload = await this.getClient().get('/api/googleads/report', params);
     return extractRows(payload);
   }
 }

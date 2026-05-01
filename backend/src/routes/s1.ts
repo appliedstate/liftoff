@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { serpVectorSearch } from '../scripts/vector/search_serp';
 import { generateText } from '../lib/openai';
 import { getPgPool } from '../lib/pg';
+import { fetchRolledKeywords } from '../lib/s1Keywords';
 import { planS1Action, S1Plan, S1WorkflowStep, S1WorkflowWiring } from '../agents/s1Planner';
 import {
   toolKeywordTotalRevenue,
@@ -11,6 +12,71 @@ import {
 } from '../services/s1SerpTools';
 
 const router = Router();
+
+router.get('/keywords', async (req, res) => {
+  try {
+    const start = String(req.query.start || req.query.dateStart || '').trim();
+    const end = String(req.query.end || req.query.dateEnd || '').trim();
+    if (!start || !end) {
+      return res.status(400).json({ error: 'start/dateStart and end/dateEnd are required (YYYY-MM-DD)' });
+    }
+
+    const minClicks = req.query.min_clicks ?? req.query.minClicks ?? 1;
+    const rolled = String(req.query.rolled ?? 'true') !== 'false';
+    const useTemplate = String(req.query.use_template ?? req.query.useTemplate ?? 'true') !== 'false';
+    const hydrateMissing = String(req.query.hydrate_missing ?? req.query.hydrateMissing ?? 'true') !== 'false';
+    const forceRefresh = String(req.query.force_refresh ?? req.query.forceRefresh ?? 'false') === 'true';
+    const limit = req.query.limit != null ? Number(req.query.limit) : null;
+    const keywords = await fetchRolledKeywords({
+      start,
+      end,
+      minClicks: Number(minClicks),
+      rolled,
+      useTemplate,
+      hydrateMissing,
+      forceRefresh,
+      network: req.query.network ? String(req.query.network) : null,
+      category: req.query.category ? String(req.query.category) : null,
+      state: req.query.state ? String(req.query.state) : null,
+      limit,
+    });
+
+    const networks = new Set<string>();
+    const categories = new Set<string>();
+    let searches = 0;
+    let clicks = 0;
+    let revenue = 0;
+    let keywordCount = 0;
+
+    for (const row of keywords) {
+      if (row.network_name) networks.add(row.network_name);
+      if (row.normalized_category) categories.add(row.normalized_category);
+      searches += row.searches;
+      clicks += row.clicks;
+      revenue += row.estimated_revenue;
+      keywordCount += 1;
+    }
+
+    return res.status(200).json({
+      range: { start, end },
+      summary: {
+        networks: networks.size,
+        categories: categories.size,
+        keywords: keywordCount,
+        searches,
+        clicks,
+        revenue,
+        rpc: clicks > 0 ? revenue / clicks : 0,
+        rps: searches > 0 ? revenue / searches : 0,
+        ctr: searches > 0 ? clicks / searches : 0,
+      },
+      keywords,
+    });
+  } catch (err: any) {
+    console.error('[s1.keywords] Error:', err?.message || err);
+    return res.status(500).json({ error: err?.message || 'Keyword report failed' });
+  }
+});
 
 // In-memory thread state for the S1 agent. This lets us answer follow-up
 // questions like "why only 9?" using the previous plan + toolResult.
@@ -1433,5 +1499,3 @@ If the active step is a "top_slugs" or "keywords_for_slug" style metrics result 
 });
 
 export default router;
-
-
