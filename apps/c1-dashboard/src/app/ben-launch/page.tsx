@@ -6,7 +6,7 @@ import "@crayonai/react-ui/styles/index.css";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useTheme } from "@/lib/theme";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   buttonGhost,
@@ -18,7 +18,6 @@ import {
   inputClass,
   pillClass,
   sectionLabel,
-  subCardClass,
 } from "@/lib/ui";
 import { Dropdown } from "@/components/Dropdown";
 
@@ -252,6 +251,53 @@ type ForcekeySelectorResponse = {
   notes: string[];
 };
 
+type LaunchAssociationOption = {
+  value: string;
+  label: string;
+  support: {
+    count: number;
+    pct: number;
+  };
+  sampleCampaignIds: string[];
+  sampleCampaignNames: string[];
+  source: "history" | "schema_only" | "history_not_in_schema";
+};
+
+type SiteAssociation = {
+  site: string;
+  campaignCount: number;
+  redirectDomains: LaunchAssociationOption[];
+  adAccounts: LaunchAssociationOption[];
+  pages: LaunchAssociationOption[];
+  networkAccounts: LaunchAssociationOption[];
+};
+
+type BuyerLaunchIntelligence = {
+  scope: {
+    buyer: string;
+    organization: string;
+    historicalCampaigns: number;
+  };
+  generatedAt: string;
+  options: {
+    sites: LaunchAssociationOption[];
+    redirectDomains: LaunchAssociationOption[];
+    adAccounts: LaunchAssociationOption[];
+    pages: LaunchAssociationOption[];
+    networkAccounts: LaunchAssociationOption[];
+  };
+  siteAssociations: SiteAssociation[];
+  notes: string[];
+};
+
+type EntityPickerState =
+  | {
+      kind: "redirect" | "page" | "adAccount";
+      title: string;
+      placeholder: string;
+    }
+  | null;
+
 type FormState = {
   article: string;
   headline: string;
@@ -259,10 +305,17 @@ type FormState = {
   budgetAmount: string;
   bidCap: string;
   creativeNotes: string;
+  creativeMode: "inherit" | "image_url" | "video_url";
+  creativeAssetUrl: string;
+  creativePrimaryText: string;
+  creativeDescription: string;
+  creativeCallToActionType: string;
   selectorVariant: string;
+  rsocSite: string;
   redirectDomain: string;
   pageId: string;
   adAccountId: string;
+  networkAccountId: string;
 };
 
 const emptyForm = (): FormState => ({
@@ -272,16 +325,101 @@ const emptyForm = (): FormState => ({
   budgetAmount: "30",
   bidCap: "",
   creativeNotes: "",
+  creativeMode: "inherit",
+  creativeAssetUrl: "",
+  creativePrimaryText: "",
+  creativeDescription: "",
+  creativeCallToActionType: "LEARN_MORE",
   selectorVariant: "primary",
+  rsocSite: "",
   redirectDomain: "",
   pageId: "",
   adAccountId: "",
+  networkAccountId: "",
 });
 
 const BUYER_OPTIONS = [
   { value: "Ben", label: "Ben Holley" },
   { value: "Cook", label: "Andrew Cook" },
 ] as const;
+
+const CREATIVE_MODE_OPTIONS = [
+  { value: "inherit", label: "Inherit source media" },
+  { value: "image_url", label: "Upload image URL" },
+  { value: "video_url", label: "Upload video URL" },
+] as const;
+
+const CTA_OPTIONS = [
+  { value: "LEARN_MORE", label: "Learn more" },
+  { value: "APPLY_NOW", label: "Apply now" },
+  { value: "SIGN_UP", label: "Sign up" },
+  { value: "GET_QUOTE", label: "Get quote" },
+  { value: "CONTACT_US", label: "Contact us" },
+] as const;
+
+const LAUNCH_MODE_OPTIONS = [
+  {
+    value: "preset",
+    label: "Category preset",
+    description: "Start from learned defaults for the category without inheriting a specific campaign shell.",
+  },
+  {
+    value: "clone",
+    label: "Clone existing campaign",
+    description: "Start from a specific historical campaign shell and make controlled changes.",
+  },
+  {
+    value: "packet",
+    label: "Intent packet",
+    description: "Concept-first, more-from-scratch lane for brand-new packets or categories.",
+  },
+] as const;
+
+const PACKET_VERTICAL_OPTIONS = [
+  { value: "", label: "Auto-detect" },
+  { value: "health", label: "Health" },
+  { value: "finance", label: "Finance" },
+  { value: "vehicles", label: "Vehicles" },
+  { value: "technology", label: "Technology" },
+  { value: "jobs", label: "Jobs" },
+  { value: "general", label: "General" },
+] as const;
+
+type LaunchMode = "preset" | "clone" | "packet";
+
+type IntentPacketFormState = {
+  primaryKeyword: string;
+  supportingKeywords: string;
+  vertical: string;
+  market: string;
+  category: string;
+  rsocSite: string;
+  destinationDomain: string;
+  destination: string;
+  strategisTemplateId: string;
+  adAccountId: string;
+  fbPage: string;
+  creativeMode: "link" | "video_url";
+  publicVideoUrl: string;
+};
+
+function emptyIntentPacketForm(): IntentPacketFormState {
+  return {
+    primaryKeyword: "",
+    supportingKeywords: "",
+    vertical: "",
+    market: "US",
+    category: "",
+    rsocSite: "",
+    destinationDomain: "",
+    destination: "Lincx",
+    strategisTemplateId: "",
+    adAccountId: "",
+    fbPage: "",
+    creativeMode: "link",
+    publicVideoUrl: "",
+  };
+}
 
 function trailingCompleteDayWindow(days: number) {
   const end = new Date();
@@ -305,8 +443,132 @@ function moneyLabel(value: number) {
   return `$${value.toFixed(2)}`;
 }
 
+function supportSuffix(option: LaunchAssociationOption) {
+  return option.support.count > 0 ? ` (${option.support.count})` : "";
+}
+
+function buildDropdownOptions(
+  primary: LaunchAssociationOption[],
+  all: LaunchAssociationOption[],
+  currentValue?: string,
+  currentLabelPrefix?: string
+) {
+  const seen = new Set<string>();
+  const merged: Array<{ value: string; label: string }> = [];
+
+  const push = (value: string, label: string) => {
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+    merged.push({ value, label });
+  };
+
+  for (const option of primary) {
+    push(option.value, `Recommended · ${option.label}${supportSuffix(option)}`);
+  }
+
+  for (const option of all) {
+    push(option.value, option.label + supportSuffix(option));
+  }
+
+  if (currentValue && !seen.has(currentValue)) {
+    push(currentValue, currentLabelPrefix ? `${currentLabelPrefix} · ${currentValue}` : currentValue);
+  }
+
+  return merged;
+}
+
+function optionSourceLabel(option: LaunchAssociationOption) {
+  if (option.source === "history") return option.support.count > 0 ? "history" : "recommended";
+  if (option.source === "history_not_in_schema") return "history only";
+  return "all options";
+}
+
+function currentOptionLabel(
+  value: string,
+  options: LaunchAssociationOption[],
+  fallbackPrefix: string
+) {
+  if (!value) return "";
+  const match = options.find((option) => option.value === value);
+  return match?.label || `${fallbackPrefix} · ${value}`;
+}
+
+function siteOptionLabel(option: LaunchAssociationOption) {
+  if (option.support.count > 0) {
+    return `${option.value} · Ben history · ${option.support.count} campaign${option.support.count === 1 ? "" : "s"}`;
+  }
+  return `${option.value} · Available site`;
+}
+
 function copyJson(value: unknown) {
   return navigator.clipboard.writeText(JSON.stringify(value, null, 2));
+}
+
+function normalizeErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return normalizeErrorMessage(error.message);
+  }
+  if (typeof error !== "string") {
+    return "Setup failed";
+  }
+  try {
+    const parsed = JSON.parse(error) as { message?: unknown; error?: unknown };
+    if (typeof parsed?.message === "string" && parsed.message.trim()) {
+      return parsed.message.trim();
+    }
+    if (typeof parsed?.error === "string" && parsed.error.trim()) {
+      return parsed.error.trim();
+    }
+  } catch {
+    // Fall through to the raw string.
+  }
+  return error;
+}
+
+function setupModeLabel(mode: SetupMode): string {
+  if (mode === "strategis") return "Strategis";
+  if (mode === "facebook") return "Facebook";
+  return "Both";
+}
+
+function facebookDestinationLabel(result: DryRunResponse): string {
+  return result.mode === "facebook"
+    ? "Current fallback destination before Strategis route exists"
+    : "Final Facebook destination after Strategis create";
+}
+
+function facebookDestinationValue(result: DryRunResponse): string {
+  if (result.mode === "facebook") {
+    return result.preview.facebook.destinationUrl || "Missing";
+  }
+  return result.preview.strategis.routeUrlPreview || "Pending Strategis create";
+}
+
+function ButtonSpinner() {
+  return (
+    <svg
+      className="h-4 w-4 animate-spin"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="9"
+        className="opacity-25"
+        stroke="currentColor"
+        strokeWidth="3"
+      />
+      <path
+        d="M21 12a9 9 0 0 0-9-9"
+        className="opacity-90"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
 }
 
 type SetupMode = "strategis" | "facebook" | "both";
@@ -319,11 +581,158 @@ type SetupResponse = {
     adSetNames: string[];
     facebookCampaign?: { id: string; name: string } | null;
     facebookAdSets?: Array<{ id: string; name: string }>;
+    facebookAd?: { id: string; name: string } | null;
+    facebookCreative?: { id: string } | null;
     strategisCampaigns?: Array<{ id: string; name: string; trackingUrl: string }>;
     mappingStored?: boolean;
     mappingId?: string | null;
+    verification?: {
+      strategis?: { ready: boolean; checks: ReadinessCheck[] };
+      facebook?: { ready: boolean; checks: ReadinessCheck[] };
+    };
     warnings?: string[];
   };
+};
+
+type LaunchHistoryItem = {
+  campaign_plan_id: string;
+  request_id: string;
+  brand: string;
+  category: string;
+  campaign_name: string;
+  campaign_plan_status: string;
+  created_at: string;
+  updated_at: string;
+  mapping_id: string | null;
+  mapping_status: string | null;
+  strategis_campaign_ids: string[] | null;
+  facebook_campaign_id: string | null;
+  facebook_ad_set_ids: string[] | null;
+  facebook_creative_ids: string[] | null;
+  facebook_ad_ids: string[] | null;
+  request_status: string | null;
+  request_step: string | null;
+};
+
+type LaunchHistoryResponse = {
+  buyer: string | null;
+  count: number;
+  items: LaunchHistoryItem[];
+  notes?: string[];
+};
+
+type BuyerPortalSessionSummary = {
+  role: "buyer" | "admin";
+  buyer: string | null;
+  allowedBuyers: string[];
+  displayName: string;
+};
+
+type IntentPacketDeployPreviewResponse = {
+  packet: {
+    id: string;
+    packetName: string;
+    vertical: string;
+    market: string;
+    intent: {
+      primaryKeyword: string;
+      supportingKeywords: string[];
+      packetHypothesis: string;
+    };
+    article: {
+      title: string;
+      summary: string;
+      widgetKeywordPhrases: string[];
+    };
+    launchTest: {
+      recommendedDailyBudget: number;
+      checklist: string[];
+    };
+    scores: {
+      launchPriority: number;
+      monetizationPotential: number;
+      evidenceConfidence: number;
+      metaRiskPenalty: number;
+      googleRiskPenalty: number;
+    };
+  };
+  deployMode: string;
+  creativeMode: string;
+  readyForLiveDeploy: boolean;
+  blockers: string[];
+  strategis: {
+    createCampaignRequest: Record<string, any> | null;
+  };
+  facebook: {
+    campaignRequest: Record<string, any> | null;
+    adSetRequest: Record<string, any> | null;
+    creativeRequest: Record<string, any> | null;
+    adRequest: Record<string, any> | null;
+  };
+  shellContract: {
+    notes: string[];
+  };
+};
+
+type ReadinessCheck = {
+  label: string;
+  ok: boolean;
+  detail?: string;
+};
+
+type DryRunResponse = {
+  mode: SetupMode;
+  dryRun: true;
+  runtime: {
+    launchHistoryAvailable: boolean;
+    notes: string[];
+  };
+  readiness: {
+    strategis: { ready: boolean; checks: ReadinessCheck[] };
+    facebook: { ready: boolean; checks: ReadinessCheck[] };
+    both: { ready: boolean; checks: ReadinessCheck[] };
+  };
+  duplicateRisk: {
+    level: "none" | "possible" | "unknown";
+    matches: Array<{
+      requestId: string;
+      campaignName: string;
+      createdAt: string;
+      status: string | null;
+    }>;
+    notes: string[];
+  };
+  operations: Array<{
+    step: string;
+    system: "Strategis" | "Facebook";
+    method: string;
+    target: string;
+    purpose: string;
+  }>;
+  preview: {
+    buyer: string;
+    category: string;
+    strategis: {
+      organization: string;
+      campaignName: string;
+      templateId: string;
+      rsocSite: string;
+      article: string;
+      headline: string;
+      forcekeys: string[];
+      routeUrlPreview: string | null;
+    };
+    facebook: {
+      sourceCampaignId: string | null;
+      sourceFacebookCampaignId: string | null;
+      targetCampaignName: string | null;
+      targetAdName: string | null;
+      destinationUrl: string | null;
+      creativeMode: "inherit" | "image_url" | "video_url";
+      creativeAssetUrl: string | null;
+    };
+  };
+  warnings: string[];
 };
 
 const THREADS_STORAGE_KEY = "ben-launch-threads-v1";
@@ -350,18 +759,43 @@ function newThreadId(): string {
   return `t-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function unavailableArticleCatalog(buyer: string): BenArticleCatalog {
+  return {
+    scope: { buyer, campaignsAnalyzed: 0, articles: 0 },
+    generatedAt: new Date().toISOString(),
+    items: [],
+    notes: ["Article catalog is temporarily unavailable."],
+  };
+}
+
+function unavailableCampaignCatalog(
+  buyer: string,
+  note = "Campaign clone catalog is temporarily unavailable."
+): BenCampaignCatalog {
+  return {
+    scope: { buyer, organization: "Interlincx", campaigns: 0 },
+    generatedAt: new Date().toISOString(),
+    items: [],
+    notes: [note],
+  };
+}
+
+function emptyLaunchHistory(buyer: string): LaunchHistoryResponse {
+  return { buyer, count: 0, items: [] };
+}
+
 export default function BenLaunchWorkbench() {
-  const searchParams = useSearchParams();
   const router = useRouter();
-  const buyerParam = searchParams.get("buyer");
-  const initialBuyer = BUYER_OPTIONS.find((option) => option.value === buyerParam)?.value || "Ben";
-  const [buyer, setBuyer] = useState<string>(initialBuyer);
+  const [buyer, setBuyer] = useState<string>("Ben");
+  const [launchMode, setLaunchMode] = useState<LaunchMode>("preset");
   const [catalog, setCatalog] = useState<BenShellCatalog | null>(null);
   const [articleCatalog, setArticleCatalog] = useState<BenArticleCatalog | null>(null);
   const [campaignCatalog, setCampaignCatalog] = useState<BenCampaignCatalog | null>(null);
+  const [launchIntelligence, setLaunchIntelligence] = useState<BuyerLaunchIntelligence | null>(null);
   const [forcekeySelector, setForcekeySelector] = useState<ForcekeySelectorResponse | null>(null);
   const [forcekeySelectorLoading, setForcekeySelectorLoading] = useState(false);
   const [forcekeySelectorError, setForcekeySelectorError] = useState<string | null>(null);
+  const [launchHistory, setLaunchHistory] = useState<LaunchHistoryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -371,13 +805,22 @@ export default function BenLaunchWorkbench() {
   const [selectedArticleKey, setSelectedArticleKey] = useState<string>("");
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>("");
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [packetForm, setPacketForm] = useState<IntentPacketFormState>(emptyIntentPacketForm);
+  const [packetPreview, setPacketPreview] = useState<IntentPacketDeployPreviewResponse | null>(null);
+  const [packetPreviewLoading, setPacketPreviewLoading] = useState(false);
+  const [packetPreviewError, setPacketPreviewError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showAllForcekeys, setShowAllForcekeys] = useState(false);
-  const [chatOpen, setChatOpen] = useState(true);
+  const [showAllRankedForcekeys, setShowAllRankedForcekeys] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [entityPicker, setEntityPicker] = useState<EntityPickerState>(null);
+  const [entityPickerQuery, setEntityPickerQuery] = useState("");
   const { resolved: resolvedTheme } = useTheme();
   const [forcekeyWindow, setForcekeyWindow] = useState(() => trailingCompleteDayWindow(14));
   const [forcekeyRefreshNonce, setForcekeyRefreshNonce] = useState(0);
+  const [sessionInfo, setSessionInfo] = useState<BuyerPortalSessionSummary | null>(null);
+  const [sessionLoading, setSessionLoading] = useState(true);
 
   const threadListManager = useThreadListManager({
     fetchThreadList: async () => {
@@ -416,7 +859,55 @@ export default function BenLaunchWorkbench() {
   const [runningSetup, setRunningSetup] = useState<SetupMode | null>(null);
   const [setupResult, setSetupResult] = useState<SetupResponse | null>(null);
   const [setupError, setSetupError] = useState<string | null>(null);
+  const [runningDryRun, setRunningDryRun] = useState<SetupMode | null>(null);
+  const [dryRunResult, setDryRunResult] = useState<DryRunResponse | null>(null);
+  const [dryRunError, setDryRunError] = useState<string | null>(null);
+  const [confirmMode, setConfirmMode] = useState<SetupMode | null>(null);
+  const [confirmPreview, setConfirmPreview] = useState<DryRunResponse | null>(null);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
   const buyerLabel = BUYER_OPTIONS.find((option) => option.value === buyer)?.label || buyer;
+  const canSwitchBuyer = sessionInfo?.role === "admin" && (sessionInfo.allowedBuyers?.length || 0) > 1;
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadSession() {
+      try {
+        const response = await fetch("/api/auth/session", { cache: "no-store" });
+        if (!response.ok) throw new Error("Unauthorized");
+        const json = await response.json();
+        if (!isMounted) return;
+        setSessionInfo(json.session);
+      } catch {
+        if (!isMounted) return;
+        router.replace("/login");
+      } finally {
+        if (isMounted) setSessionLoading(false);
+      }
+    }
+
+    loadSession();
+    return () => {
+      isMounted = false;
+    };
+  }, [router]);
+
+  useEffect(() => {
+    if (!sessionInfo || sessionInfo.role === "admin") return;
+    const scopedBuyer = sessionInfo.buyer || "Ben";
+    if (buyer !== scopedBuyer) {
+      setBuyer(scopedBuyer);
+    }
+  }, [buyer, sessionInfo]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const currentParam = new URLSearchParams(window.location.search).get("buyer");
+    const nextBuyer = BUYER_OPTIONS.find((option) => option.value === currentParam)?.value || "Ben";
+    if (buyer !== nextBuyer) {
+      setBuyer(nextBuyer);
+    }
+  }, [buyer]);
 
   useEffect(() => {
     function refreshForcekeyWindow() {
@@ -438,13 +929,16 @@ export default function BenLaunchWorkbench() {
   }, []);
 
   useEffect(() => {
-    const currentParam = searchParams.get("buyer") || "Ben";
+    if (sessionLoading) return;
+    if (typeof window === "undefined") return;
+    const currentParam = new URLSearchParams(window.location.search).get("buyer") || "Ben";
     if (currentParam !== buyer) {
       router.replace(`/ben-launch?buyer=${encodeURIComponent(buyer)}`);
     }
-  }, [buyer, router, searchParams]);
+  }, [buyer, router, sessionLoading]);
 
   useEffect(() => {
+    setLaunchMode("preset");
     setSelectedProfileId("");
     setSelectedArticleKey("");
     setSelectedCampaignId("");
@@ -452,11 +946,27 @@ export default function BenLaunchWorkbench() {
     setArticleQuery("");
     setCampaignQuery("");
     setForm(emptyForm());
+    setPacketForm(emptyIntentPacketForm());
+    setPacketPreview(null);
+    setPacketPreviewError(null);
     setSetupResult(null);
     setSetupError(null);
+    setDryRunResult(null);
+    setDryRunError(null);
+    setConfirmMode(null);
+    setConfirmPreview(null);
+    setConfirmError(null);
     setForcekeySelector(null);
     setForcekeySelectorError(null);
+    setLaunchHistory(null);
+    setLaunchIntelligence(null);
   }, [buyer]);
+
+  useEffect(() => {
+    if (launchMode !== "clone" && selectedCampaignId) {
+      setSelectedCampaignId("");
+    }
+  }, [launchMode, selectedCampaignId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -475,49 +985,83 @@ export default function BenLaunchWorkbench() {
         setCatalog(json);
         const firstProfile = json?.profiles?.[0];
         if (firstProfile) setSelectedProfileId(firstProfile.profileId);
+        setLoading(false);
 
-        try {
-          const articleResponse = await fetch(`/api/ben-article-catalog?buyer=${encodeURIComponent(buyer)}`, {
-            cache: "no-store",
-          });
-          const articleJson = await articleResponse.json();
-          if (articleResponse.ok && isMounted) setArticleCatalog(articleJson);
-        } catch {
-          if (isMounted) {
-            setArticleCatalog({
-              scope: { buyer, campaignsAnalyzed: 0, articles: 0 },
-              generatedAt: new Date().toISOString(),
-              items: [],
-              notes: ["Article catalog is temporarily unavailable."],
+        void (async () => {
+          try {
+            const articleResponse = await fetch(`/api/ben-article-catalog?buyer=${encodeURIComponent(buyer)}`, {
+              cache: "no-store",
             });
+            const articleJson = await articleResponse.json();
+            if (!isMounted) return;
+            if (articleResponse.ok) {
+              setArticleCatalog(articleJson);
+            } else {
+              setArticleCatalog(unavailableArticleCatalog(buyer));
+            }
+          } catch {
+            if (isMounted) setArticleCatalog(unavailableArticleCatalog(buyer));
           }
-        }
+        })();
 
-        try {
-          const campaignResponse = await fetch(`/api/ben-campaign-catalog?buyer=${encodeURIComponent(buyer)}`, {
-            cache: "no-store",
-          });
-          const campaignJson = await campaignResponse.json();
-          if (campaignResponse.ok && isMounted) {
-            setCampaignCatalog(campaignJson);
-          } else if (isMounted) {
-            setCampaignCatalog({
-              scope: { buyer, organization: "Interlincx", campaigns: 0 },
-              generatedAt: new Date().toISOString(),
-              items: [],
-              notes: [campaignJson?.message || campaignJson?.error || "Campaign clone catalog is unavailable."],
+        void (async () => {
+          try {
+            const campaignResponse = await fetch(`/api/ben-campaign-catalog?buyer=${encodeURIComponent(buyer)}`, {
+              cache: "no-store",
             });
+            const campaignJson = await campaignResponse.json();
+            if (!isMounted) return;
+            if (campaignResponse.ok) {
+              setCampaignCatalog(campaignJson);
+            } else {
+              setCampaignCatalog(
+                unavailableCampaignCatalog(
+                  buyer,
+                  campaignJson?.message || campaignJson?.error || "Campaign clone catalog is unavailable."
+                )
+              );
+            }
+          } catch {
+            if (isMounted) setCampaignCatalog(unavailableCampaignCatalog(buyer));
           }
-        } catch {
-          if (isMounted) {
-            setCampaignCatalog({
-              scope: { buyer, organization: "Interlincx", campaigns: 0 },
-              generatedAt: new Date().toISOString(),
-              items: [],
-              notes: ["Campaign clone catalog is temporarily unavailable."],
+        })();
+
+        void (async () => {
+          try {
+            const historyResponse = await fetch(`/api/ben-launch-history?buyer=${encodeURIComponent(buyer)}&limit=8`, {
+              cache: "no-store",
             });
+            const historyJson = await historyResponse.json();
+            if (!isMounted) return;
+            if (historyResponse.ok) {
+              setLaunchHistory(historyJson);
+            } else {
+              setLaunchHistory(emptyLaunchHistory(buyer));
+            }
+          } catch {
+            if (isMounted) setLaunchHistory(emptyLaunchHistory(buyer));
           }
-        }
+        })();
+
+        void (async () => {
+          try {
+            const intelligenceResponse = await fetch(
+              `/api/ben-launch-intelligence?buyer=${encodeURIComponent(buyer)}`,
+              {
+                cache: "no-store",
+              }
+            );
+            const intelligenceJson = await intelligenceResponse.json();
+            if (!isMounted) return;
+            if (intelligenceResponse.ok) {
+              setLaunchIntelligence(intelligenceJson);
+            } else {
+              setLaunchIntelligence(null);
+            }
+          } catch {
+            if (isMounted) setLaunchIntelligence(null);
+          }
+        })();
       } catch (err) {
         if (!isMounted) return;
         setError(err instanceof Error ? err.message : String(err));
@@ -618,6 +1162,21 @@ export default function BenLaunchWorkbench() {
   const selectedCampaign =
     campaignItems.find((campaign) => campaign.campaignId === selectedCampaignId) || null;
 
+  const siteAssociationBySite = useMemo(
+    () => new Map((launchIntelligence?.siteAssociations || []).map((association) => [association.site, association])),
+    [launchIntelligence]
+  );
+
+  const adAccountLabelMap = useMemo(
+    () => new Map((launchIntelligence?.options.adAccounts || []).map((option) => [option.value, option.label])),
+    [launchIntelligence]
+  );
+
+  const pageLabelMap = useMemo(
+    () => new Map((launchIntelligence?.options.pages || []).map((option) => [option.value, option.label])),
+    [launchIntelligence]
+  );
+
   const rankedArticles = useMemo(() => {
     const items = articleCatalog?.items || [];
     if (!selectedProfile) return items;
@@ -647,6 +1206,14 @@ export default function BenLaunchWorkbench() {
     rankedArticles[0] ||
     null;
 
+  const currentArticleValue = form.article.trim();
+  const articleLooksLikeUrl = /^https?:\/\//i.test(currentArticleValue);
+  const currentArticleSlug =
+    selectedArticle?.articleSlug ||
+    currentArticleValue.replace(/^https?:\/\/[^/]+\//i, "").replace(/^\/+|\/+$/g, "").split("/").filter(Boolean).pop() ||
+    "";
+  const hasCurrentArticle = currentArticleValue.length > 0;
+
   useEffect(() => {
     if (!articleQuery.trim()) return;
     if (filteredArticles.length === 0) return;
@@ -672,12 +1239,17 @@ export default function BenLaunchWorkbench() {
         selectedArticle?.headlineHints?.[0] ||
         selectedProfile.strategist.headline?.value ||
         "",
+      rsocSite: current.rsocSite || selectedProfile.strategist.rsocSite?.value || "",
       redirectDomain: current.redirectDomain || selectedProfile.strategist.redirectDomain?.value || "",
       pageId: current.pageId || selectedProfile.facebook.pageId?.value || "",
       adAccountId:
         current.adAccountId ||
         selectedProfile.facebook.adAccountId?.value ||
         selectedProfile.strategist.fbAdAccount?.value ||
+        "",
+      networkAccountId:
+        current.networkAccountId ||
+        selectedProfile.strategist.networkAccountId?.value ||
         "",
     }));
   }, [selectedProfile, selectedArticle]);
@@ -740,14 +1312,14 @@ export default function BenLaunchWorkbench() {
           selectedProfile.strategist.language?.value ||
           catalog?.lockedDefaults.language ||
           "EN - English",
-        rsocSite: selectedProfile.strategist.rsocSite?.value || "",
+        rsocSite: form.rsocSite || selectedProfile.strategist.rsocSite?.value || "",
         subdirectory: selectedProfile.strategist.subdirectory?.value || "",
         templateId: selectedProfile.strategist.templateId?.value || "",
         redirectDomain: form.redirectDomain || selectedProfile.strategist.redirectDomain?.value || "",
         headline: form.headline,
         article: form.article,
         fbAdAccount: form.adAccountId || selectedProfile.strategist.fbAdAccount?.value || "",
-        networkAccountId: selectedProfile.strategist.networkAccountId?.value || "",
+        networkAccountId: form.networkAccountId || selectedProfile.strategist.networkAccountId?.value || "",
         forcekeys: activeForcekeys,
         namingFamilyHint: selectedProfile.strategist.namingFamily?.value || "",
       }
@@ -774,6 +1346,168 @@ export default function BenLaunchWorkbench() {
         }
       : null;
 
+  const currentSiteAssociation =
+    strategistPreview?.rsocSite ? siteAssociationBySite.get(strategistPreview.rsocSite) || null : null;
+
+  useEffect(() => {
+    if (!selectedProfile) return;
+    setPacketForm((current) => ({
+      ...current,
+      category: current.category || selectedProfile.category,
+      rsocSite: current.rsocSite || strategistPreview?.rsocSite || "",
+      destinationDomain: current.destinationDomain || strategistPreview?.rsocSite || "",
+      strategisTemplateId: current.strategisTemplateId || strategistPreview?.templateId || "",
+      adAccountId: current.adAccountId || facebookPreview?.adAccountId || "",
+      fbPage: current.fbPage || facebookPreview?.pageId || "",
+    }));
+  }, [
+    selectedProfile,
+    strategistPreview?.rsocSite,
+    strategistPreview?.templateId,
+    facebookPreview?.adAccountId,
+    facebookPreview?.pageId,
+  ]);
+
+  const siteDropdownOptions = useMemo(
+    () => {
+      const primary = currentSiteAssociation
+        ? [
+            {
+              value: currentSiteAssociation.site,
+              label: siteOptionLabel({
+                value: currentSiteAssociation.site,
+                label: currentSiteAssociation.site,
+                support: { count: currentSiteAssociation.campaignCount, pct: 1 },
+                sampleCampaignIds: [],
+                sampleCampaignNames: [],
+                source: "history",
+              }),
+              support: { count: currentSiteAssociation.campaignCount, pct: 1 },
+              sampleCampaignIds: [],
+              sampleCampaignNames: [],
+              source: "history" as const,
+            },
+          ]
+        : [];
+      const all = (launchIntelligence?.options.sites || []).map((option) => ({
+        ...option,
+        label: siteOptionLabel(option),
+      }));
+      return buildDropdownOptions(primary, all, strategistPreview?.rsocSite, "Current site");
+    },
+    [currentSiteAssociation, launchIntelligence, strategistPreview?.rsocSite]
+  );
+
+  const redirectDropdownOptions = useMemo(
+    () =>
+      buildDropdownOptions(
+        currentSiteAssociation?.redirectDomains || [],
+        launchIntelligence?.options.redirectDomains || [],
+        form.redirectDomain,
+        "Current redirect"
+      ),
+    [currentSiteAssociation, launchIntelligence, form.redirectDomain]
+  );
+
+  const adAccountDropdownOptions = useMemo(
+    () =>
+      buildDropdownOptions(
+        currentSiteAssociation?.adAccounts || [],
+        launchIntelligence?.options.adAccounts || [],
+        form.adAccountId,
+        "Current ad account"
+      ),
+    [currentSiteAssociation, launchIntelligence, form.adAccountId]
+  );
+
+  const pageDropdownOptions = useMemo(
+    () =>
+      buildDropdownOptions(
+        currentSiteAssociation?.pages || [],
+        launchIntelligence?.options.pages || [],
+        form.pageId,
+        "Current page"
+      ),
+    [currentSiteAssociation, launchIntelligence, form.pageId]
+  );
+
+  const allRedirectOptions = useMemo(
+    () => buildDropdownOptions(currentSiteAssociation?.redirectDomains || [], launchIntelligence?.options.redirectDomains || []),
+    [currentSiteAssociation, launchIntelligence]
+  );
+
+  const allPageOptions = useMemo(
+    () => buildDropdownOptions(currentSiteAssociation?.pages || [], launchIntelligence?.options.pages || []),
+    [currentSiteAssociation, launchIntelligence]
+  );
+
+  const allAdAccountOptions = useMemo(
+    () => buildDropdownOptions(currentSiteAssociation?.adAccounts || [], launchIntelligence?.options.adAccounts || []),
+    [currentSiteAssociation, launchIntelligence]
+  );
+
+  const currentRedirectLabel = useMemo(
+    () => currentOptionLabel(form.redirectDomain, launchIntelligence?.options.redirectDomains || [], "Redirect"),
+    [form.redirectDomain, launchIntelligence]
+  );
+
+  const currentPageLabel = useMemo(
+    () => currentOptionLabel(form.pageId, launchIntelligence?.options.pages || [], "Page"),
+    [form.pageId, launchIntelligence]
+  );
+
+  const currentAdAccountLabel = useMemo(
+    () => currentOptionLabel(form.adAccountId, launchIntelligence?.options.adAccounts || [], "Ad account"),
+    [form.adAccountId, launchIntelligence]
+  );
+
+  const entityPickerOptions = useMemo(() => {
+    if (!entityPicker) return [];
+    if (entityPicker.kind === "redirect") return launchIntelligence?.options.redirectDomains || [];
+    if (entityPicker.kind === "page") return launchIntelligence?.options.pages || [];
+    return launchIntelligence?.options.adAccounts || [];
+  }, [entityPicker, launchIntelligence]);
+
+  const filteredEntityPickerOptions = useMemo(() => {
+    const lowered = entityPickerQuery.trim().toLowerCase();
+    if (!lowered) return entityPickerOptions;
+    return entityPickerOptions.filter((option) =>
+      [option.label, option.value, ...option.sampleCampaignNames].some((value) =>
+        String(value || "").toLowerCase().includes(lowered)
+      )
+    );
+  }, [entityPickerOptions, entityPickerQuery]);
+
+  function applySiteSelection(site: string) {
+    const association = siteAssociationBySite.get(site) || null;
+    setForm((current) => ({
+      ...current,
+      rsocSite: site,
+      redirectDomain: association?.redirectDomains[0]?.value || current.redirectDomain,
+      pageId: association?.pages[0]?.value || current.pageId,
+      adAccountId: association?.adAccounts[0]?.value || current.adAccountId,
+      networkAccountId: association?.networkAccounts[0]?.value || current.networkAccountId,
+    }));
+  }
+
+  function openEntityPicker(kind: "redirect" | "page" | "adAccount") {
+    setEntityPickerQuery("");
+    if (kind === "redirect") {
+      setEntityPicker({ kind, title: "All redirect domains", placeholder: "Search redirect domains..." });
+      return;
+    }
+    if (kind === "page") {
+      setEntityPicker({ kind, title: "All Facebook pages", placeholder: "Search page names or IDs..." });
+      return;
+    }
+    setEntityPicker({ kind, title: "All ad accounts", placeholder: "Search ad account names or IDs..." });
+  }
+
+  function closeEntityPicker() {
+    setEntityPicker(null);
+    setEntityPickerQuery("");
+  }
+
   function hydrateFromCampaign(campaign: BenCampaignCatalogItem) {
     const matchingProfile = profiles.find((profile) => profile.category === campaign.category);
     if (matchingProfile) setSelectedProfileId(matchingProfile.profileId);
@@ -798,10 +1532,17 @@ export default function BenLaunchWorkbench() {
       budgetAmount: campaign.facebook.budgetAmount || "30",
       bidCap: campaign.facebook.bidCap || "",
       creativeNotes: `Clone shell from ${campaign.campaignName}. Upload fresh creatives in Facebook.`,
+      creativeMode: "inherit",
+      creativeAssetUrl: "",
+      creativePrimaryText: "",
+      creativeDescription: "",
+      creativeCallToActionType: "LEARN_MORE",
       selectorVariant: campaign.facebook.cloneSelector ? "cloned" : "primary",
+      rsocSite: campaign.rsocSite || "",
       redirectDomain: campaign.redirectDomain || "",
       pageId: campaign.facebook.pageId || campaign.fbPage || "",
       adAccountId: campaign.facebook.adAccountId || campaign.networkAccountId || campaign.fbAdAccount || "",
+      networkAccountId: campaign.networkAccountId || "",
     });
   }
 
@@ -828,13 +1569,33 @@ export default function BenLaunchWorkbench() {
     });
   }
 
+  function replaceForcekeyStack(stack: string[]) {
+    setForm((current) => ({
+      ...current,
+      forcekeys: Array.from({ length: 12 }, (_, index) => stack[index] || ""),
+    }));
+  }
+
+  function moveSelectedForcekey(fromIndex: number, direction: -1 | 1) {
+    const active = form.forcekeys.map((value) => value.trim()).filter(Boolean);
+    const targetIndex = fromIndex + direction;
+    if (fromIndex < 0 || targetIndex < 0 || fromIndex >= active.length || targetIndex >= active.length) return;
+    const next = [...active];
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(targetIndex, 0, moved);
+    replaceForcekeyStack(next);
+  }
+
+  function removeSelectedForcekey(atIndex: number) {
+    const active = form.forcekeys.map((value) => value.trim()).filter(Boolean);
+    if (atIndex < 0 || atIndex >= active.length) return;
+    replaceForcekeyStack(active.filter((_, index) => index !== atIndex));
+  }
+
   function applyTopForcekeys(count: number) {
     if (!forcekeySelector?.options?.length) return;
     const top = forcekeySelector.options.slice(0, count).map((option) => option.forcekey);
-    setForm((current) => {
-      const next = Array.from({ length: 12 }, (_, index) => top[index] || "");
-      return { ...current, forcekeys: next };
-    });
+    replaceForcekeyStack(top);
     setShowAllForcekeys(count > 5);
   }
 
@@ -848,17 +1609,48 @@ export default function BenLaunchWorkbench() {
 
   const canRunFacebookSetup =
     Boolean(selectedProfile) &&
-    Boolean(facebookPreview?.adAccountId) &&
-    Boolean(facebookPreview?.pageId) &&
-    Boolean(facebookPreview?.pixelId) &&
-    Boolean(facebookPreview?.targeting) &&
+    Boolean(selectedCampaign?.campaignId) &&
+    Boolean((facebookPreview?.adAccountId || form.adAccountId).trim()) &&
+    Boolean(form.article.trim()) &&
+    Boolean(form.headline.trim()) &&
+    (form.creativeMode === "inherit" || Boolean(form.creativeAssetUrl.trim())) &&
     activeForcekeys.length >= 1;
 
   const canRunBothSetup = canRunStrategisSetup && canRunFacebookSetup;
 
-  async function handleSetup(mode: SetupMode) {
-    if (!selectedProfile || !strategistPreview) return;
-    if (mode !== "strategis" && !facebookPreview) return;
+  const strategisReadinessChecks: ReadinessCheck[] = [
+    { label: "Preset selected", ok: Boolean(selectedProfile) },
+    { label: "Template selected", ok: Boolean(strategistPreview?.templateId) },
+    { label: "RSOC site selected", ok: Boolean(strategistPreview?.rsocSite) },
+    { label: "Article provided", ok: Boolean(form.article.trim()) },
+    { label: "Headline provided", ok: Boolean(form.headline.trim()) },
+    { label: "At least one forcekey", ok: activeForcekeys.length >= 1 },
+  ];
+
+  const facebookReadinessChecks: ReadinessCheck[] = [
+    { label: "Preset selected", ok: Boolean(selectedProfile) },
+    { label: "Clone source selected", ok: Boolean(selectedCampaign?.campaignId) },
+    {
+      label: "Source Facebook shell found",
+      ok: Boolean(selectedCampaign?.facebook.facebookCampaignId),
+      detail: selectedCampaign?.campaignId && !selectedCampaign?.facebook.facebookCampaignId
+        ? "This source campaign is missing a mapped Facebook campaign id."
+        : undefined,
+    },
+    { label: "Ad account available", ok: Boolean((facebookPreview?.adAccountId || form.adAccountId).trim()) },
+    { label: "Article provided", ok: Boolean(form.article.trim()) },
+    { label: "Headline provided", ok: Boolean(form.headline.trim()) },
+    {
+      label: "Creative asset present for upload mode",
+      ok: form.creativeMode === "inherit" || Boolean(form.creativeAssetUrl.trim()),
+      detail: form.creativeMode === "inherit" ? "Source media will be reused." : undefined,
+    },
+  ];
+
+  const bothReadinessChecks: ReadinessCheck[] = [...strategisReadinessChecks, ...facebookReadinessChecks];
+
+  function buildSetupPayload(mode: SetupMode, dryRun: boolean) {
+    if (!selectedProfile || !strategistPreview) return null;
 
     const setupFacebookPayload = facebookPreview
       ? {
@@ -884,53 +1676,448 @@ export default function BenLaunchWorkbench() {
           targeting: {},
         };
 
+    return {
+      dryRun,
+      mode,
+      buyer,
+      category: selectedProfile.category,
+      article: form.article.trim(),
+      headline: form.headline.trim(),
+      forcekeys: activeForcekeys,
+      strategist: {
+        rsocSite: strategistPreview.rsocSite,
+        subdirectory: strategistPreview.subdirectory,
+        templateId: strategistPreview.templateId,
+        redirectDomain: strategistPreview.redirectDomain,
+        language: strategistPreview.language,
+        networkAccountId: strategistPreview.networkAccountId,
+        namingFamilyHint: strategistPreview.namingFamilyHint,
+      },
+      facebook: {
+        ...setupFacebookPayload,
+        creativeMode: form.creativeMode,
+        creativeAssetUrl: form.creativeAssetUrl.trim(),
+        creativePrimaryText: form.creativePrimaryText.trim(),
+        creativeDescription: form.creativeDescription.trim(),
+        creativeCallToActionType: form.creativeCallToActionType.trim(),
+      },
+      cloneSource: selectedCampaign
+        ? {
+            campaignId: selectedCampaign.campaignId,
+            campaignName: selectedCampaign.campaignName,
+          }
+        : null,
+    };
+  }
+
+  async function runDryRunRequest(mode: SetupMode) {
+    if (!selectedProfile || !strategistPreview) return;
+    if (mode !== "strategis" && !((facebookPreview?.adAccountId || form.adAccountId).trim())) return;
+    const payload = buildSetupPayload(mode, true);
+    if (!payload) return null;
+
     try {
-      setRunningSetup(mode);
-      setSetupError(null);
-      setSetupResult(null);
+      setRunningDryRun(mode);
+      setDryRunError(null);
+      setDryRunResult(null);
       const response = await fetch("/api/ben-setup", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          mode,
-          buyer,
-          category: selectedProfile.category,
-          article: form.article.trim(),
-          headline: form.headline.trim(),
-          forcekeys: activeForcekeys,
-          strategist: {
-            rsocSite: strategistPreview.rsocSite,
-            subdirectory: strategistPreview.subdirectory,
-            templateId: strategistPreview.templateId,
-            redirectDomain: strategistPreview.redirectDomain,
-            language: strategistPreview.language,
-            networkAccountId: strategistPreview.networkAccountId,
-            namingFamilyHint: strategistPreview.namingFamilyHint,
-          },
-          facebook: setupFacebookPayload,
-          cloneSource: selectedCampaign
-            ? {
-                campaignId: selectedCampaign.campaignId,
-                campaignName: selectedCampaign.campaignName,
-              }
-            : null,
-        }),
+        body: JSON.stringify(payload),
+      });
+      const json = await response.json();
+      if (!response.ok) {
+        throw new Error(json?.message || json?.error || "Dry run failed");
+      }
+      setDryRunResult(json);
+      return json as DryRunResponse;
+    } catch (error) {
+      setDryRunError(error instanceof Error ? error.message : String(error));
+      return null;
+    } finally {
+      setRunningDryRun(null);
+    }
+  }
+
+  async function handleDryRun(mode: SetupMode) {
+    await runDryRunRequest(mode);
+  }
+
+  async function handleSetup(mode: SetupMode) {
+    if (!selectedProfile || !strategistPreview) return;
+    if (mode !== "strategis" && !((facebookPreview?.adAccountId || form.adAccountId).trim())) return;
+    setConfirmError(null);
+    const preview = await runDryRunRequest(mode);
+    if (!preview) return;
+    setConfirmPreview(preview);
+    setConfirmMode(mode);
+  }
+
+  async function confirmAndRunSetup() {
+    if (!confirmMode) return;
+    const payload = buildSetupPayload(confirmMode, false);
+    if (!payload) return;
+
+    try {
+      setRunningSetup(confirmMode);
+      setSetupError(null);
+      setSetupResult(null);
+      setConfirmError(null);
+      const response = await fetch("/api/ben-setup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
       });
       const json = await response.json();
       if (!response.ok) {
         throw new Error(json?.message || json?.error || "Setup failed");
       }
       setSetupResult(json);
+      setConfirmMode(null);
+      setConfirmPreview(null);
+      try {
+        const historyResponse = await fetch(`/api/ben-launch-history?buyer=${encodeURIComponent(buyer)}&limit=8`, {
+          cache: "no-store",
+        });
+        const historyJson = await historyResponse.json();
+        if (historyResponse.ok) setLaunchHistory(historyJson);
+      } catch {
+        // Ignore launch history refresh failures; setup itself already succeeded.
+      }
     } catch (error) {
-      setSetupError(error instanceof Error ? error.message : String(error));
+      const message = normalizeErrorMessage(error);
+      setSetupError(message);
+      setConfirmError(message);
     } finally {
       setRunningSetup(null);
     }
   }
 
-  if (loading) {
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.replace("/login");
+  }
+
+  async function handleIntentPacketPreview() {
+    try {
+      setPacketPreviewLoading(true);
+      setPacketPreviewError(null);
+      setPacketPreview(null);
+
+      const supportingKeywords = packetForm.supportingKeywords
+        .split(/[\n,]/)
+        .map((value) => value.trim())
+        .filter(Boolean);
+
+      const response = await fetch("/api/intent-packets/deploy-preview", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          packet: {
+            primaryKeyword: packetForm.primaryKeyword.trim(),
+            supportingKeywords,
+            vertical: packetForm.vertical || undefined,
+            market: packetForm.market.trim() || "US",
+            buyer,
+            rsocSite: packetForm.rsocSite.trim() || undefined,
+            destinationDomain: packetForm.destinationDomain.trim() || undefined,
+          },
+          deployConfig: {
+            organization: "Interlincx",
+            buyer,
+            category: packetForm.category.trim(),
+            adAccountId: packetForm.adAccountId.trim(),
+            domain: packetForm.destinationDomain.trim(),
+            destination: packetForm.destination.trim() || "Lincx",
+            strategisTemplateId: packetForm.strategisTemplateId.trim(),
+            fbPage: packetForm.fbPage.trim() || undefined,
+            rsocSite: packetForm.rsocSite.trim() || undefined,
+            creativeMode: packetForm.creativeMode,
+            publicVideoUrl: packetForm.publicVideoUrl.trim() || undefined,
+          },
+        }),
+      });
+      const json = await response.json();
+      if (!response.ok) {
+        throw new Error(json?.message || json?.error || "Intent packet preview failed");
+      }
+      setPacketPreview(json);
+    } catch (error) {
+      setPacketPreviewError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setPacketPreviewLoading(false);
+    }
+  }
+
+  const packetModePanel = (
+    <div className="space-y-6">
+      <div className="rounded-[22px] border border-[#0071e3]/20 bg-[#0071e3]/[0.06] px-5 py-4 text-sm text-neutral-800 dark:border-[#0a84ff]/30 dark:bg-[#0a84ff]/[0.10] dark:text-neutral-100">
+        <div className="font-semibold text-neutral-900 dark:text-neutral-50">Intent packet lane</div>
+        <div className="mt-2 text-sm text-neutral-700 dark:text-neutral-300">
+          This is the more-from-scratch lane. It should be used when the buyer is starting from a concept, packet,
+          or brand-new category shape rather than inheriting a specific historical shell.
+        </div>
+        <div className="mt-2 text-xs text-neutral-600 dark:text-neutral-400">
+          The current implementation is preview-first: it builds the Strategis/Facebook shell plan and blockers
+          without cluttering the clone workflow or triggering live setup from this page yet.
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <label className="block">
+          <div className={fieldLabel}>Primary keyword</div>
+          <input
+            value={packetForm.primaryKeyword}
+            onChange={(e) => setPacketForm((current) => ({ ...current, primaryKeyword: e.target.value }))}
+            placeholder="online school that gives you $ and laptops"
+            className={inputClass}
+          />
+        </label>
+        <label className="block">
+          <div className={fieldLabel}>Supporting keywords</div>
+          <textarea
+            value={packetForm.supportingKeywords}
+            onChange={(e) => setPacketForm((current) => ({ ...current, supportingKeywords: e.target.value }))}
+            placeholder="One per line or comma-separated"
+            className={`${inputClass} min-h-[88px]`}
+          />
+        </label>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <label className="block">
+          <div className={fieldLabel}>Vertical</div>
+          <Dropdown
+            value={packetForm.vertical}
+            onChange={(value) => setPacketForm((current) => ({ ...current, vertical: value }))}
+            options={PACKET_VERTICAL_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+          />
+        </label>
+        <label className="block">
+          <div className={fieldLabel}>Market</div>
+          <input
+            value={packetForm.market}
+            onChange={(e) => setPacketForm((current) => ({ ...current, market: e.target.value }))}
+            placeholder="US"
+            className={inputClass}
+          />
+        </label>
+        <label className="block xl:col-span-2">
+          <div className={fieldLabel}>Launch category</div>
+          <input
+            value={packetForm.category}
+            onChange={(e) => setPacketForm((current) => ({ ...current, category: e.target.value }))}
+            placeholder="Education > Training > High School Diploma"
+            className={inputClass}
+          />
+        </label>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <label className="block">
+          <div className={fieldLabel}>RSOC site</div>
+          <Dropdown
+            value={packetForm.rsocSite}
+            onChange={(value) => setPacketForm((current) => ({ ...current, rsocSite: value, destinationDomain: current.destinationDomain || value }))}
+            options={siteDropdownOptions}
+            placeholder="Select site"
+          />
+        </label>
+        <label className="block">
+          <div className={fieldLabel}>Destination domain</div>
+          <input
+            value={packetForm.destinationDomain}
+            onChange={(e) => setPacketForm((current) => ({ ...current, destinationDomain: e.target.value }))}
+            placeholder="simpliworld.com"
+            className={inputClass}
+          />
+        </label>
+        <label className="block">
+          <div className={fieldLabel}>Strategis destination</div>
+          <input
+            value={packetForm.destination}
+            onChange={(e) => setPacketForm((current) => ({ ...current, destination: e.target.value }))}
+            placeholder="Lincx"
+            className={inputClass}
+          />
+        </label>
+        <label className="block">
+          <div className={fieldLabel}>Template ID</div>
+          <input
+            value={packetForm.strategisTemplateId}
+            onChange={(e) => setPacketForm((current) => ({ ...current, strategisTemplateId: e.target.value }))}
+            placeholder="cm1kw4pev00mb0bs6h4x9eu6k"
+            className={inputClass}
+          />
+        </label>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <label className="block xl:col-span-2">
+          <div className={fieldLabel}>Facebook page</div>
+          <Dropdown
+            value={packetForm.fbPage}
+            onChange={(value) => setPacketForm((current) => ({ ...current, fbPage: value }))}
+            options={pageDropdownOptions}
+            placeholder="Select page"
+          />
+        </label>
+        <label className="block xl:col-span-2">
+          <div className={fieldLabel}>Ad account</div>
+          <Dropdown
+            value={packetForm.adAccountId}
+            onChange={(value) => setPacketForm((current) => ({ ...current, adAccountId: value }))}
+            options={adAccountDropdownOptions}
+            placeholder="Select ad account"
+          />
+        </label>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <label className="block">
+          <div className={fieldLabel}>Creative mode</div>
+          <Dropdown
+            value={packetForm.creativeMode}
+            onChange={(value) =>
+              setPacketForm((current) => ({
+                ...current,
+                creativeMode: value as IntentPacketFormState["creativeMode"],
+              }))
+            }
+            options={[
+              { value: "link", label: "Link creative" },
+              { value: "video_url", label: "Video creative" },
+            ]}
+          />
+        </label>
+        <label className="block">
+          <div className={fieldLabel}>Public video URL</div>
+          <input
+            value={packetForm.publicVideoUrl}
+            onChange={(e) => setPacketForm((current) => ({ ...current, publicVideoUrl: e.target.value }))}
+            placeholder="Only needed for video creative preview"
+            className={inputClass}
+          />
+        </label>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => void handleIntentPacketPreview()}
+          disabled={packetPreviewLoading}
+          className={buttonPrimary}
+        >
+          <span className="inline-flex items-center gap-2">
+            {packetPreviewLoading ? <ButtonSpinner /> : null}
+            <span>{packetPreviewLoading ? "Previewing…" : "Preview intent packet launch"}</span>
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setPacketForm(emptyIntentPacketForm());
+            setPacketPreview(null);
+            setPacketPreviewError(null);
+          }}
+          className={buttonOutline}
+        >
+          Clear packet form
+        </button>
+      </div>
+
+      {packetPreviewError ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-200">
+          {packetPreviewError}
+        </div>
+      ) : null}
+
+      {packetPreview ? (
+        <div className="space-y-4">
+          <div className="rounded-xl bg-neutral-100/80 dark:bg-neutral-800/60 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-medium uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
+                  Packet preview
+                </div>
+                <div className="mt-1 text-lg font-semibold text-neutral-900 dark:text-neutral-50">
+                  {packetPreview.packet.packetName}
+                </div>
+              </div>
+              <span className={packetPreview.readyForLiveDeploy ? pillClass : "inline-flex items-center rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-200"}>
+                {packetPreview.readyForLiveDeploy ? "Preview ready" : "Blocked"}
+              </span>
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-3 text-sm">
+              <div className="rounded-lg bg-white/80 dark:bg-neutral-900/70 px-3 py-2">
+                <div className="text-[11px] uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Primary keyword</div>
+                <div className="mt-1 font-semibold text-neutral-900 dark:text-neutral-50">{packetPreview.packet.intent.primaryKeyword}</div>
+              </div>
+              <div className="rounded-lg bg-white/80 dark:bg-neutral-900/70 px-3 py-2">
+                <div className="text-[11px] uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Launch priority</div>
+                <div className="mt-1 font-semibold text-neutral-900 dark:text-neutral-50">{packetPreview.packet.scores.launchPriority}</div>
+              </div>
+              <div className="rounded-lg bg-white/80 dark:bg-neutral-900/70 px-3 py-2">
+                <div className="text-[11px] uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Recommended daily budget</div>
+                <div className="mt-1 font-semibold text-neutral-900 dark:text-neutral-50">${packetPreview.packet.launchTest.recommendedDailyBudget}</div>
+              </div>
+            </div>
+          </div>
+
+          {packetPreview.blockers.length ? (
+            <div className="rounded-xl bg-amber-100/70 px-4 py-3 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              <div className="font-semibold">Preview blockers</div>
+              <ul className="mt-2 space-y-1">
+                {packetPreview.blockers.map((blocker) => (
+                  <li key={blocker}>• {blocker}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-xl bg-neutral-100/80 dark:bg-neutral-800/60 px-4 py-3 text-sm">
+              <div className="font-semibold text-neutral-900 dark:text-neutral-50">Strategis shell plan</div>
+              <div className="mt-2 space-y-1 text-xs text-neutral-600 dark:text-neutral-400">
+                <div>Category: {packetForm.category || "Missing"}</div>
+                <div>Site: {packetForm.rsocSite || "Missing"}</div>
+                <div>Template: {packetForm.strategisTemplateId || "Missing"}</div>
+                <div>Destination: {packetForm.destination || "Missing"}</div>
+                <div>Article: {packetPreview.packet.article.title}</div>
+              </div>
+            </div>
+            <div className="rounded-xl bg-neutral-100/80 dark:bg-neutral-800/60 px-4 py-3 text-sm">
+              <div className="font-semibold text-neutral-900 dark:text-neutral-50">Facebook shell plan</div>
+              <div className="mt-2 space-y-1 text-xs text-neutral-600 dark:text-neutral-400">
+                <div>Ad account: {packetForm.adAccountId || "Missing"}</div>
+                <div>Page: {packetForm.fbPage || "Missing"}</div>
+                <div>Creative mode: {packetPreview.creativeMode}</div>
+                <div>Campaign create: {packetPreview.facebook.campaignRequest ? "yes" : "no"}</div>
+                <div>Ad set create: {packetPreview.facebook.adSetRequest ? "yes" : "no"}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl bg-neutral-100/80 dark:bg-neutral-800/60 px-4 py-3 text-sm">
+            <div className="font-semibold text-neutral-900 dark:text-neutral-50">Why this lane is separate</div>
+            <ul className="mt-2 space-y-1 text-xs text-neutral-600 dark:text-neutral-400">
+              {packetPreview.shellContract.notes.map((note) => (
+                <li key={note}>• {note}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+
+  if (loading || sessionLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white dark:bg-neutral-950 text-neutral-600 dark:text-neutral-400">
         <div className={`${cardClass} px-6 py-4 text-sm`}>Loading {buyerLabel} preset catalog…</div>
@@ -972,27 +2159,45 @@ export default function BenLaunchWorkbench() {
                 {catalog.manualFields.length} manual fields · {readyCount}/5 ready
               </p>
             </div>
-            <div className="flex items-end gap-3">
-              <div className="flex-1 min-w-0">
-                <label className={fieldLabel}>Buyer profile</label>
-                <Dropdown
-                  value={buyer}
-                  onChange={(nextBuyer) => setBuyer(nextBuyer)}
-                  options={BUYER_OPTIONS.map((option) => ({
-                    value: option.value,
-                    label: option.label,
-                  }))}
-                />
+            <div className="flex min-w-0 flex-col items-stretch gap-3">
+              <div className="min-w-0">
+                <label className={fieldLabel}>{canSwitchBuyer ? "Buyer profile" : "Signed in as"}</label>
+                {canSwitchBuyer ? (
+                  <Dropdown
+                    value={buyer}
+                    onChange={(nextBuyer) => setBuyer(nextBuyer)}
+                    options={BUYER_OPTIONS.filter((option) =>
+                      sessionInfo?.allowedBuyers?.includes(option.value)
+                    ).map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                    }))}
+                  />
+                ) : (
+                  <div className="min-h-[76px] rounded-lg bg-neutral-100 px-4 py-3 text-sm text-neutral-800 dark:bg-neutral-800 dark:text-neutral-100">
+                    <div className="text-base font-medium leading-tight">
+                      {sessionInfo?.displayName || buyerLabel}
+                    </div>
+                    <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                      {buyerLabel} buyer scope
+                    </div>
+                  </div>
+                )}
               </div>
-              <ThemeToggle />
-              <button
-                type="button"
-                onClick={() => setChatOpen((v) => !v)}
-                className={buttonGhost}
-                aria-label="Toggle assistant"
-              >
-                {chatOpen ? "Hide assistant" : "Show assistant"}
-              </button>
+              <div className="flex flex-wrap items-center gap-3">
+                <ThemeToggle />
+                <button type="button" onClick={() => void handleLogout()} className={buttonGhost}>
+                  Log out
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChatOpen((v) => !v)}
+                  className={buttonGhost}
+                  aria-label="Toggle assistant"
+                >
+                  {chatOpen ? "Hide assistant" : "Show assistant"}
+                </button>
+              </div>
             </div>
           </header>
 
@@ -1017,8 +2222,35 @@ export default function BenLaunchWorkbench() {
                 <div className="space-y-8">
                   {/* Preset row */}
                   <div>
+                    <div className={sectionLabel}>Start mode</div>
+                    <div className="mt-3 grid gap-3 lg:grid-cols-3">
+                      {LAUNCH_MODE_OPTIONS.map((option) => {
+                        const active = launchMode === option.value;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => setLaunchMode(option.value)}
+                            className={`rounded-[20px] border px-4 py-4 text-left transition ${
+                              active
+                                ? "border-[#0071e3]/30 bg-[#0071e3]/[0.08] dark:border-[#0a84ff]/40 dark:bg-[#0a84ff]/[0.12]"
+                                : "border-black/[0.08] bg-white hover:bg-black/[0.02] dark:border-white/[0.10] dark:bg-neutral-900/60 dark:hover:bg-white/[0.04]"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="font-semibold text-neutral-900 dark:text-neutral-50">{option.label}</div>
+                              {active ? <span className={pillClass}>Active</span> : null}
+                            </div>
+                            <div className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
+                              {option.description}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
                     <div className={sectionLabel}>Launch preset</div>
-                    <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                    <div className={`mt-3 grid gap-4 ${launchMode === "clone" ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" : "lg:grid-cols-1"}`}>
                       <div>
                         <label className={fieldLabel}>Category preset</label>
                         <input
@@ -1027,6 +2259,11 @@ export default function BenLaunchWorkbench() {
                           placeholder="Search categories…"
                           className={`${inputClass} mb-2`}
                         />
+                        <div className="mb-2 text-xs text-neutral-500 dark:text-neutral-400">
+                          {query.trim()
+                            ? `${filteredProfiles.length} matching preset${filteredProfiles.length === 1 ? "" : "s"} shown below for “${query.trim()}”.`
+                            : `${catalog.profiles.length} category preset${catalog.profiles.length === 1 ? "" : "s"} available.`}
+                        </div>
                         <Dropdown
                           value={selectedProfile.profileId}
                           onChange={(v) => {
@@ -1039,9 +2276,12 @@ export default function BenLaunchWorkbench() {
                             label: p.category,
                           }))}
                           placeholder="Select preset…"
+                          openSignal={query}
+                          emptyLabel={`No category presets match “${query.trim()}”.`}
                         />
                       </div>
 
+                      {launchMode === "clone" ? (
                       <div>
                         <label className={fieldLabel}>Clone existing campaign</label>
                         <input
@@ -1050,6 +2290,11 @@ export default function BenLaunchWorkbench() {
                           placeholder={`Search ${buyerLabel} campaigns…`}
                           className={`${inputClass} mb-2`}
                         />
+                        <div className="mb-2 text-xs text-neutral-500 dark:text-neutral-400">
+                          {campaignQuery.trim()
+                            ? `${filteredCampaigns.length} matching campaign${filteredCampaigns.length === 1 ? "" : "s"} shown below for “${campaignQuery.trim()}”.`
+                            : `${campaignItems.length} ${buyerLabel} campaign${campaignItems.length === 1 ? "" : "s"} available for cloning.`}
+                        </div>
                         <Dropdown
                           value={selectedCampaignId}
                           onChange={(v) => {
@@ -1068,6 +2313,8 @@ export default function BenLaunchWorkbench() {
                               label: c.campaignName,
                             })),
                           ]}
+                          openSignal={campaignQuery}
+                          emptyLabel={`No ${buyerLabel} campaigns match “${campaignQuery.trim()}”.`}
                         />
                         <div className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">
                           {campaignItems.length > 0
@@ -1075,6 +2322,7 @@ export default function BenLaunchWorkbench() {
                             : campaignCatalog?.notes?.[0] || "Campaign clone catalog unavailable"}
                         </div>
                       </div>
+                      ) : null}
                     </div>
 
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -1107,7 +2355,7 @@ export default function BenLaunchWorkbench() {
                       {selectedArticle?.articleSlug ? (
                         <span className={pillClass}>article {selectedArticle.articleSlug}</span>
                       ) : null}
-                      {selectedCampaign ? (
+                      {launchMode === "clone" && selectedCampaign ? (
                         <span className={pillClass}>clone {selectedCampaign.campaignId}</span>
                       ) : null}
                     </div>
@@ -1115,8 +2363,10 @@ export default function BenLaunchWorkbench() {
 
                   <div className="h-px bg-black/[0.06] dark:bg-white/[0.10]" />
 
+                  {launchMode === "packet" ? packetModePanel : null}
+
                   {/* Content inputs */}
-                  <div className="space-y-4">
+                  <div className={launchMode === "packet" ? "hidden space-y-4" : "space-y-4"}>
                     <div className={sectionLabel}>Content inputs</div>
 
                       {selectedCampaign ? (
@@ -1130,6 +2380,17 @@ export default function BenLaunchWorkbench() {
                       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
                         <div>
                           <label className={fieldLabel}>Article selector</label>
+                          {hasCurrentArticle ? (
+                            <div className="mb-2 rounded-xl bg-emerald-500/[0.10] px-3 py-2 text-sm text-emerald-900 dark:text-emerald-100">
+                              <div className="font-semibold">Article already set</div>
+                              <div className="mt-1 break-all text-xs text-emerald-800/90 dark:text-emerald-200/90">
+                                {currentArticleValue}
+                              </div>
+                              <div className="mt-1 text-xs text-emerald-800/80 dark:text-emerald-200/80">
+                                You only need to use the selector if you want to replace it.
+                              </div>
+                            </div>
+                          ) : null}
                           <input
                             value={articleQuery}
                             onChange={(e) => setArticleQuery(e.target.value)}
@@ -1153,24 +2414,31 @@ export default function BenLaunchWorkbench() {
                               value: item.articleKey,
                               label: `${item.label} (${item.campaignCount})`,
                             }))}
-                            placeholder="Select an article…"
+                            placeholder={hasCurrentArticle ? "Replace current article…" : "Select an article…"}
                           />
                           <div className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">
-                            Showing all {buyerLabel} articles with this category ranked first.
+                            {hasCurrentArticle
+                              ? `Current article is populated below. Showing ${buyerLabel} articles with this category ranked first if you want to replace it.`
+                              : `Showing all ${buyerLabel} articles with this category ranked first.`}
                           </div>
                         </div>
 
                         <div className="rounded-xl bg-white dark:bg-neutral-900 px-3 py-2.5 text-xs text-neutral-600 dark:text-neutral-400 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
                           <div className="text-neutral-500 dark:text-neutral-400">Article details</div>
                           <div className="mt-1 text-sm font-semibold text-neutral-900 dark:text-neutral-50">
-                            {selectedArticle?.label || "No article selected"}
+                            {selectedArticle?.label || (hasCurrentArticle ? "Current article in use" : "No article selected")}
                           </div>
                           <div className="mt-1 text-neutral-500 dark:text-neutral-400">
-                            {selectedArticle?.articleSlug || "No slug"}
+                            {currentArticleSlug || "No slug"}
                           </div>
                           <div className="mt-2 text-neutral-500 dark:text-neutral-400">
-                            Used in {selectedArticle?.campaignCount || 0} {buyerLabel} campaign
-                            {selectedArticle?.campaignCount === 1 ? "" : "s"}
+                            {selectedArticle
+                              ? `Used in ${selectedArticle.campaignCount || 0} ${buyerLabel} campaign${selectedArticle?.campaignCount === 1 ? "" : "s"}`
+                              : hasCurrentArticle
+                                ? articleLooksLikeUrl
+                                  ? "A direct article URL is already populated."
+                                  : "An article path is already populated."
+                                : `Used in 0 ${buyerLabel} campaigns`}
                           </div>
                         </div>
                       </div>
@@ -1254,6 +2522,32 @@ export default function BenLaunchWorkbench() {
                           ) : null}
                         </div>
 
+                        <div className="rounded-[20px] border border-black/[0.06] bg-black/[0.02] px-4 py-3 text-sm text-neutral-700 dark:border-white/[0.10] dark:bg-white/[0.03] dark:text-neutral-200">
+                          <div className="font-semibold text-neutral-900 dark:text-neutral-50">
+                            How to use this section
+                          </div>
+                          <div className="mt-2 grid gap-2 md:grid-cols-3">
+                            <div>
+                              <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
+                                Step 1
+                              </span>
+                              <div className="mt-1">Click `Add` on ranked keywords or use `Autofill top 6/12`.</div>
+                            </div>
+                            <div>
+                              <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
+                                Step 2
+                              </span>
+                              <div className="mt-1">Use `Show all ranked keywords` if you want to investigate beyond the default list.</div>
+                            </div>
+                            <div>
+                              <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
+                                Step 3
+                              </span>
+                              <div className="mt-1">Selected rows show slot badges and reorder controls directly in the table.</div>
+                            </div>
+                          </div>
+                        </div>
+
                         {forcekeySelectorLoading ? (
                           <div className="text-sm text-neutral-500 dark:text-neutral-400">
                             Loading forcekey analysis…
@@ -1263,106 +2557,187 @@ export default function BenLaunchWorkbench() {
                             {forcekeySelectorError}
                           </div>
                         ) : forcekeySelector?.options?.length ? (
-                          <div className="divide-y divide-black/[0.06] dark:divide-white/[0.10]">
-                            {forcekeySelector.options.slice(0, 8).map((option) => {
-                              const alreadySelected = form.forcekeys.some(
-                                (value) => value.trim().toLowerCase() === option.forcekey.trim().toLowerCase()
-                              );
+                          <div className="space-y-3">
+                            {(() => {
+                              const totalRanked = forcekeySelector.options.length;
+                              const visibleRanked = showAllRankedForcekeys
+                                ? forcekeySelector.options
+                                : forcekeySelector.options.slice(0, 8);
                               return (
-                                <details
-                                  key={option.normalizedForcekey}
-                                  className="group px-1 py-3 transition hover:bg-neutral-50 dark:hover:bg-neutral-800 [&_summary::-webkit-details-marker]:hidden"
-                                >
-                                  <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
-                                    <div className="min-w-0">
-                                      <div className="flex flex-wrap items-center gap-2">
-                                        <span className="text-sm font-semibold text-neutral-900 dark:text-neutral-50">
-                                          {option.forcekey}
-                                        </span>
-                                        <span className={pillClass}>{option.type}</span>
-                                        <span className={pillClass}>
-                                          rank #{option.comparison.categoryRank}
-                                        </span>
-                                        <span className={pillClass}>{option.score.confidence}</span>
-                                      </div>
-                                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-500 dark:text-neutral-400">
-                                        <span>{option.metrics.searches} searches</span>
-                                        <span>{option.metrics.clicks} clicks</span>
-                                        <span>{moneyLabel(option.metrics.revenue)} revenue</span>
-                                        <span>RPC {option.metrics.rpc.toFixed(2)}</span>
-                                        <span>RPS {option.metrics.rps.toFixed(2)}</span>
-                                        <span>vs category {pctLabel(option.comparison.categoryRpsLiftPct)}</span>
-                                      </div>
-                                    </div>
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        addForcekeyToNextOpenSlot(option.forcekey);
-                                      }}
-                                      className={alreadySelected ? buttonOutline : buttonSecondary}
-                                    >
-                                      {alreadySelected ? "Selected" : "Add"}
-                                    </button>
-                                  </summary>
-                                  <div className="mt-3 space-y-3 text-sm text-neutral-700 dark:text-neutral-200">
-                                    <div className="h-px bg-black/[0.06] dark:bg-white/[0.10]" />
-                                    <div className="grid gap-x-6 gap-y-2 md:grid-cols-3">
-                                      <div>
-                                        <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
-                                          Ranking score
-                                        </div>
-                                        <div className="mt-0.5 font-semibold text-neutral-900 dark:text-neutral-50">
-                                          {option.score.rankingScore.toFixed(2)}
-                                        </div>
-                                      </div>
-                                      <div>
-                                        <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
-                                          Network RPS lift
-                                        </div>
-                                        <div className="mt-0.5 font-semibold text-neutral-900 dark:text-neutral-50">
-                                          {pctLabel(option.comparison.networkRpsLiftPct)}
-                                        </div>
-                                      </div>
-                                      <div>
-                                        <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
-                                          Network RPC lift
-                                        </div>
-                                        <div className="mt-0.5 font-semibold text-neutral-900 dark:text-neutral-50">
-                                          {pctLabel(option.comparison.networkRpcLiftPct)}
-                                        </div>
-                                      </div>
-                                    </div>
-                                    {option.geo ? (
-                                      <div>
-                                        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
-                                          Geo analysis
-                                        </div>
-                                        <div className="mt-2 text-xs text-neutral-600 dark:text-neutral-400">
-                                          {option.geo.rationale}
-                                        </div>
-                                        <div className="mt-2 flex flex-wrap gap-2">
-                                          {option.geo.topValues.slice(0, 3).map((geo) => (
-                                            <span key={`${geo.token}-${geo.value}`} className={pillClass}>
-                                              {geo.value} · RPS {geo.rps.toFixed(2)} · {geo.band}
-                                            </span>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    ) : null}
-                                    {option.observedKeywordVariants.length > 0 ? (
-                                      <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                                        Observed variants: {option.observedKeywordVariants.slice(0, 3).join(" · ")}
-                                        {option.observedKeywordVariants.length > 3
-                                          ? ` +${option.observedKeywordVariants.length - 3} more`
-                                          : ""}
-                                      </div>
+                                <>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-neutral-500 dark:text-neutral-400">
+                                      Showing {visibleRanked.length} of {totalRanked} ranked keywords.
+                                    </span>
+                                    {totalRanked > 8 ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => setShowAllRankedForcekeys((value) => !value)}
+                                        className={buttonGhost}
+                                      >
+                                        {showAllRankedForcekeys ? "Show top 8 only" : "Show all ranked keywords"}
+                                      </button>
                                     ) : null}
                                   </div>
-                                </details>
+
+                                  <div className="divide-y divide-black/[0.06] dark:divide-white/[0.10]">
+                                    {visibleRanked.map((option) => {
+                                      const selectedIndex = form.forcekeys.findIndex(
+                                        (value) =>
+                                          value.trim().toLowerCase() === option.forcekey.trim().toLowerCase()
+                                      );
+                                      const alreadySelected = selectedIndex >= 0;
+                                      return (
+                                        <details
+                                          key={option.normalizedForcekey}
+                                          className={`group px-1 py-3 transition hover:bg-neutral-50 dark:hover:bg-neutral-800 [&_summary::-webkit-details-marker]:hidden ${
+                                            alreadySelected ? "bg-[#0071e3]/[0.06] dark:bg-[#0a84ff]/[0.10]" : ""
+                                          }`}
+                                        >
+                                          <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                              <div className="flex flex-wrap items-center gap-2">
+                                                <span className="text-sm font-semibold text-neutral-900 dark:text-neutral-50">
+                                                  {option.forcekey}
+                                                </span>
+                                                {alreadySelected ? (
+                                                  <span className={pillClass}>
+                                                    slot {String.fromCharCode(65 + selectedIndex)}
+                                                  </span>
+                                                ) : null}
+                                                <span className={pillClass}>{option.type}</span>
+                                                <span className={pillClass}>
+                                                  rank #{option.comparison.categoryRank}
+                                                </span>
+                                                <span className={pillClass}>{option.score.confidence}</span>
+                                              </div>
+                                              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-500 dark:text-neutral-400">
+                                                <span>{option.metrics.searches} searches</span>
+                                                <span>{option.metrics.clicks} clicks</span>
+                                                <span>{moneyLabel(option.metrics.revenue)} revenue</span>
+                                                <span>RPC {option.metrics.rpc.toFixed(2)}</span>
+                                                <span>RPS {option.metrics.rps.toFixed(2)}</span>
+                                                <span>vs category {pctLabel(option.comparison.categoryRpsLiftPct)}</span>
+                                              </div>
+                                            </div>
+                                            {alreadySelected ? (
+                                              <div
+                                                className="flex shrink-0 items-center gap-2"
+                                                onClick={(e) => {
+                                                  e.preventDefault();
+                                                  e.stopPropagation();
+                                                }}
+                                              >
+                                                <div
+                                                  className="grid grid-cols-2 gap-0.5 rounded-lg border border-black/[0.08] bg-black/[0.03] px-2 py-2 dark:border-white/[0.10] dark:bg-white/[0.03]"
+                                                  title="Selected in final stack"
+                                                >
+                                                  {Array.from({ length: 6 }).map((_, dotIndex) => (
+                                                    <span
+                                                      key={dotIndex}
+                                                      className="h-1 w-1 rounded-full bg-neutral-400 dark:bg-neutral-500"
+                                                    />
+                                                  ))}
+                                                </div>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => moveSelectedForcekey(selectedIndex, -1)}
+                                                  disabled={selectedIndex === 0}
+                                                  className="rounded-lg border border-black/[0.08] px-2 py-1 text-xs font-medium text-neutral-700 transition hover:bg-black/[0.04] disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/[0.10] dark:text-neutral-200 dark:hover:bg-white/[0.06]"
+                                                >
+                                                  Up
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => moveSelectedForcekey(selectedIndex, 1)}
+                                                  disabled={selectedIndex === activeForcekeys.length - 1}
+                                                  className="rounded-lg border border-black/[0.08] px-2 py-1 text-xs font-medium text-neutral-700 transition hover:bg-black/[0.04] disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/[0.10] dark:text-neutral-200 dark:hover:bg-white/[0.06]"
+                                                >
+                                                  Down
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => removeSelectedForcekey(selectedIndex)}
+                                                  className="rounded-lg border border-black/[0.08] px-2 py-1 text-xs font-medium text-neutral-700 transition hover:bg-black/[0.04] dark:border-white/[0.10] dark:text-neutral-200 dark:hover:bg-white/[0.06]"
+                                                >
+                                                  Remove
+                                                </button>
+                                              </div>
+                                            ) : (
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.preventDefault();
+                                                  e.stopPropagation();
+                                                  addForcekeyToNextOpenSlot(option.forcekey);
+                                                }}
+                                                className={buttonSecondary}
+                                              >
+                                                Add
+                                              </button>
+                                            )}
+                                          </summary>
+                                          <div className="mt-3 space-y-3 text-sm text-neutral-700 dark:text-neutral-200">
+                                            <div className="h-px bg-black/[0.06] dark:bg-white/[0.10]" />
+                                            <div className="grid gap-x-6 gap-y-2 md:grid-cols-3">
+                                              <div>
+                                                <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
+                                                  Ranking score
+                                                </div>
+                                                <div className="mt-0.5 font-semibold text-neutral-900 dark:text-neutral-50">
+                                                  {option.score.rankingScore.toFixed(2)}
+                                                </div>
+                                              </div>
+                                              <div>
+                                                <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
+                                                  Network RPS lift
+                                                </div>
+                                                <div className="mt-0.5 font-semibold text-neutral-900 dark:text-neutral-50">
+                                                  {pctLabel(option.comparison.networkRpsLiftPct)}
+                                                </div>
+                                              </div>
+                                              <div>
+                                                <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
+                                                  Network RPC lift
+                                                </div>
+                                                <div className="mt-0.5 font-semibold text-neutral-900 dark:text-neutral-50">
+                                                  {pctLabel(option.comparison.networkRpcLiftPct)}
+                                                </div>
+                                              </div>
+                                            </div>
+                                            {option.geo ? (
+                                              <div>
+                                                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
+                                                  Geo analysis
+                                                </div>
+                                                <div className="mt-2 text-xs text-neutral-600 dark:text-neutral-400">
+                                                  {option.geo.rationale}
+                                                </div>
+                                                <div className="mt-2 flex flex-wrap gap-2">
+                                                  {option.geo.topValues.slice(0, 3).map((geo) => (
+                                                    <span key={`${geo.token}-${geo.value}`} className={pillClass}>
+                                                      {geo.value} · RPS {geo.rps.toFixed(2)} · {geo.band}
+                                                    </span>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            ) : null}
+                                            {option.observedKeywordVariants.length > 0 ? (
+                                              <div className="text-xs text-neutral-500 dark:text-neutral-400">
+                                                Observed variants: {option.observedKeywordVariants.slice(0, 3).join(" · ")}
+                                                {option.observedKeywordVariants.length > 3
+                                                  ? ` +${option.observedKeywordVariants.length - 3} more`
+                                                  : ""}
+                                              </div>
+                                            ) : null}
+                                          </div>
+                                        </details>
+                                      );
+                                    })}
+                                  </div>
+                                </>
                               );
-                            })}
+                            })()}
                           </div>
                         ) : (
                           <div className="text-sm text-neutral-500 dark:text-neutral-400">
@@ -1391,38 +2766,43 @@ export default function BenLaunchWorkbench() {
                         const visibleCount = showAllForcekeys ? 12 : naturalVisibleCount;
                         const canToggle = naturalVisibleCount < 12;
                         return (
-                          <div>
-                            <div className={fieldLabel}>Forcekeys</div>
-                            <div className="space-y-2">
-                              {form.forcekeys.slice(0, visibleCount).map((value, index) => (
-                                <input
-                                  key={index}
-                                  value={value}
-                                  onChange={(e) =>
-                                    setForm((current) => {
-                                      const next = [...current.forcekeys];
-                                      next[index] = e.target.value;
-                                      return { ...current, forcekeys: next };
-                                    })
-                                  }
-                                  placeholder={`forcekey${String.fromCharCode(65 + index)}`}
-                                  className={inputClass}
-                                />
-                              ))}
-                            </div>
-                            <div className="mt-2 flex items-center justify-between text-xs">
-                              <span className="text-neutral-500 dark:text-neutral-400">
-                                Active forcekeys: {activeForcekeys.length}.
-                              </span>
-                              {canToggle ? (
-                                <button
-                                  type="button"
-                                  onClick={() => setShowAllForcekeys((v) => !v)}
-                                  className="font-medium text-[#0071e3] hover:underline"
-                                >
-                                  {showAllForcekeys ? "Show fewer fields" : "Show all 12 fields"}
-                                </button>
-                              ) : null}
+                          <div className="space-y-4">
+                            <div>
+                              <div className={fieldLabel}>Forcekeys</div>
+                              <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                                Raw slot values remain editable below if you need to fine-tune the final injection.
+                              </div>
+                              <div className="space-y-2">
+                                {form.forcekeys.slice(0, visibleCount).map((value, index) => (
+                                  <input
+                                    key={index}
+                                    value={value}
+                                    onChange={(e) =>
+                                      setForm((current) => {
+                                        const next = [...current.forcekeys];
+                                        next[index] = e.target.value;
+                                        return { ...current, forcekeys: next };
+                                      })
+                                    }
+                                    placeholder={`forcekey${String.fromCharCode(65 + index)}`}
+                                    className={inputClass}
+                                  />
+                                ))}
+                              </div>
+                              <div className="mt-2 flex items-center justify-between text-xs">
+                                <span className="text-neutral-500 dark:text-neutral-400">
+                                  Active forcekeys: {activeForcekeys.length}.
+                                </span>
+                                {canToggle ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowAllForcekeys((v) => !v)}
+                                    className="font-medium text-[#0071e3] hover:underline"
+                                  >
+                                    {showAllForcekeys ? "Show fewer fields" : "Show all 12 fields"}
+                                  </button>
+                                ) : null}
+                              </div>
                             </div>
                           </div>
                         );
@@ -1443,7 +2823,199 @@ export default function BenLaunchWorkbench() {
                         </button>
                       </div>
 
-                      <div className="grid gap-3 md:grid-cols-3">
+                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                        <div className="xl:col-span-4">
+                          <div className={fieldLabel}>RSOC site</div>
+                          <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                            Change the site here first. The workbench will recommend the redirect, page, and ad account that {buyerLabel} has historically used with that site, while still letting you pick a different option.
+                          </div>
+                          <div className="mt-2">
+                            <Dropdown
+                              value={form.rsocSite || strategistPreview?.rsocSite || ""}
+                              onChange={applySiteSelection}
+                              options={siteDropdownOptions}
+                              placeholder="Select site"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="xl:col-span-4">
+                          {currentSiteAssociation ? (
+                            <div className="rounded-xl bg-neutral-100/80 dark:bg-neutral-800/60 px-3 py-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <div>
+                                  <div className="text-xs font-medium uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
+                                    Historical associations for {currentSiteAssociation.site}
+                                  </div>
+                                  <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+                                    Based on {currentSiteAssociation.campaignCount} prior {buyerLabel} campaigns on this site.
+                                  </div>
+                                </div>
+                                {form.networkAccountId ? (
+                                  <span className={pillClass}>Network account: {form.networkAccountId}</span>
+                                ) : null}
+                              </div>
+
+                              <div className="mt-3 grid gap-3 md:grid-cols-3">
+                                <div>
+                                  <div className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
+                                    Redirects
+                                  </div>
+                                  <div className="mt-2 flex flex-wrap gap-2">
+                                    {currentSiteAssociation.redirectDomains.slice(0, 4).map((option) => (
+                                      <button
+                                        key={`redirect-${option.value}`}
+                                        type="button"
+                                        onClick={() => setForm((c) => ({ ...c, redirectDomain: option.value }))}
+                                        className={buttonGhost}
+                                      >
+                                        {option.value}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
+                                    Pages
+                                  </div>
+                                  <div className="mt-2 flex flex-wrap gap-2">
+                                    {currentSiteAssociation.pages.length ? currentSiteAssociation.pages.slice(0, 4).map((option) => (
+                                      <button
+                                        key={`page-${option.value}`}
+                                        type="button"
+                                        onClick={() => setForm((c) => ({ ...c, pageId: option.value }))}
+                                        className={buttonGhost}
+                                        title={option.label}
+                                      >
+                                        {option.label}
+                                      </button>
+                                    )) : (
+                                      <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                                        No page history found for this site in the current catalog.
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
+                                    Ad accounts
+                                  </div>
+                                  <div className="mt-2 flex flex-wrap gap-2">
+                                    {currentSiteAssociation.adAccounts.length ? currentSiteAssociation.adAccounts.slice(0, 4).map((option) => (
+                                      <button
+                                        key={`account-${option.value}`}
+                                        type="button"
+                                        onClick={() =>
+                                          setForm((c) => ({
+                                            ...c,
+                                            adAccountId: option.value,
+                                          }))
+                                        }
+                                        className={buttonGhost}
+                                        title={option.label}
+                                      >
+                                        {option.label}
+                                      </button>
+                                    )) : (
+                                      <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                                        No ad account history found for this site in the current catalog.
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="mt-4 rounded-xl bg-white/70 px-3 py-3 dark:bg-neutral-900/60">
+                                <div className="text-xs font-medium uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
+                                  Use a different option
+                                </div>
+                                <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                                  These dropdowns start with {buyerLabel}&rsquo;s historical associations for this site, then continue into the broader available option set.
+                                </div>
+                                <div className="mt-3 grid gap-2 md:grid-cols-3">
+                                  <div className="rounded-lg border border-black/[0.06] bg-black/[0.02] px-3 py-2 dark:border-white/[0.10] dark:bg-white/[0.03]">
+                                    <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
+                                      Current redirect
+                                    </div>
+                                    <div className="mt-1 text-sm font-semibold text-neutral-900 dark:text-neutral-50">
+                                      {currentRedirectLabel || "No redirect selected"}
+                                    </div>
+                                  </div>
+                                  <div className="rounded-lg border border-black/[0.06] bg-black/[0.02] px-3 py-2 dark:border-white/[0.10] dark:bg-white/[0.03]">
+                                    <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
+                                      Current page
+                                    </div>
+                                    <div className="mt-1 text-sm font-semibold text-neutral-900 dark:text-neutral-50">
+                                      {currentPageLabel || "No page selected"}
+                                    </div>
+                                  </div>
+                                  <div className="rounded-lg border border-black/[0.06] bg-black/[0.02] px-3 py-2 dark:border-white/[0.10] dark:bg-white/[0.03]">
+                                    <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
+                                      Current ad account
+                                    </div>
+                                    <div className="mt-1 text-sm font-semibold text-neutral-900 dark:text-neutral-50">
+                                      {currentAdAccountLabel || "No ad account selected"}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="mt-3 grid gap-3 md:grid-cols-3">
+                                  <div>
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className={fieldLabel}>Redirect domain</div>
+                                      <button type="button" onClick={() => openEntityPicker("redirect")} className="text-xs font-medium text-[#0071e3] hover:underline">
+                                        Show more
+                                      </button>
+                                    </div>
+                                    <Dropdown
+                                      value={form.redirectDomain}
+                                      onChange={(value) => setForm((c) => ({ ...c, redirectDomain: value }))}
+                                      options={redirectDropdownOptions}
+                                      placeholder="Select redirect domain"
+                                    />
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className={fieldLabel}>Facebook page</div>
+                                      <button type="button" onClick={() => openEntityPicker("page")} className="text-xs font-medium text-[#0071e3] hover:underline">
+                                        Show more
+                                      </button>
+                                    </div>
+                                    <Dropdown
+                                      value={form.pageId}
+                                      onChange={(value) => setForm((c) => ({ ...c, pageId: value }))}
+                                      options={pageDropdownOptions}
+                                      placeholder="Select page"
+                                    />
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className={fieldLabel}>Ad account</div>
+                                      <button type="button" onClick={() => openEntityPicker("adAccount")} className="text-xs font-medium text-[#0071e3] hover:underline">
+                                        Show more
+                                      </button>
+                                    </div>
+                                    <Dropdown
+                                      value={form.adAccountId}
+                                      onChange={(value) =>
+                                        setForm((c) => ({
+                                          ...c,
+                                          adAccountId: value,
+                                        }))
+                                      }
+                                      options={adAccountDropdownOptions}
+                                      placeholder="Select ad account"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ) : launchIntelligence?.notes?.length ? (
+                            <div className="rounded-xl bg-neutral-100/80 dark:bg-neutral-800/60 px-3 py-3 text-sm text-neutral-600 dark:text-neutral-400">
+                              {launchIntelligence.notes[0]}
+                            </div>
+                          ) : null}
+                        </div>
+
                         <div>
                           <div className={fieldLabel}>Selector variant</div>
                           <Dropdown
@@ -1477,33 +3049,56 @@ export default function BenLaunchWorkbench() {
                       </div>
 
                       {showAdvanced ? (
-                        <div className="grid gap-3 md:grid-cols-3">
-                          <label className="block">
-                            <div className={fieldLabel}>Redirect domain</div>
-                            <input
-                              value={form.redirectDomain}
-                              onChange={(e) => setForm((c) => ({ ...c, redirectDomain: e.target.value }))}
-                              className={inputClass}
-                            />
-                          </label>
-                          <label className="block">
-                            <div className={fieldLabel}>Facebook page</div>
-                            <input
-                              value={form.pageId}
-                              onChange={(e) => setForm((c) => ({ ...c, pageId: e.target.value }))}
-                              className={inputClass}
-                            />
-                          </label>
-                          <label className="block">
-                            <div className={fieldLabel}>Ad account</div>
-                            <input
-                              value={form.adAccountId}
-                              onChange={(e) => setForm((c) => ({ ...c, adAccountId: e.target.value }))}
-                              className={inputClass}
-                            />
-                          </label>
+                        <div className="space-y-4">
+                          <div className="rounded-xl bg-neutral-100/80 px-3 py-3 text-sm text-neutral-600 dark:bg-neutral-800/60 dark:text-neutral-400">
+                            Site, redirect, page, and ad account selection now live above. Advanced mode is reserved for lower-frequency overrides.
+                          </div>
                         </div>
                       ) : null}
+
+                      <div className="rounded-xl bg-neutral-100/80 dark:bg-neutral-800/60 px-3 py-3">
+                        <div className="mb-3 text-xs font-medium uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
+                          Launch readiness
+                        </div>
+                        {launchHistory?.notes?.length ? (
+                          <div className="mb-3 rounded-lg bg-amber-100/70 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                            {launchHistory.notes[0]}
+                          </div>
+                        ) : null}
+                        <div className="grid gap-3 md:grid-cols-3">
+                          {[
+                            { label: "Strategis", checks: strategisReadinessChecks, ready: canRunStrategisSetup },
+                            { label: "Facebook clone", checks: facebookReadinessChecks, ready: canRunFacebookSetup },
+                            { label: "Both", checks: bothReadinessChecks, ready: canRunBothSetup },
+                          ].map((group) => (
+                            <div key={group.label} className="rounded-xl bg-white/80 dark:bg-neutral-900/70 px-3 py-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="text-sm font-semibold text-neutral-900 dark:text-neutral-50">
+                                  {group.label}
+                                </div>
+                                <span className={group.ready ? pillClass : "inline-flex items-center rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-200"}>
+                                  {group.ready ? "Ready" : "Blocked"}
+                                </span>
+                              </div>
+                              <div className="mt-2 space-y-1.5 text-xs text-neutral-600 dark:text-neutral-400">
+                                {group.checks.map((check, index) => (
+                                  <div key={`${group.label}-${check.label}-${index}`}>
+                                    <div>
+                                      {check.ok ? "• " : "• "}
+                                      <span className={check.ok ? "text-neutral-700 dark:text-neutral-300" : "text-amber-700 dark:text-amber-300"}>
+                                        {check.label}
+                                      </span>
+                                    </div>
+                                    {check.detail ? (
+                                      <div className="pl-3 text-neutral-500 dark:text-neutral-500">{check.detail}</div>
+                                    ) : null}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
 
                       <div className="rounded-xl bg-neutral-100/80 dark:bg-neutral-800/60 px-3 py-3">
                         <div className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
@@ -1512,32 +3107,253 @@ export default function BenLaunchWorkbench() {
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
+                            onClick={() => handleDryRun("strategis")}
+                            disabled={runningSetup !== null || runningDryRun !== null}
+                            className={buttonGhost}
+                          >
+                            {runningDryRun === "strategis" ? "Previewing…" : "Dry run Strategis"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDryRun("facebook")}
+                            disabled={runningSetup !== null || runningDryRun !== null}
+                            className={buttonGhost}
+                          >
+                            {runningDryRun === "facebook" ? "Previewing…" : "Dry run Facebook"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDryRun("both")}
+                            disabled={runningSetup !== null || runningDryRun !== null}
+                            className={buttonGhost}
+                          >
+                            {runningDryRun === "both" ? "Previewing…" : "Dry run Both"}
+                          </button>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button
+                            type="button"
                             onClick={() => handleSetup("strategis")}
-                            disabled={!canRunStrategisSetup || runningSetup !== null}
+                            disabled={!canRunStrategisSetup || runningSetup !== null || runningDryRun !== null}
                             className={buttonOutline}
                           >
-                            {runningSetup === "strategis" ? "Setting up…" : "Setup in Strategis"}
+                            <span className="inline-flex items-center gap-2">
+                              {runningSetup === "strategis" ? <ButtonSpinner /> : null}
+                              <span>{runningSetup === "strategis" ? "Setting up…" : "Setup in Strategis"}</span>
+                            </span>
                           </button>
                           <button
                             type="button"
                             onClick={() => handleSetup("facebook")}
-                            disabled={!canRunFacebookSetup || runningSetup !== null}
+                            disabled={!canRunFacebookSetup || runningSetup !== null || runningDryRun !== null}
                             className={buttonSecondary}
                           >
-                            {runningSetup === "facebook" ? "Setting up…" : "Setup in Facebook"}
+                            <span className="inline-flex items-center gap-2">
+                              {runningSetup === "facebook" ? <ButtonSpinner /> : null}
+                              <span>{runningSetup === "facebook" ? "Setting up…" : "Setup in Facebook"}</span>
+                            </span>
                           </button>
                           <button
                             type="button"
                             onClick={() => handleSetup("both")}
-                            disabled={!canRunBothSetup || runningSetup !== null}
+                            disabled={!canRunBothSetup || runningSetup !== null || runningDryRun !== null}
                             className={buttonPrimary}
                           >
-                            {runningSetup === "both" ? "Setting up…" : "Setup in Both"}
+                            <span className="inline-flex items-center gap-2">
+                              {runningSetup === "both" ? <ButtonSpinner /> : null}
+                              <span>{runningSetup === "both" ? "Setting up…" : "Setup in Both"}</span>
+                            </span>
                           </button>
                         </div>
                         <div className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
-                          Strategis creates the tracking shell only. Facebook creates the campaign and ad set shell
-                          only. Both attempts both sides and stores the mapping when database access is available.
+                          Strategis creates the tracking shell only. Facebook currently clones the selected source
+                          campaign shell, creates a fresh creative, and swaps that creative onto the cloned ad while
+                          keeping the clone paused.
+                        </div>
+                        {runningSetup ? (
+                          <div className="mt-3 rounded-xl bg-[#0071e3]/[0.10] px-3 py-3 text-sm text-[#0b63ce] dark:text-[#72b7ff]">
+                            {setupModeLabel(runningSetup)} setup in progress. This can take a moment, especially while
+                            Strategis returns the created shell.
+                          </div>
+                        ) : null}
+                        {!runningSetup && setupResult ? (
+                          <div className="mt-3 rounded-xl bg-[#34c759]/[0.10] px-3 py-3 text-sm text-[#0a7d2e] dark:text-[#5dd680]">
+                            {setupModeLabel(setupResult.mode)} setup complete for{" "}
+                            <span className="font-semibold">{setupResult.result.campaignName}</span>
+                            {setupResult.result.strategisCampaigns?.[0]?.id
+                              ? ` (${setupResult.result.strategisCampaigns[0].id})`
+                              : ""}
+                            .
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {dryRunError ? (
+                        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-200">
+                          {dryRunError}
+                        </div>
+                      ) : null}
+
+                      {dryRunResult ? (
+                        <div className="rounded-xl bg-neutral-100/80 dark:bg-neutral-800/60 px-3 py-3">
+                          <div className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
+                            Dry run result
+                          </div>
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <div className="rounded-xl bg-white/80 dark:bg-neutral-900/70 px-3 py-3 text-sm">
+                              <div className="font-semibold text-neutral-900 dark:text-neutral-50">Strategis preview</div>
+                              <div className="mt-2 space-y-1 text-xs text-neutral-600 dark:text-neutral-400">
+                                <div>Org: {dryRunResult.preview.strategis.organization}</div>
+                                <div>Campaign name: {dryRunResult.preview.strategis.campaignName || "Will derive on create"}</div>
+                                <div>Template: {dryRunResult.preview.strategis.templateId}</div>
+                                <div>Site: {dryRunResult.preview.strategis.rsocSite}</div>
+                                <div>Article: {dryRunResult.preview.strategis.article}</div>
+                                <div>Forcekeys: {dryRunResult.preview.strategis.forcekeys.length}</div>
+                                <div>
+                                  Route URL pattern after Strategis create:{" "}
+                                  {dryRunResult.preview.strategis.routeUrlPreview || "N/A"}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="rounded-xl bg-white/80 dark:bg-neutral-900/70 px-3 py-3 text-sm">
+                              <div className="font-semibold text-neutral-900 dark:text-neutral-50">Facebook preview</div>
+                              <div className="mt-2 space-y-1 text-xs text-neutral-600 dark:text-neutral-400">
+                                <div>Source campaign: {dryRunResult.preview.facebook.sourceCampaignId || "Missing"}</div>
+                                <div>Source FB campaign: {dryRunResult.preview.facebook.sourceFacebookCampaignId || "Missing"}</div>
+                                <div>Target campaign: {dryRunResult.preview.facebook.targetCampaignName || "Pending"}</div>
+                                <div>Target ad: {dryRunResult.preview.facebook.targetAdName || "Pending"}</div>
+                                <div>Creative mode: {dryRunResult.preview.facebook.creativeMode}</div>
+                                <div>{facebookDestinationLabel(dryRunResult)}: {facebookDestinationValue(dryRunResult)}</div>
+                                {dryRunResult.preview.facebook.creativeAssetUrl ? (
+                                  <div>Asset URL: {dryRunResult.preview.facebook.creativeAssetUrl}</div>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+                          {dryRunResult.runtime.notes.length ? (
+                            <div className="mt-3 rounded-lg bg-amber-100/70 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                              {dryRunResult.runtime.notes.map((note, index) => (
+                                <div key={`${note}-${index}`}>{note}</div>
+                              ))}
+                            </div>
+                          ) : null}
+                          <div className="mt-3 grid gap-3 md:grid-cols-2">
+                            <div className="rounded-xl bg-white/80 dark:bg-neutral-900/70 px-3 py-3 text-sm">
+                              <div className="font-semibold text-neutral-900 dark:text-neutral-50">Duplicate risk</div>
+                              <div className="mt-2 text-xs text-neutral-600 dark:text-neutral-400">
+                                Level: {dryRunResult.duplicateRisk.level}
+                              </div>
+                              {dryRunResult.duplicateRisk.notes.length ? (
+                                <div className="mt-2 space-y-1 text-xs text-amber-700 dark:text-amber-300">
+                                  {dryRunResult.duplicateRisk.notes.map((note, index) => (
+                                    <div key={`${note}-${index}`}>{note}</div>
+                                  ))}
+                                </div>
+                              ) : null}
+                              {dryRunResult.duplicateRisk.matches.length ? (
+                                <div className="mt-2 space-y-2 text-xs text-neutral-600 dark:text-neutral-400">
+                                  {dryRunResult.duplicateRisk.matches.map((match) => (
+                                    <div key={match.requestId} className="rounded-lg bg-neutral-100 dark:bg-neutral-800 px-2.5 py-2">
+                                      <div className="font-medium text-neutral-900 dark:text-neutral-50">{match.campaignName}</div>
+                                      <div>{match.createdAt}</div>
+                                      <div>{match.status || "unknown status"}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                            <div className="rounded-xl bg-white/80 dark:bg-neutral-900/70 px-3 py-3 text-sm">
+                              <div className="font-semibold text-neutral-900 dark:text-neutral-50">Planned operations</div>
+                              <div className="mt-2 space-y-2 text-xs text-neutral-600 dark:text-neutral-400">
+                                {dryRunResult.operations.map((op) => (
+                                  <div key={`${op.system}-${op.step}`} className="rounded-lg bg-neutral-100 dark:bg-neutral-800 px-2.5 py-2">
+                                    <div className="font-medium text-neutral-900 dark:text-neutral-50">
+                                      {op.system} · {op.method} · {op.step}
+                                    </div>
+                                    <div className="mt-1 font-mono text-[11px] break-all">{op.target}</div>
+                                    <div className="mt-1">{op.purpose}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                          {dryRunResult.warnings.length ? (
+                            <div className="mt-3 space-y-1 text-xs text-amber-700 dark:text-amber-300">
+                              {dryRunResult.warnings.map((warning, index) => (
+                                <div key={`${warning}-${index}`}>{warning}</div>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <label className="block">
+                          <div className={fieldLabel}>Creative mode</div>
+                          <Dropdown
+                            value={form.creativeMode}
+                            onChange={(nextValue) =>
+                              setForm((c) => ({
+                                ...c,
+                                creativeMode: nextValue as FormState["creativeMode"],
+                              }))
+                            }
+                            options={CREATIVE_MODE_OPTIONS.map((option) => ({
+                              value: option.value,
+                              label: option.label,
+                            }))}
+                          />
+                        </label>
+                        <label className="block">
+                          <div className={fieldLabel}>
+                            {form.creativeMode === "video_url" ? "Video URL" : "Asset URL"}
+                          </div>
+                          <input
+                            value={form.creativeAssetUrl}
+                            onChange={(e) => setForm((c) => ({ ...c, creativeAssetUrl: e.target.value }))}
+                            placeholder={
+                              form.creativeMode === "inherit"
+                                ? "Leave blank to preserve source media"
+                                : "https://…"
+                            }
+                            className={inputClass}
+                          />
+                        </label>
+                      </div>
+
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <label className="block">
+                          <div className={fieldLabel}>Creative primary text</div>
+                          <textarea
+                            value={form.creativePrimaryText}
+                            onChange={(e) => setForm((c) => ({ ...c, creativePrimaryText: e.target.value }))}
+                            placeholder="Optional. Falls back to the source ad copy."
+                            className={`${inputClass} min-h-[88px]`}
+                          />
+                        </label>
+                        <div className="grid gap-3">
+                          <label className="block">
+                            <div className={fieldLabel}>Creative description</div>
+                            <input
+                              value={form.creativeDescription}
+                              onChange={(e) => setForm((c) => ({ ...c, creativeDescription: e.target.value }))}
+                              placeholder="Optional link description"
+                              className={inputClass}
+                            />
+                          </label>
+                          <label className="block">
+                            <div className={fieldLabel}>Call to action</div>
+                            <Dropdown
+                              value={form.creativeCallToActionType}
+                              onChange={(nextValue) =>
+                                setForm((c) => ({ ...c, creativeCallToActionType: nextValue }))
+                              }
+                              options={CTA_OPTIONS.map((option) => ({
+                                value: option.value,
+                                label: option.label,
+                              }))}
+                            />
+                          </label>
                         </div>
                       </div>
 
@@ -1557,6 +3373,50 @@ export default function BenLaunchWorkbench() {
 
             {/* Summary rail — flat sections divided by hairlines */}
             <aside>
+              {launchMode === "packet" ? (
+                <div className="space-y-8">
+                  <div>
+                    <div className={sectionLabel}>Intent packet</div>
+                    <div className="mt-2 space-y-1 text-xs text-neutral-600 dark:text-neutral-400">
+                      <div>Primary keyword: {packetForm.primaryKeyword || "—"}</div>
+                      <div>Category: {packetForm.category || "—"}</div>
+                      <div>Site: {packetForm.rsocSite || "—"}</div>
+                      <div>Destination domain: {packetForm.destinationDomain || "—"}</div>
+                      <div>Ad account: {packetForm.adAccountId || "—"}</div>
+                      <div>Page: {packetForm.fbPage || "—"}</div>
+                    </div>
+                  </div>
+
+                  <div className="h-px bg-black/[0.06] dark:bg-white/[0.10]" />
+
+                  <div>
+                    <div className={sectionLabel}>Packet preview</div>
+                    {packetPreview ? (
+                      <div className="mt-2 space-y-2 text-xs text-neutral-600 dark:text-neutral-400">
+                        <div>Packet: {packetPreview.packet.packetName}</div>
+                        <div>Vertical: {packetPreview.packet.vertical}</div>
+                        <div>Launch priority: {packetPreview.packet.scores.launchPriority}</div>
+                        <div>Monetization potential: {packetPreview.packet.scores.monetizationPotential}</div>
+                        <div>Recommended budget: ${packetPreview.packet.launchTest.recommendedDailyBudget}</div>
+                      </div>
+                    ) : (
+                      <div className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
+                        Preview the packet lane to see the Strategis and Facebook shell plan.
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="h-px bg-black/[0.06] dark:bg-white/[0.10]" />
+
+                  <div>
+                    <div className={sectionLabel}>Operational note</div>
+                    <div className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
+                      This lane is intentionally separated from clone/setup actions so buyers can reason about a
+                      brand-new packet shell without mixing it into the existing historical-shell workflow.
+                    </div>
+                  </div>
+                </div>
+              ) : (
               <div className="space-y-8">
                 <div>
                   <div className={sectionLabel}>Strategis</div>
@@ -1581,11 +3441,22 @@ export default function BenLaunchWorkbench() {
                 <div>
                   <div className={sectionLabel}>Facebook</div>
                   <div className="mt-2 space-y-1 text-xs text-neutral-600 dark:text-neutral-400">
-                    <div>Ad account: {facebookPreview?.adAccountId || "—"}</div>
-                    <div>Page: {facebookPreview?.pageId || "—"}</div>
+                    <div>
+                      Ad account:{" "}
+                      {facebookPreview?.adAccountId
+                        ? adAccountLabelMap.get(facebookPreview.adAccountId) || facebookPreview.adAccountId
+                        : "—"}
+                    </div>
+                    <div>
+                      Page:{" "}
+                      {facebookPreview?.pageId
+                        ? pageLabelMap.get(facebookPreview.pageId) || facebookPreview.pageId
+                        : "—"}
+                    </div>
                     <div>Pixel: {facebookPreview?.pixelId || "—"}</div>
                     <div>Bid strategy: {facebookPreview?.bidStrategy || "—"}</div>
                     {selectedCampaign ? <div>Source campaign: {selectedCampaign.campaignId}</div> : null}
+                    <div>Creative mode: {form.creativeMode}</div>
                   </div>
                   <button
                     type="button"
@@ -1654,12 +3525,28 @@ export default function BenLaunchWorkbench() {
                       {setupResult.result.facebookCampaign?.id ? (
                         <div>Facebook campaign: {setupResult.result.facebookCampaign.id}</div>
                       ) : null}
+                      {setupResult.result.facebookAd?.id ? (
+                        <div>Facebook ad: {setupResult.result.facebookAd.id}</div>
+                      ) : null}
+                      {setupResult.result.facebookCreative?.id ? (
+                        <div>Facebook creative: {setupResult.result.facebookCreative.id}</div>
+                      ) : null}
                       {setupResult.result.strategisCampaigns?.[0]?.id ? (
                         <div>Strategis campaign: {setupResult.result.strategisCampaigns[0].id}</div>
                       ) : null}
                       {setupResult.mode === "both" ? (
                         <div>
                           Mapping: {setupResult.result.mappingStored ? setupResult.result.mappingId || "stored" : "not stored"}
+                        </div>
+                      ) : null}
+                      {setupResult.result.verification?.strategis ? (
+                        <div>
+                          Strategis verification: {setupResult.result.verification.strategis.ready ? "passed" : "needs review"}
+                        </div>
+                      ) : null}
+                      {setupResult.result.verification?.facebook ? (
+                        <div>
+                          Facebook verification: {setupResult.result.verification.facebook.ready ? "passed" : "needs review"}
                         </div>
                       ) : null}
                     </div>
@@ -1670,11 +3557,264 @@ export default function BenLaunchWorkbench() {
                         ))}
                       </ul>
                     ) : null}
+                    {setupResult.result.verification ? (
+                      <div className="mt-3 space-y-2 text-xs text-[#0a7d2e] dark:text-[#5dd680]">
+                        {setupResult.result.verification.strategis?.checks?.length ? (
+                          <div>
+                            <div className="font-medium">Strategis checks</div>
+                            <ul className="mt-1 space-y-1">
+                              {setupResult.result.verification.strategis.checks.map((check) => (
+                                <li key={`strategis-${check.label}`}>• {check.label}: {check.ok ? "ok" : "failed"}{check.detail ? ` — ${check.detail}` : ""}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                        {setupResult.result.verification.facebook?.checks?.length ? (
+                          <div>
+                            <div className="font-medium">Facebook checks</div>
+                            <ul className="mt-1 space-y-1">
+                              {setupResult.result.verification.facebook.checks.map((check) => (
+                                <li key={`facebook-${check.label}`}>• {check.label}: {check.ok ? "ok" : "failed"}{check.detail ? ` — ${check.detail}` : ""}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
+
+                <div className="rounded-xl bg-neutral-100/80 dark:bg-neutral-800/60 px-3 py-3">
+                  <div className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+                    Recent launches
+                  </div>
+                  {launchHistory?.items?.length ? (
+                    <div className="mt-2 space-y-2">
+                      {launchHistory.items.slice(0, 6).map((item) => (
+                        <div key={item.request_id} className="rounded-lg bg-white/80 dark:bg-neutral-900/70 px-3 py-2 text-xs text-neutral-600 dark:text-neutral-400">
+                          <div className="font-medium text-neutral-900 dark:text-neutral-50">{item.campaign_name}</div>
+                          <div className="mt-1">{item.category}</div>
+                          <div className="mt-1">
+                            {item.request_status || item.campaign_plan_status}
+                            {item.request_step ? ` · ${item.request_step}` : ""}
+                          </div>
+                          <div className="mt-1">
+                            Strategis {item.strategis_campaign_ids?.length || 0} · FB campaign {item.facebook_campaign_id ? "yes" : "no"} · FB ads {item.facebook_ad_ids?.length || 0}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
+                      No persisted launch history yet.
+                    </div>
+                  )}
+                </div>
               </div>
+              )}
             </aside>
           </div>
+
+          {entityPicker ? (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/45 px-6">
+              <div className={`${cardClass} w-full max-w-3xl p-6`}>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-xs font-medium uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
+                      Search all options
+                    </div>
+                    <div className="mt-1 text-lg font-semibold text-neutral-900 dark:text-neutral-50">
+                      {entityPicker.title}
+                    </div>
+                    <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+                      Search across the full {entityPicker.kind === "redirect" ? "redirect" : entityPicker.kind === "page" ? "page" : "ad account"} set, not just the historical recommendations for this site.
+                    </div>
+                  </div>
+                  <button type="button" onClick={closeEntityPicker} className={buttonGhost}>
+                    Close
+                  </button>
+                </div>
+
+                <div className="mt-4">
+                  <input
+                    value={entityPickerQuery}
+                    onChange={(e) => setEntityPickerQuery(e.target.value)}
+                    placeholder={entityPicker.placeholder}
+                    className={inputClass}
+                    autoFocus
+                  />
+                </div>
+
+                <div className="mt-4 max-h-[28rem] overflow-auto rounded-xl border border-black/[0.06] dark:border-white/[0.10]">
+                  {filteredEntityPickerOptions.length ? (
+                    <div className="divide-y divide-black/[0.06] dark:divide-white/[0.10]">
+                      {filteredEntityPickerOptions.map((option) => {
+                        const isSelected =
+                          (entityPicker.kind === "redirect" && option.value === form.redirectDomain) ||
+                          (entityPicker.kind === "page" && option.value === form.pageId) ||
+                          (entityPicker.kind === "adAccount" && option.value === form.adAccountId);
+                        return (
+                          <button
+                            key={`${entityPicker.kind}-${option.value}`}
+                            type="button"
+                            onClick={() => {
+                              setForm((current) => ({
+                                ...current,
+                                ...(entityPicker.kind === "redirect" ? { redirectDomain: option.value } : {}),
+                                ...(entityPicker.kind === "page" ? { pageId: option.value } : {}),
+                                ...(entityPicker.kind === "adAccount" ? { adAccountId: option.value } : {}),
+                              }));
+                              closeEntityPicker();
+                            }}
+                            className={`flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition ${
+                              isSelected
+                                ? "bg-neutral-100 dark:bg-neutral-800"
+                                : "hover:bg-neutral-50 dark:hover:bg-neutral-900"
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold text-neutral-900 dark:text-neutral-50">
+                                {option.label}
+                              </div>
+                              <div className="mt-1 flex flex-wrap gap-2 text-xs text-neutral-500 dark:text-neutral-400">
+                                <span className={pillClass}>{optionSourceLabel(option)}</span>
+                                {option.support.count > 0 ? (
+                                  <span className={pillClass}>
+                                    {option.support.count} {buyerLabel} campaign{option.support.count === 1 ? "" : "s"}
+                                  </span>
+                                ) : null}
+                              </div>
+                              {option.sampleCampaignNames.length ? (
+                                <div className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+                                  Seen on: {option.sampleCampaignNames.slice(0, 2).join(" · ")}
+                                  {option.sampleCampaignNames.length > 2 ? ` +${option.sampleCampaignNames.length - 2} more` : ""}
+                                </div>
+                              ) : null}
+                            </div>
+                            {isSelected ? (
+                              <span className={pillClass}>Selected</span>
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="px-4 py-6 text-sm text-neutral-500 dark:text-neutral-400">
+                      No matches for this search.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {confirmMode && confirmPreview ? (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/45 px-6">
+              <div className={`${cardClass} w-full max-w-3xl p-6`}>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-xs font-medium uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
+                      Confirm launch
+                    </div>
+                    <div className="mt-1 text-lg font-semibold text-neutral-900 dark:text-neutral-50">
+                      {confirmMode === "strategis"
+                        ? "Setup in Strategis"
+                        : confirmMode === "facebook"
+                          ? "Setup in Facebook"
+                          : "Setup in Both"}
+                    </div>
+                    <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+                      This will perform real writes. Facebook clone launches stay paused by default.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirmMode(null);
+                      setConfirmPreview(null);
+                      setConfirmError(null);
+                    }}
+                    className={buttonGhost}
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <div className="rounded-xl bg-neutral-100/80 dark:bg-neutral-800/60 px-4 py-3 text-sm">
+                    <div className="font-semibold text-neutral-900 dark:text-neutral-50">Launch summary</div>
+                    <div className="mt-2 space-y-1 text-xs text-neutral-600 dark:text-neutral-400">
+                      <div>Buyer: {confirmPreview.preview.buyer}</div>
+                      <div>Category: {confirmPreview.preview.category}</div>
+                      <div>Campaign: {confirmPreview.preview.strategis.campaignName || "Will derive on create"}</div>
+                      <div>Article: {confirmPreview.preview.strategis.article}</div>
+                      <div>Source FB campaign: {confirmPreview.preview.facebook.sourceFacebookCampaignId || "N/A"}</div>
+                      <div>Creative mode: {confirmPreview.preview.facebook.creativeMode}</div>
+                      <div>{facebookDestinationLabel(confirmPreview)}: {facebookDestinationValue(confirmPreview)}</div>
+                    </div>
+                  </div>
+                  <div className="rounded-xl bg-neutral-100/80 dark:bg-neutral-800/60 px-4 py-3 text-sm">
+                    <div className="font-semibold text-neutral-900 dark:text-neutral-50">Risk checks</div>
+                    <div className="mt-2 space-y-1 text-xs text-neutral-600 dark:text-neutral-400">
+                      <div>Duplicate risk: {confirmPreview.duplicateRisk.level}</div>
+                      <div>History storage: {confirmPreview.runtime.launchHistoryAvailable ? "available" : "unavailable in this runtime"}</div>
+                      {confirmPreview.duplicateRisk.notes.map((note, index) => (
+                        <div key={`${note}-${index}`} className="text-amber-700 dark:text-amber-300">{note}</div>
+                      ))}
+                      {confirmPreview.runtime.notes.map((note, index) => (
+                        <div key={`${note}-${index}`} className="text-amber-700 dark:text-amber-300">{note}</div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-xl bg-neutral-100/80 dark:bg-neutral-800/60 px-4 py-3">
+                  <div className="font-semibold text-neutral-900 dark:text-neutral-50">Exact operations</div>
+                  <div className="mt-2 space-y-2 text-xs text-neutral-600 dark:text-neutral-400">
+                    {confirmPreview.operations.map((op) => (
+                      <div key={`${op.system}-${op.step}`} className="rounded-lg bg-white/80 dark:bg-neutral-900/70 px-3 py-2">
+                        <div className="font-medium text-neutral-900 dark:text-neutral-50">{op.system} · {op.method} · {op.step}</div>
+                        <div className="mt-1 font-mono text-[11px] break-all">{op.target}</div>
+                        <div className="mt-1">{op.purpose}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {confirmError ? (
+                  <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-200">
+                    {confirmError}
+                  </div>
+                ) : null}
+
+                <div className="mt-5 flex flex-wrap justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirmMode(null);
+                      setConfirmPreview(null);
+                      setConfirmError(null);
+                    }}
+                    className={buttonOutline}
+                    disabled={runningSetup !== null}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void confirmAndRunSetup()}
+                    className={buttonPrimary}
+                    disabled={runningSetup !== null}
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      {runningSetup === confirmMode ? <ButtonSpinner /> : null}
+                      <span>{runningSetup === confirmMode ? "Launching…" : "Confirm and launch"}</span>
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           {/* Footer — collapsed JSON shells */}
           <details className="group">
