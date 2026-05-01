@@ -2235,7 +2235,8 @@ export default function BenLaunchWorkbench() {
                     </div>
 
                     <div className={sectionLabel}>Launch preset</div>
-                    <div className={`mt-3 grid gap-4 ${launchMode === "clone" ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" : "lg:grid-cols-1"}`}>
+                    <div className="mt-3 grid grid-cols-[minmax(0,1fr)] gap-4">
+                      {launchMode !== "clone" ? (
                       <div>
                         <label className={fieldLabel}>Category preset</label>
                         <input
@@ -2265,6 +2266,7 @@ export default function BenLaunchWorkbench() {
                           emptyLabel={`No category presets match “${query.trim()}”.`}
                         />
                       </div>
+                      ) : null}
 
                       {launchMode === "clone" ? (
                       <div>
