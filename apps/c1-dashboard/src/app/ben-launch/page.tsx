@@ -2149,22 +2149,15 @@ export default function BenLaunchWorkbench() {
       {/* Dashboard pane */}
       <main className="min-w-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[1180px] space-y-12 px-4 py-8 sm:px-6 sm:py-12">
-          {/* Header — flat text on page bg, mirrors the form/rail grid below */}
-          <header className="grid grid-cols-1 items-end gap-x-8 gap-y-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-            <div>
+          {/* Top bar — Liftoff badge + (optional buyer switcher) on the left,
+              theme + log out + assistant on the right. Thin, single row. */}
+          <header className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
               <div className="inline-flex h-6 items-center rounded-md bg-[#0071e3]/12 dark:bg-[#0071e3]/[0.20] px-2 text-[11px] font-semibold uppercase tracking-wider text-[#0071e3] dark:text-[#4a9fff] ring-1 ring-inset ring-[#0071e3]/15 dark:ring-[#0071e3]/30">
                 Liftoff
               </div>
-              <p className="mt-3 text-xs text-neutral-600 dark:text-neutral-400">
-                {buyerLabel} · {catalog.profiles.length} presets ·{" "}
-                {Object.keys(catalog.lockedDefaults).length} locked defaults ·{" "}
-                {catalog.manualFields.length} manual fields · {readyCount}/5 ready
-              </p>
-            </div>
-            <div className="flex min-w-0 flex-col items-stretch gap-3">
-              <div className="min-w-0">
-                <label className={fieldLabel}>{canSwitchBuyer ? "Buyer profile" : "Signed in as"}</label>
-                {canSwitchBuyer ? (
+              {canSwitchBuyer ? (
+                <div className="min-w-[220px]">
                   <Dropdown
                     value={buyer}
                     onChange={(nextBuyer) => setBuyer(nextBuyer)}
@@ -2175,44 +2168,37 @@ export default function BenLaunchWorkbench() {
                       label: option.label,
                     }))}
                   />
-                ) : (
-                  <div className="min-h-[76px] rounded-lg bg-neutral-100 px-4 py-3 text-sm text-neutral-800 dark:bg-neutral-800 dark:text-neutral-100">
-                    <div className="text-base font-medium leading-tight">
-                      {sessionInfo?.displayName || buyerLabel}
-                    </div>
-                    <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-                      {buyerLabel} buyer scope
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <ThemeToggle />
-                <button type="button" onClick={() => void handleLogout()} className={buttonGhost}>
-                  Log out
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setChatOpen((v) => !v)}
-                  className={buttonGhost}
-                  aria-label="Toggle assistant"
-                >
-                  {chatOpen ? "Hide assistant" : "Show assistant"}
-                </button>
-              </div>
+                </div>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <ThemeToggle />
+              <button type="button" onClick={() => void handleLogout()} className={buttonGhost}>
+                Log out
+              </button>
+              <button
+                type="button"
+                onClick={() => setChatOpen((v) => !v)}
+                className={buttonGhost}
+                aria-label="Toggle assistant"
+              >
+                {chatOpen ? "Hide assistant" : "Show assistant"}
+              </button>
             </div>
           </header>
 
-          {Object.entries(catalog.lockedDefaults).length > 0 ? (
+          {Object.entries(catalog.lockedDefaults).filter(([key]) => key !== "buyer").length > 0 ? (
             <div className="flex flex-wrap items-center gap-2 xl:max-w-[calc(100%-352px)]">
               <span className="text-xs font-medium uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
                 Locked defaults
               </span>
-              {Object.entries(catalog.lockedDefaults).map(([key, value]) => (
-                <span key={key} className={pillClass}>
-                  {key}: {value}
-                </span>
-              ))}
+              {Object.entries(catalog.lockedDefaults)
+                .filter(([key]) => key !== "buyer")
+                .map(([key, value]) => (
+                  <span key={key} className={pillClass}>
+                    {key}: {value}
+                  </span>
+                ))}
             </div>
           ) : null}
 
@@ -2225,7 +2211,7 @@ export default function BenLaunchWorkbench() {
                   {/* Preset row */}
                   <div>
                     <div className={sectionLabel}>Start mode</div>
-                    <div className="mt-3 grid gap-3 lg:grid-cols-3">
+                    <div className="mt-3 inline-flex max-w-full flex-wrap items-center gap-1 rounded-full bg-neutral-100 p-1 dark:bg-neutral-800">
                       {LAUNCH_MODE_OPTIONS.map((option) => {
                         const active = launchMode === option.value;
                         return (
@@ -2233,22 +2219,19 @@ export default function BenLaunchWorkbench() {
                             key={option.value}
                             type="button"
                             onClick={() => setLaunchMode(option.value)}
-                            className={`rounded-[20px] border px-4 py-4 text-left transition ${
+                            className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
                               active
-                                ? "border-[#0071e3]/30 bg-[#0071e3]/[0.08] dark:border-[#0a84ff]/40 dark:bg-[#0a84ff]/[0.12]"
-                                : "border-black/[0.08] bg-white hover:bg-black/[0.02] dark:border-white/[0.10] dark:bg-neutral-900/60 dark:hover:bg-white/[0.04]"
+                                ? "bg-white text-neutral-900 shadow-sm dark:bg-neutral-900 dark:text-neutral-50"
+                                : "text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
                             }`}
                           >
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="font-semibold text-neutral-900 dark:text-neutral-50">{option.label}</div>
-                              {active ? <span className={pillClass}>Active</span> : null}
-                            </div>
-                            <div className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
-                              {option.description}
-                            </div>
+                            {option.label}
                           </button>
                         );
                       })}
+                    </div>
+                    <div className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+                      {LAUNCH_MODE_OPTIONS.find((option) => option.value === launchMode)?.description}
                     </div>
 
                     <div className={sectionLabel}>Launch preset</div>
