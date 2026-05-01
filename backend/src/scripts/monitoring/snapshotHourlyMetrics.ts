@@ -170,10 +170,29 @@ async function runSnapshot(): Promise<void> {
         conversions,
         rpc
       )
-      WITH hourly AS (
+      WITH ci_dedup AS (
+        -- campaign_index can have multiple rows per campaign per day (different snapshot sources).
+        -- We dedupe to a single "best" row per campaign_id for that date to avoid blowing up joins.
+        SELECT *
+        FROM (
+          SELECT
+            *,
+            row_number() OVER (
+              PARTITION BY date, campaign_id
+              ORDER BY updated_at DESC, snapshot_source DESC
+            ) AS rn
+          FROM campaign_index
+          WHERE date >= DATE '${trailingStartUtc}'
+            AND date <= DATE '${trailingEndUtc}'
+        )
+        WHERE rn = 1
+      ),
+      hourly AS (
         SELECT
           shm.date,
-          shm.campaign_id AS fb_campaign_id,
+          -- NOTE: ingestSessionMetrics stores Strategis campaign IDs in session_hourly_metrics.campaign_id
+          -- (from S1 hourly endpoint's strategisCampaignId dimension).
+          shm.campaign_id AS campaign_id,
           shm.click_hour,
           shm.sessions,
           shm.revenue,
@@ -193,8 +212,8 @@ async function runSnapshot(): Promise<void> {
           -- UTC timestamp: date + click_hour
           shm.date + shm.click_hour * INTERVAL 1 HOUR AS ts_utc
         FROM session_hourly_metrics shm
-        LEFT JOIN campaign_index ci
-          ON ci.facebook_campaign_id = shm.campaign_id
+        LEFT JOIN ci_dedup ci
+          ON ci.campaign_id = shm.campaign_id
          AND ci.date = shm.date
         WHERE shm.media_source IS NOT NULL
           AND shm.date >= DATE '${trailingStartUtc}'
@@ -234,7 +253,7 @@ async function runSnapshot(): Promise<void> {
         COALESCE(f.lane, 'UNKNOWN') AS lane,
         COALESCE(f.category, 'UNKNOWN') AS category,
         COALESCE(f.level, 'UNKNOWN') AS level,
-        COALESCE(f.strategis_campaign_id, f.fb_campaign_id) AS campaign_id,
+        COALESCE(f.strategis_campaign_id, f.campaign_id) AS campaign_id,
         f.campaign_name,
         COALESCE(f.adset_id, 'UNKNOWN') AS adset_id,
         f.adset_name,
@@ -262,7 +281,7 @@ async function runSnapshot(): Promise<void> {
         COALESCE(f.lane, 'UNKNOWN'),
         COALESCE(f.category, 'UNKNOWN'),
         COALESCE(f.level, 'UNKNOWN'),
-        COALESCE(f.strategis_campaign_id, f.fb_campaign_id),
+        COALESCE(f.strategis_campaign_id, f.campaign_id),
         f.campaign_name,
         COALESCE(f.adset_id, 'UNKNOWN'),
         f.adset_name

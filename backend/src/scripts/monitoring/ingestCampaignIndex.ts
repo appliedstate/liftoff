@@ -91,6 +91,20 @@ function pick(row: Record<string, any>, keys: string[]): any {
   return null;
 }
 
+function pickOwner(row: Record<string, any>): any {
+  // Upstream sources are inconsistent: some use "owner", others use "buyer".
+  // We treat buyer as owner for launch attribution.
+  return pick(row, [
+    'owner',
+    'buyer',
+    'Buyer',
+    'buyer_name',
+    'buyerName',
+    'lane_owner',
+    'laneOwner',
+  ]);
+}
+
 function pickNumber(row: Record<string, any>, keys: string[]): number | null {
   const raw = pick(row, keys);
   if (raw === null || raw === undefined || raw === '') return null;
@@ -113,7 +127,7 @@ function buildRecordFromSnapshotRow(
     campaignName: pick(row, ['campaign_name', 'name']),
     adsetId: pick(row, ['adset_id', 'ad_set_id']),
     adsetName: pick(row, ['adset_name', 'ad_set_name']),
-    owner: pick(row, ['owner']),
+    owner: pickOwner(row),
     lane: pick(row, ['lane']),
     category: pick(row, ['category']),
     mediaSource: pick(row, ['source', 'traffic_source', 'media_source']),
@@ -389,7 +403,7 @@ class CampaignAggregator {
         }
       }
       
-      this.setIfEmpty(agg, 'owner', pick(row, ['owner']));
+      this.setIfEmpty(agg, 'owner', pickOwner(row));
       this.setIfEmpty(agg, 'lane', pick(row, ['lane']));
       this.setIfEmpty(agg, 'category', pick(row, ['category']));
       this.setIfEmpty(agg, 'mediaSource', 'facebook');
@@ -510,7 +524,7 @@ class CampaignAggregator {
         }
       }
       
-      this.setIfEmpty(agg, 'owner', pick(row, ['owner']));
+      this.setIfEmpty(agg, 'owner', pickOwner(row));
       this.setIfEmpty(agg, 'lane', pick(row, ['lane']));
       this.setIfEmpty(agg, 'category', pick(row, ['category']));
       this.setIfEmpty(agg, 'mediaSource', 'facebook');
@@ -549,7 +563,7 @@ class CampaignAggregator {
       if (!agg) continue;
       // Extract metadata fields that S1 daily includes (buyer, category, networkAccountId, etc.)
       // buyer field is included when dimensions includes 'buyer' - it represents lane/owner
-      const buyer = pick(row, ['buyer', 'owner']);
+      const buyer = pickOwner(row);
       if (buyer) {
         this.setIfEmpty(agg, 'owner', buyer);
         this.setIfEmpty(agg, 'lane', buyer); // buyer is the lane field

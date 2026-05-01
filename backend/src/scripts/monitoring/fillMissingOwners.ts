@@ -6,7 +6,7 @@
  */
 
 import 'dotenv/config';
-import { allRows, createMonitoringConnection, closeConnection, runSql, sqlString } from '../../lib/monitoringDb';
+import { allRows, createMonitoringConnection, closeConnection, runSql } from '../../lib/monitoringDb';
 import { initMonitoringSchema } from '../../lib/monitoringDb';
 
 async function main() {
@@ -16,73 +16,93 @@ async function main() {
     await initMonitoringSchema(conn);
     
     console.log('\n# Filling Missing Owner Information\n');
-    
-    // Find ALL campaigns in campaign_launches with UNKNOWN or NULL owner
-    const campaignsWithUnknownOwner = await allRows(
+
+    // Stats before
+    const before = await allRows<any>(
       conn,
-      `SELECT campaign_id, first_seen_date, owner
-      FROM campaign_launches
-      WHERE owner IS NULL OR owner = 'UNKNOWN' OR owner = ''
-      ORDER BY first_seen_date DESC`
+      `SELECT
+        COUNT(*) as total,
+        COUNT(CASE WHEN owner IS NULL OR owner = 'UNKNOWN' OR owner = '' THEN 1 END) as unknown_owner,
+        COUNT(CASE WHEN owner IS NOT NULL AND owner != '' AND owner != 'UNKNOWN' THEN 1 END) as known_owner
+      FROM campaign_launches`
     );
-    
-    console.log(`Found ${campaignsWithUnknownOwner.length} campaigns with missing owner info\n`);
-    
-    if (campaignsWithUnknownOwner.length === 0) {
-      console.log('No campaigns with missing owner information found.\n');
-      return;
-    }
-    
-    // Check campaign_index for these campaigns across ALL dates to find owner info
-    // Process in batches to avoid memory issues
-    const batchSize = 100;
-    let updated = 0;
-    let found = 0;
-    let processed = 0;
-    
-    for (let i = 0; i < campaignsWithUnknownOwner.length; i += batchSize) {
-      const batch = campaignsWithUnknownOwner.slice(i, i + batchSize);
-      processed += batch.length;
-      
-      console.log(`Processing batch ${Math.floor(i / batchSize) + 1} (${processed}/${campaignsWithUnknownOwner.length})...`);
-      
-      for (const campaign of batch) {
-        const campaignId = campaign.campaign_id;
-        
-        // Look for this campaign in campaign_index with owner info
-        const withOwner = await allRows(
-          conn,
-          `SELECT DISTINCT owner, date
+    const beforeStats = before[0] || {};
+    console.log(`Before: known_owner=${Number(beforeStats.known_owner || 0)} unknown_owner=${Number(beforeStats.unknown_owner || 0)} total=${Number(beforeStats.total || 0)}`);
+
+    // Bulk-fill owner/lane/category from campaign_index using the most recent known value per campaign.
+    // This avoids N+1 queries and is much faster on larger datasets.
+    const updateSql = `
+      WITH owner_best AS (
+        SELECT
+          campaign_id,
+          arg_max(owner_candidate, date) AS owner
+        FROM (
+          SELECT
+            campaign_id,
+            date,
+            COALESCE(
+              NULLIF(owner, ''),
+              NULLIF(trim(both '"' from CAST(json_extract(raw_payload, '$.owner') AS VARCHAR)), ''),
+              NULLIF(trim(both '"' from CAST(json_extract(raw_payload, '$.buyer') AS VARCHAR)), ''),
+              NULLIF(trim(both '"' from CAST(json_extract(raw_payload, '$.Buyer') AS VARCHAR)), ''),
+              NULLIF(trim(both '"' from CAST(json_extract(raw_payload, '$.buyer_name') AS VARCHAR)), ''),
+              NULLIF(trim(both '"' from CAST(json_extract(raw_payload, '$.buyerName') AS VARCHAR)), '')
+            ) AS owner_candidate
           FROM campaign_index
-          WHERE campaign_id = ${sqlString(campaignId)}
-            AND owner IS NOT NULL
-            AND owner != ''
-            AND owner != 'UNKNOWN'
-          ORDER BY date DESC
-          LIMIT 1`
+        ) t
+        WHERE owner_candidate IS NOT NULL AND owner_candidate != '' AND owner_candidate != 'UNKNOWN'
+        GROUP BY campaign_id
+      ),
+      lane_best AS (
+        SELECT
+          campaign_id,
+          arg_max(lane, date) AS lane
+        FROM campaign_index
+        WHERE lane IS NOT NULL AND lane != '' AND lane != 'UNKNOWN'
+        GROUP BY campaign_id
+      ),
+      category_best AS (
+        SELECT
+          campaign_id,
+          arg_max(category, date) AS category
+        FROM campaign_index
+        WHERE category IS NOT NULL AND category != '' AND category != 'UNKNOWN'
+        GROUP BY campaign_id
+      ),
+      best AS (
+        SELECT
+          COALESCE(o.campaign_id, l.campaign_id, c.campaign_id) AS campaign_id,
+          o.owner AS owner,
+          l.lane AS lane,
+          c.category AS category
+        FROM owner_best o
+        FULL OUTER JOIN lane_best l USING (campaign_id)
+        FULL OUTER JOIN category_best c USING (campaign_id)
+      )
+      UPDATE campaign_launches cl
+      SET
+        owner = CASE
+          WHEN cl.owner IS NULL OR cl.owner = '' OR cl.owner = 'UNKNOWN' THEN best.owner
+          ELSE cl.owner
+        END,
+        lane = CASE
+          WHEN cl.lane IS NULL OR cl.lane = '' OR cl.lane = 'UNKNOWN' THEN best.lane
+          ELSE cl.lane
+        END,
+        category = CASE
+          WHEN cl.category IS NULL OR cl.category = '' OR cl.category = 'UNKNOWN' THEN best.category
+          ELSE cl.category
+        END
+      FROM best
+      WHERE cl.campaign_id = best.campaign_id
+        AND (
+          (cl.owner IS NULL OR cl.owner = '' OR cl.owner = 'UNKNOWN') OR
+          (cl.lane IS NULL OR cl.lane = '' OR cl.lane = 'UNKNOWN') OR
+          (cl.category IS NULL OR cl.category = '' OR cl.category = 'UNKNOWN')
         );
-        
-        if (withOwner.length > 0) {
-          const owner = withOwner[0].owner;
-          const foundDate = withOwner[0].date;
-          found++;
-          
-          console.log(`Found owner for ${campaignId.substring(0, 12)}: ${owner} (from ${foundDate})`);
-          
-          // Update campaign_launches
-          await runSql(
-            conn,
-            `UPDATE campaign_launches
-            SET owner = ${sqlString(owner)}
-            WHERE campaign_id = ${sqlString(campaignId)}`
-          );
-          updated++;
-        }
-      }
-    }
-    
-    console.log(`\nUpdated ${updated} campaigns with owner information`);
-    console.log(`Found owner info for ${found} out of ${campaignsWithUnknownOwner.length} checked\n`);
+    `;
+
+    await runSql(conn, updateSql);
     
     // Show summary
     const summary = await allRows(

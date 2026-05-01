@@ -32,57 +32,59 @@ async function main() {
   
   const tests: Array<{ name: string; test: () => Promise<any[]> }> = [
     // Test 1: Current implementation (baseline)
+    // NOTE: This now uses the cached campaign summary endpoint instead of the
+    // low-level Taboola proxy. Dimensions are intentionally minimal here – the
+    // Strategis backend owns the mapping to Taboola-supported dimensions.
     {
-      name: 'Current: dimension (singular)',
+      name: 'Current: cached campaign summary (no dimensions)',
       test: async () => {
         const params = {
           dateStart: date,
           dateEnd: date,
           organization: process.env.STRATEGIS_ORGANIZATION || 'Interlincx',
           adSource: process.env.STRATEGIS_AD_SOURCE || 'rsoc',
-          dimension: 'date-strategisCampaignId',
+          cached: 1,
         };
         const client = (api as any).client as StrategistClient;
-        const payload = await client.get('/api/taboola/report', params);
+        const payload = await client.get('/api/taboola/campaign-summary-report', params);
         return Array.isArray(payload) ? payload : payload?.data || payload?.rows || [];
       },
     },
     
-    // Test 2: Try dimensions (plural)
+    // Test 2: Explicit cached flag only (no adSource)
     {
-      name: 'Try: dimensions (plural)',
+      name: 'Try: cached=1 without adSource',
+      test: async () => {
+        const params = {
+          dateStart: date,
+          dateEnd: date,
+          organization: process.env.STRATEGIS_ORGANIZATION || 'Interlincx',
+          cached: 1,
+        };
+        const client = (api as any).client as StrategistClient;
+        const payload = await client.get('/api/taboola/campaign-summary-report', params);
+        return Array.isArray(payload) ? payload : payload?.data || payload?.rows || [];
+      },
+    },
+    
+    // Test 3: No cached flag (bypass cache – not recommended for production,
+    // but useful to compare behaviour if Strategis supports both modes)
+    {
+      name: 'Try: no cached flag (direct summary)',
       test: async () => {
         const params = {
           dateStart: date,
           dateEnd: date,
           organization: process.env.STRATEGIS_ORGANIZATION || 'Interlincx',
           adSource: process.env.STRATEGIS_AD_SOURCE || 'rsoc',
-          dimensions: 'date-strategisCampaignId', // plural
         };
         const client = (api as any).client as StrategistClient;
-        const payload = await client.get('/api/taboola/report', params);
+        const payload = await client.get('/api/taboola/campaign-summary-report', params);
         return Array.isArray(payload) ? payload : payload?.data || payload?.rows || [];
       },
     },
     
-    // Test 3: Without adSource
-    {
-      name: 'Try: without adSource',
-      test: async () => {
-        const params = {
-          dateStart: date,
-          dateEnd: date,
-          organization: process.env.STRATEGIS_ORGANIZATION || 'Interlincx',
-          dimension: 'date-strategisCampaignId',
-          // No adSource
-        };
-        const client = (api as any).client as StrategistClient;
-        const payload = await client.get('/api/taboola/report', params);
-        return Array.isArray(payload) ? payload : payload?.data || payload?.rows || [];
-      },
-    },
-    
-    // Test 4: With dbSource=ch (explicit ClickHouse)
+    // Test 4: With dbSource=ch (explicit ClickHouse), cached
     {
       name: 'Try: with dbSource=ch',
       test: async () => {
@@ -91,16 +93,16 @@ async function main() {
           dateEnd: date,
           organization: process.env.STRATEGIS_ORGANIZATION || 'Interlincx',
           adSource: process.env.STRATEGIS_AD_SOURCE || 'rsoc',
-          dimension: 'date-strategisCampaignId',
           dbSource: 'ch',
+          cached: 1,
         };
         const client = (api as any).client as StrategistClient;
-        const payload = await client.get('/api/taboola/report', params);
+        const payload = await client.get('/api/taboola/campaign-summary-report', params);
         return Array.isArray(payload) ? payload : payload?.data || payload?.rows || [];
       },
     },
     
-    // Test 5: With dbSource=level (LevelDB fallback)
+    // Test 5: With dbSource=level (LevelDB fallback), cached
     {
       name: 'Try: with dbSource=level',
       test: async () => {
@@ -109,11 +111,11 @@ async function main() {
           dateEnd: date,
           organization: process.env.STRATEGIS_ORGANIZATION || 'Interlincx',
           adSource: process.env.STRATEGIS_AD_SOURCE || 'rsoc',
-          dimension: 'date-strategisCampaignId',
           dbSource: 'level',
+          cached: 1,
         };
         const client = (api as any).client as StrategistClient;
-        const payload = await client.get('/api/taboola/report', params);
+        const payload = await client.get('/api/taboola/campaign-summary-report', params);
         return Array.isArray(payload) ? payload : payload?.data || payload?.rows || [];
       },
     },
@@ -128,7 +130,7 @@ async function main() {
           organization: process.env.STRATEGIS_ORGANIZATION || 'Interlincx',
         };
         const client = (api as any).client as StrategistClient;
-        const payload = await client.get('/api/taboola/report', params);
+        const payload = await client.get('/api/taboola/campaign-summary-report', params);
         return Array.isArray(payload) ? payload : payload?.data || payload?.rows || [];
       },
     },

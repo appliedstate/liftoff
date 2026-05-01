@@ -6,7 +6,7 @@
  */
 
 import 'dotenv/config';
-import { allRows, createMonitoringConnection, closeConnection } from '../../lib/monitoringDb';
+import { allRows, createMonitoringConnection, closeConnection, sqlString } from '../../lib/monitoringDb';
 import { initMonitoringSchema } from '../../lib/monitoringDb';
 
 function getPSTDate(date: Date): string {
@@ -72,7 +72,7 @@ async function main() {
     console.log(`Date Range: ${startDate} to ${endDate} (Last ${daysBack} days)\n`);
     
     // Build query with optional site filter
-    const siteCondition = site ? `AND ci.rsoc_site = '${site}'` : '';
+    const siteCondition = site ? `AND ci.rsoc_site = ${sqlString(site)}` : '';
     
     // Get campaign launches for this buyer-network combination (optionally filtered by site)
     const launches = await allRows(
@@ -97,10 +97,10 @@ async function main() {
       LEFT JOIN campaign_index ci 
         ON cl.campaign_id = ci.campaign_id 
         AND ci.date = cl.first_seen_date
-      WHERE cl.first_seen_date >= '${startDate}'
-        AND cl.first_seen_date <= '${endDate}'
-        AND cl.owner = '${buyer}'
-        AND cl.media_source = '${network}'
+      WHERE cl.first_seen_date >= ${sqlString(startDate)}
+        AND cl.first_seen_date <= ${sqlString(endDate)}
+        AND LOWER(cl.owner) = LOWER(${sqlString(buyer)})
+        AND cl.media_source = ${sqlString(network)}
         ${siteCondition}
       ORDER BY ci.rsoc_site, cl.first_seen_date DESC, cl.campaign_name`
     );
@@ -156,10 +156,10 @@ async function main() {
         LEFT JOIN campaign_index ci 
           ON cl.campaign_id = ci.campaign_id 
           AND ci.date = cl.first_seen_date
-        WHERE cl.first_seen_date >= '${startDate}'
-          AND cl.first_seen_date <= '${endDate}'
-          AND cl.owner = '${buyer}'
-          AND cl.media_source = '${network}'
+        WHERE cl.first_seen_date >= ${sqlString(startDate)}
+          AND cl.first_seen_date <= ${sqlString(endDate)}
+          AND LOWER(cl.owner) = LOWER(${sqlString(buyer)})
+          AND cl.media_source = ${sqlString(network)}
         GROUP BY ci.rsoc_site, ci.s1_google_account
         ORDER BY campaign_count DESC`
       );
