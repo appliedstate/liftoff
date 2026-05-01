@@ -812,6 +812,8 @@ export default function BenLaunchWorkbench() {
   const [copied, setCopied] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showAllForcekeys, setShowAllForcekeys] = useState(false);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [showAllRankedForcekeys, setShowAllRankedForcekeys] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [entityPicker, setEntityPicker] = useState<EntityPickerState>(null);
@@ -2772,21 +2774,68 @@ export default function BenLaunchWorkbench() {
                               <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
                                 Raw slot values remain editable below if you need to fine-tune the final injection.
                               </div>
-                              <div className="space-y-2">
+                              <div className="space-y-1">
                                 {form.forcekeys.slice(0, visibleCount).map((value, index) => (
-                                  <input
+                                  <div
                                     key={index}
-                                    value={value}
-                                    onChange={(e) =>
-                                      setForm((current) => {
-                                        const next = [...current.forcekeys];
-                                        next[index] = e.target.value;
-                                        return { ...current, forcekeys: next };
-                                      })
-                                    }
-                                    placeholder={`forcekey${String.fromCharCode(65 + index)}`}
-                                    className={inputClass}
-                                  />
+                                    draggable
+                                    onDragStart={() => setDragIndex(index)}
+                                    onDragOver={(e) => {
+                                      e.preventDefault();
+                                      setDragOverIndex(index);
+                                    }}
+                                    onDragEnd={() => {
+                                      if (
+                                        dragIndex !== null &&
+                                        dragOverIndex !== null &&
+                                        dragIndex !== dragOverIndex
+                                      ) {
+                                        setForm((current) => {
+                                          const next = [...current.forcekeys];
+                                          const [moved] = next.splice(dragIndex, 1);
+                                          next.splice(dragOverIndex, 0, moved);
+                                          return { ...current, forcekeys: next };
+                                        });
+                                      }
+                                      setDragIndex(null);
+                                      setDragOverIndex(null);
+                                    }}
+                                    className={`group flex items-center gap-2 rounded-lg transition ${
+                                      dragIndex === index
+                                        ? "opacity-40"
+                                        : dragOverIndex === index
+                                          ? "ring-2 ring-[#0071e3] rounded-lg"
+                                          : ""
+                                    }`}
+                                  >
+                                    <div className="flex shrink-0 cursor-grab items-center text-neutral-300 opacity-0 transition-opacity group-hover:opacity-100 dark:text-neutral-600 active:cursor-grabbing">
+                                      <svg
+                                        width="16"
+                                        height="16"
+                                        viewBox="0 0 16 16"
+                                        fill="currentColor"
+                                      >
+                                        <circle cx="6" cy="4" r="1.5" />
+                                        <circle cx="10" cy="4" r="1.5" />
+                                        <circle cx="6" cy="8" r="1.5" />
+                                        <circle cx="10" cy="8" r="1.5" />
+                                        <circle cx="6" cy="12" r="1.5" />
+                                        <circle cx="10" cy="12" r="1.5" />
+                                      </svg>
+                                    </div>
+                                    <input
+                                      value={value}
+                                      onChange={(e) =>
+                                        setForm((current) => {
+                                          const next = [...current.forcekeys];
+                                          next[index] = e.target.value;
+                                          return { ...current, forcekeys: next };
+                                        })
+                                      }
+                                      placeholder={`forcekey${String.fromCharCode(65 + index)}`}
+                                      className={inputClass}
+                                    />
+                                  </div>
                                 ))}
                               </div>
                               <div className="mt-2 flex items-center justify-between text-xs">
