@@ -14,8 +14,6 @@ import {
   buttonPrimary,
   buttonSecondary,
   cardClass,
-  currentValueCardEmpty,
-  currentValueCardSet,
   fieldLabel,
   inputClass,
   pickButtonActive,
@@ -486,6 +484,38 @@ function optionSourceLabel(option: LaunchAssociationOption) {
   if (option.source === "history") return option.support.count > 0 ? "history" : "recommended";
   if (option.source === "history_not_in_schema") return "history only";
   return "all options";
+}
+
+// Returns the option list with the currently-selected value pinned first
+// (synthesizing a stub option if the value isn't in the historical list).
+// Used so the user always sees their current selection as a green pill,
+// even if the value came from the broader catalog via the entity picker.
+function pinActiveFirst(
+  options: LaunchAssociationOption[],
+  activeValue: string,
+): LaunchAssociationOption[] {
+  if (!activeValue) return options;
+  const idx = options.findIndex((o) => o.value === activeValue);
+  if (idx === 0) return options;
+  if (idx > 0) {
+    const reordered = [...options];
+    const [moved] = reordered.splice(idx, 1);
+    reordered.unshift(moved);
+    return reordered;
+  }
+  // Active value isn't in the historical list — synthesize a stub so it
+  // still renders as a (green) pill in the row.
+  return [
+    {
+      value: activeValue,
+      label: activeValue,
+      support: { count: 0, pct: 0 },
+      sampleCampaignIds: [],
+      sampleCampaignNames: [],
+      source: "history" as const,
+    },
+    ...options,
+  ];
 }
 
 function currentOptionLabel(
@@ -2862,13 +2892,22 @@ export default function BenLaunchWorkbench() {
                                 ) : null}
                               </div>
 
-                              <div className="mt-3 grid grid-cols-[minmax(0,1fr)] gap-3 md:grid-cols-3">
-                                <div>
-                                  <div className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
-                                    Redirects
+                              <div className="mt-3 space-y-3">
+                                {/* Redirects */}
+                                <div className="min-w-0">
+                                  <div className="flex items-baseline justify-between gap-2">
+                                    <div className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
+                                      Redirects
+                                    </div>
+                                    <button type="button" onClick={() => openEntityPicker("redirect")} className="text-xs font-medium text-[#0071e3] hover:underline">
+                                      Show more
+                                    </button>
                                   </div>
                                   <div className="mt-2 flex flex-wrap gap-2">
-                                    {currentSiteAssociation.redirectDomains.slice(0, 4).map((option) => {
+                                    {pinActiveFirst(
+                                      currentSiteAssociation.redirectDomains,
+                                      form.redirectDomain,
+                                    ).slice(0, 5).map((option) => {
                                       const active = form.redirectDomain === option.value;
                                       return (
                                         <button
@@ -2883,12 +2922,22 @@ export default function BenLaunchWorkbench() {
                                     })}
                                   </div>
                                 </div>
-                                <div>
-                                  <div className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
-                                    Pages
+
+                                {/* Pages */}
+                                <div className="min-w-0">
+                                  <div className="flex items-baseline justify-between gap-2">
+                                    <div className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
+                                      Pages
+                                    </div>
+                                    <button type="button" onClick={() => openEntityPicker("page")} className="text-xs font-medium text-[#0071e3] hover:underline">
+                                      Show more
+                                    </button>
                                   </div>
                                   <div className="mt-2 flex flex-wrap gap-2">
-                                    {currentSiteAssociation.pages.length ? currentSiteAssociation.pages.slice(0, 4).map((option) => {
+                                    {currentSiteAssociation.pages.length || form.pageId ? pinActiveFirst(
+                                      currentSiteAssociation.pages,
+                                      form.pageId,
+                                    ).slice(0, 5).map((option) => {
                                       const active = form.pageId === option.value;
                                       return (
                                         <button
@@ -2903,28 +2952,33 @@ export default function BenLaunchWorkbench() {
                                       );
                                     }) : (
                                       <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                                        No page history found for this site in the current catalog.
+                                        No page history found for this site. Use Show more to search.
                                       </span>
                                     )}
                                   </div>
                                 </div>
-                                <div>
-                                  <div className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
-                                    Ad accounts
+
+                                {/* Ad accounts */}
+                                <div className="min-w-0">
+                                  <div className="flex items-baseline justify-between gap-2">
+                                    <div className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
+                                      Ad accounts
+                                    </div>
+                                    <button type="button" onClick={() => openEntityPicker("adAccount")} className="text-xs font-medium text-[#0071e3] hover:underline">
+                                      Show more
+                                    </button>
                                   </div>
                                   <div className="mt-2 flex flex-wrap gap-2">
-                                    {currentSiteAssociation.adAccounts.length ? currentSiteAssociation.adAccounts.slice(0, 4).map((option) => {
+                                    {currentSiteAssociation.adAccounts.length || form.adAccountId ? pinActiveFirst(
+                                      currentSiteAssociation.adAccounts,
+                                      form.adAccountId,
+                                    ).slice(0, 5).map((option) => {
                                       const active = form.adAccountId === option.value;
                                       return (
                                         <button
                                           key={`account-${option.value}`}
                                           type="button"
-                                          onClick={() =>
-                                            setForm((c) => ({
-                                              ...c,
-                                              adAccountId: option.value,
-                                            }))
-                                          }
+                                          onClick={() => setForm((c) => ({ ...c, adAccountId: option.value }))}
                                           className={active ? pickButtonActive : buttonGhost}
                                           title={option.label}
                                         >
@@ -2933,93 +2987,9 @@ export default function BenLaunchWorkbench() {
                                       );
                                     }) : (
                                       <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                                        No ad account history found for this site in the current catalog.
+                                        No ad account history found for this site. Use Show more to search.
                                       </span>
                                     )}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="mt-4 rounded-xl bg-white/70 px-3 py-3 dark:bg-neutral-900/60">
-                                <div className="text-xs font-medium uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
-                                  Use a different option
-                                </div>
-                                <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-                                  These dropdowns start with {buyerLabel}&rsquo;s historical associations for this site, then continue into the broader available option set.
-                                </div>
-                                <div className="mt-3 grid grid-cols-[minmax(0,1fr)] gap-2 md:grid-cols-3">
-                                  <div className={form.redirectDomain ? currentValueCardSet : currentValueCardEmpty}>
-                                    <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
-                                      Current redirect
-                                    </div>
-                                    <div className="mt-1 break-words text-sm font-semibold text-neutral-900 dark:text-neutral-50">
-                                      {currentRedirectLabel || "No redirect selected"}
-                                    </div>
-                                  </div>
-                                  <div className={form.pageId ? currentValueCardSet : currentValueCardEmpty}>
-                                    <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
-                                      Current page
-                                    </div>
-                                    <div className="mt-1 break-words text-sm font-semibold text-neutral-900 dark:text-neutral-50">
-                                      {currentPageLabel || "No page selected"}
-                                    </div>
-                                  </div>
-                                  <div className={form.adAccountId ? currentValueCardSet : currentValueCardEmpty}>
-                                    <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
-                                      Current ad account
-                                    </div>
-                                    <div className="mt-1 break-words text-sm font-semibold text-neutral-900 dark:text-neutral-50">
-                                      {currentAdAccountLabel || "No ad account selected"}
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="mt-3 grid grid-cols-[minmax(0,1fr)] gap-3 md:grid-cols-3">
-                                  <div className="min-w-0">
-                                    <div className="flex items-center justify-between gap-2">
-                                      <div className={fieldLabel}>Redirect domain</div>
-                                      <button type="button" onClick={() => openEntityPicker("redirect")} className="text-xs font-medium text-[#0071e3] hover:underline">
-                                        Show more
-                                      </button>
-                                    </div>
-                                    <Dropdown
-                                      value={form.redirectDomain}
-                                      onChange={(value) => setForm((c) => ({ ...c, redirectDomain: value }))}
-                                      options={redirectDropdownOptions}
-                                      placeholder="Select redirect domain"
-                                    />
-                                  </div>
-                                  <div className="min-w-0">
-                                    <div className="flex items-center justify-between gap-2">
-                                      <div className={fieldLabel}>Facebook page</div>
-                                      <button type="button" onClick={() => openEntityPicker("page")} className="text-xs font-medium text-[#0071e3] hover:underline">
-                                        Show more
-                                      </button>
-                                    </div>
-                                    <Dropdown
-                                      value={form.pageId}
-                                      onChange={(value) => setForm((c) => ({ ...c, pageId: value }))}
-                                      options={pageDropdownOptions}
-                                      placeholder="Select page"
-                                    />
-                                  </div>
-                                  <div className="min-w-0">
-                                    <div className="flex items-center justify-between gap-2">
-                                      <div className={fieldLabel}>Ad account</div>
-                                      <button type="button" onClick={() => openEntityPicker("adAccount")} className="text-xs font-medium text-[#0071e3] hover:underline">
-                                        Show more
-                                      </button>
-                                    </div>
-                                    <Dropdown
-                                      value={form.adAccountId}
-                                      onChange={(value) =>
-                                        setForm((c) => ({
-                                          ...c,
-                                          adAccountId: value,
-                                        }))
-                                      }
-                                      options={adAccountDropdownOptions}
-                                      placeholder="Select ad account"
-                                    />
                                   </div>
                                 </div>
                               </div>
