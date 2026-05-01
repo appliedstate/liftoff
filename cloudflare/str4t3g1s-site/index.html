@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>str4t3g1s | Meta Policy Harness</title>
+    <meta
+      name="description"
+      content="Meta ad policy command surface for scoring, rewriting, and auditing copy against deterministic gates."
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="sitebar">
+        <a class="brand" href="/" aria-label="str4t3g1s home">
+          <span class="brandmark"></span>
+          <span>STR4T3G1S</span>
+        </a>
+        <nav class="site-nav" aria-label="Primary">
+          <a href="#overview">Overview</a>
+          <a href="#stations">Stations</a>
+          <a href="#platform">Platform</a>
+          <a href="#console">Console</a>
+        </nav>
+        <div class="site-meta">
+          <span>Meta Policy Harness</span>
+          <span>API Live</span>
+        </div>
+      </header>
+
+      <section class="hero" id="overview">
+        <div class="hero-field" aria-hidden="true"></div>
+        <p class="eyebrow">Meta Policy Harness</p>
+        <h1>Command &amp; Control</h1>
+      </section>
+
+      <section class="intro-grid">
+        <div class="section-label">Meta Policy Command Layer</div>
+        <div class="intro-copy">
+          <p>
+            STR4T3G1S turns ad copy review into a deterministic operating system. The harness scores black-risk
+            language, rewrites toward stronger grey territory, and keeps every generation boxed inside explicit gates.
+          </p>
+          <p>
+            It is built for buyers who need persuasive copy, fast feedback, and clean API access without drifting into
+            asset-ban or account-ban territory.
+          </p>
+        </div>
+      </section>
+
+      <section class="station-section" id="stations">
+        <h2>Station Chain</h2>
+        <div class="station-grid">
+          <article class="station-card">
+            <div class="station-number">01</div>
+            <h3>Boundary Judge</h3>
+            <p>Deterministic scoring across sensitive attributes, medical hype, vulnerability framing, and combo risk.</p>
+          </article>
+          <article class="station-card">
+            <div class="station-number">02</div>
+            <h3>Rewrite Engine</h3>
+            <p>Halbert-informed copy generation constrained by risk triggers, supported claims, and landing-page congruence.</p>
+          </article>
+          <article class="station-card">
+            <div class="station-number">03</div>
+            <h3>Congruence Gate</h3>
+            <p>Re-scores every candidate, rejects unsupported claims, and only passes variants that stay inside the target band.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="platform-section" id="platform">
+        <h2>Battle Management Platform</h2>
+        <div class="platform-grid">
+          <div class="platform-visual">
+            <div class="visual-frame">
+              <div class="visual-label">LIVE ROUTE / API.STR4T3G1S.COM</div>
+              <div class="visual-network">
+                <span class="node node-a"></span>
+                <span class="node node-b"></span>
+                <span class="node node-c"></span>
+                <span class="node node-d"></span>
+                <span class="node node-e"></span>
+                <span class="node node-f"></span>
+                <span class="node node-g"></span>
+                <span class="line line-1"></span>
+                <span class="line line-2"></span>
+                <span class="line line-3"></span>
+                <span class="line line-4"></span>
+                <span class="line line-5"></span>
+                <span class="line line-6"></span>
+                <span class="line line-7"></span>
+              </div>
+              <div class="visual-footer">
+                <span>judge</span>
+                <span>rewrite</span>
+                <span>rank</span>
+              </div>
+            </div>
+          </div>
+          <div class="platform-list">
+            <article class="platform-row">
+              <div class="row-number">01</div>
+              <h3>Built for Policy at Scale</h3>
+              <p>The judge applies fixed risk surfaces and combo penalties so review does not drift with prompt mood.</p>
+            </article>
+            <article class="platform-row">
+              <div class="row-number">02</div>
+              <h3>Push Toward Strong Grey</h3>
+              <p>The writer starts from pain, motive, and angle, then rewrites toward attention without slipping into black territory.</p>
+            </article>
+            <article class="platform-row">
+              <div class="row-number">03</div>
+              <h3>Keep Landing Pages Honest</h3>
+              <p>Congruence checks force the ad to stay inside what the article can actually support, line by line.</p>
+            </article>
+            <article class="platform-row">
+              <div class="row-number">04</div>
+              <h3>Expose One Clean API Surface</h3>
+              <p>Your teammate can hit the same production path used below and get scoring, rewrite options, and acceptance state back.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="console-section" id="console">
+        <div class="console-head">
+          <div>
+            <p class="eyebrow">Production Console</p>
+            <h2>Live Harness Interface</h2>
+          </div>
+          <div class="endpoint-chip">
+            <span>Active Endpoint</span>
+            <code>/api/meta-policy/run</code>
+          </div>
+        </div>
+
+        <div class="console-grid">
+          <section class="console-panel">
+            <div class="field">
+              <label for="apiKey">Partner API key</label>
+              <input id="apiKey" type="password" placeholder="Paste bearer key" />
+            </div>
+            <div class="field">
+              <label for="payload">Meta policy payload</label>
+              <textarea id="payload" spellcheck="false"></textarea>
+            </div>
+            <div class="actions">
+              <button id="healthCheck" type="button">Check Health</button>
+              <button id="runHarness" type="button">Run Harness</button>
+            </div>
+            <p id="status" class="status">Ready.</p>
+          </section>
+
+          <section class="response-panel">
+            <div class="response-head">
+              <p class="eyebrow">Response Surface</p>
+              <p>Raw production output for scoring, rewrite, and ranking inspection.</p>
+            </div>
+            <pre id="output">{}</pre>
+          </section>
+        </div>
+      </section>
+    </main>
+    <script src="/app.js" defer></script>
+  </body>
+</html>

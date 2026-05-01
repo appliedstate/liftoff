@@ -1,0 +1,14 @@
+api.str4t3g1s.com {
+  encode zstd gzip
+
+  @preflight method OPTIONS
+  handle @preflight {
+    header Access-Control-Allow-Origin "*"
+    header Access-Control-Allow-Methods "GET, POST, OPTIONS"
+    header Access-Control-Allow-Headers "Authorization, Content-Type"
+    header Access-Control-Max-Age "86400"
+    respond "" 204
+  }
+
+  reverse_proxy 127.0.0.1:3010
+}

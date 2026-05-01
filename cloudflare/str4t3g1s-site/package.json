@@ -1,0 +1,14 @@
+{
+  "name": "str4t3g1s-site",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Cloudflare Pages site and edge gateway for the Meta policy harness.",
+  "scripts": {
+    "serve": "python3 -m http.server 8008 --directory .",
+    "pages:create": "wrangler pages project create str4t3g1s-site --production-branch main",
+    "pages:deploy": "wrangler pages deploy . --project-name str4t3g1s-site"
+  },
+  "devDependencies": {
+    "wrangler": "^4.84.1"
+  }
+}
