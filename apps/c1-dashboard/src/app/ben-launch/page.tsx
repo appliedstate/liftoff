@@ -2370,25 +2370,41 @@ export default function BenLaunchWorkbench() {
                         </div>
                       ) : null}
 
-                      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
+                      {/* Single source of truth — the canonical article field on top,
+                          a 'pick from catalog' search affordance beneath. */}
+                      <div className="space-y-3">
                         <div>
-                          <label className={fieldLabel}>Article selector</label>
-                          {hasCurrentArticle ? (
-                            <div className="mb-2 rounded-xl bg-emerald-500/[0.10] px-3 py-2 text-sm text-emerald-900 dark:text-emerald-100">
-                              <div className="font-semibold">Article already set</div>
-                              <div className="mt-1 break-all text-xs text-emerald-800/90 dark:text-emerald-200/90">
-                                {currentArticleValue}
-                              </div>
-                              <div className="mt-1 text-xs text-emerald-800/80 dark:text-emerald-200/80">
-                                You only need to use the selector if you want to replace it.
-                              </div>
+                          <label className={fieldLabel}>Article</label>
+                          <input
+                            value={form.article}
+                            onChange={(e) => setForm((c) => ({ ...c, article: e.target.value }))}
+                            placeholder="Article URL or path"
+                            className={inputClass}
+                          />
+                          {hasCurrentArticle && selectedArticle ? (
+                            <div className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+                              {selectedArticle.label} · used in {selectedArticle.campaignCount || 0} {buyerLabel} campaign{selectedArticle.campaignCount === 1 ? "" : "s"}
                             </div>
-                          ) : null}
+                          ) : hasCurrentArticle ? (
+                            <div className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+                              {articleLooksLikeUrl ? "Direct URL." : "Article path."} Goes to Strategis as-is.
+                            </div>
+                          ) : (
+                            <div className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+                              Paste a URL/path or pick one from the catalog below.
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="text-xs font-medium uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
+                            {hasCurrentArticle ? `Replace from ${buyerLabel}'s catalog` : `Pick from ${buyerLabel}'s catalog`}
+                          </div>
                           <input
                             value={articleQuery}
                             onChange={(e) => setArticleQuery(e.target.value)}
                             placeholder={`Search ${buyerLabel}'s articles for this category…`}
-                            className={`${inputClass} mb-2`}
+                            className={inputClass}
                           />
                           <Dropdown
                             value={selectedArticle?.articleKey || ""}
@@ -2407,47 +2423,10 @@ export default function BenLaunchWorkbench() {
                               value: item.articleKey,
                               label: `${item.label} (${item.campaignCount})`,
                             }))}
-                            placeholder={hasCurrentArticle ? "Replace current article…" : "Select an article…"}
+                            placeholder={hasCurrentArticle ? "Replace with…" : "Select an article…"}
                           />
-                          <div className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">
-                            {hasCurrentArticle
-                              ? `Current article is populated below. Showing ${buyerLabel} articles with this category ranked first if you want to replace it.`
-                              : `Showing all ${buyerLabel} articles with this category ranked first.`}
-                          </div>
-                        </div>
-
-                        <div className="rounded-xl bg-white dark:bg-neutral-900 px-3 py-2.5 text-xs text-neutral-600 dark:text-neutral-400 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-                          <div className="text-neutral-500 dark:text-neutral-400">Article details</div>
-                          <div className="mt-1 text-sm font-semibold text-neutral-900 dark:text-neutral-50">
-                            {selectedArticle?.label || (hasCurrentArticle ? "Current article in use" : "No article selected")}
-                          </div>
-                          <div className="mt-1 text-neutral-500 dark:text-neutral-400">
-                            {currentArticleSlug || "No slug"}
-                          </div>
-                          <div className="mt-2 text-neutral-500 dark:text-neutral-400">
-                            {selectedArticle
-                              ? `Used in ${selectedArticle.campaignCount || 0} ${buyerLabel} campaign${selectedArticle?.campaignCount === 1 ? "" : "s"}`
-                              : hasCurrentArticle
-                                ? articleLooksLikeUrl
-                                  ? "A direct article URL is already populated."
-                                  : "An article path is already populated."
-                                : `Used in 0 ${buyerLabel} campaigns`}
-                          </div>
                         </div>
                       </div>
-
-                      <label className="block">
-                        <div className={fieldLabel}>Selected article URL or path</div>
-                        <input
-                          value={form.article}
-                          onChange={(e) => setForm((c) => ({ ...c, article: e.target.value }))}
-                          placeholder="Article URL or path"
-                          className={inputClass}
-                        />
-                        <div className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">
-                          This is the final Strategis article value. The selector above pre-fills it, and you can override it manually here.
-                        </div>
-                      </label>
 
                       <label className="block">
                         <div className={fieldLabel}>Headline</div>
