@@ -540,6 +540,20 @@ function siteOptionLabel(option: LaunchAssociationOption) {
   return `${option.value} · Available site`;
 }
 
+function normalizeSiteHost(value: string) {
+  return value.trim().replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/g, "").toLowerCase();
+}
+
+function articleHostFromValue(value: string) {
+  const raw = value.trim();
+  if (!/^https?:\/\//i.test(raw)) return null;
+  try {
+    return new URL(raw).hostname.replace(/^www\./i, "").toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
 function formatArticleBuyerLabel(item: BenArticleCatalogItem, currentBuyer: string) {
   const normalizedCurrentBuyer = currentBuyer.trim().toLowerCase();
   const normalizedBuyers = item.buyers.map((value) => value.trim()).filter(Boolean);
@@ -1247,7 +1261,11 @@ export default function BenLaunchWorkbench() {
   const rankedArticles = useMemo(() => {
     const items = articleCatalog?.items || [];
     if (!selectedProfile) return items;
+    const selectedSiteHost = normalizeSiteHost(form.rsocSite || selectedProfile.strategist.rsocSite?.value || "");
     return [...items].sort((a, b) => {
+      const aSiteMatch = a.rsocSite && normalizeSiteHost(a.rsocSite) === selectedSiteHost ? 0 : 1;
+      const bSiteMatch = b.rsocSite && normalizeSiteHost(b.rsocSite) === selectedSiteHost ? 0 : 1;
+      if (aSiteMatch !== bSiteMatch) return aSiteMatch - bSiteMatch;
       const aBuyerMatch = a.buyers.some((value) => value.toLowerCase() === buyer.toLowerCase()) ? 0 : 1;
       const bBuyerMatch = b.buyers.some((value) => value.toLowerCase() === buyer.toLowerCase()) ? 0 : 1;
       if (aBuyerMatch !== bBuyerMatch) return aBuyerMatch - bBuyerMatch;
@@ -1257,23 +1275,37 @@ export default function BenLaunchWorkbench() {
       if (a.campaignCount !== b.campaignCount) return b.campaignCount - a.campaignCount;
       return a.label.localeCompare(b.label);
     });
-  }, [articleCatalog, buyer, selectedProfile]);
+  }, [articleCatalog, buyer, form.rsocSite, selectedProfile]);
+
+  const selectedSiteHost = normalizeSiteHost(form.rsocSite || selectedProfile?.strategist.rsocSite?.value || "");
+
+  const selectedSiteScopedArticles = useMemo(() => {
+    if (!selectedSiteHost) return [] as BenArticleCatalogItem[];
+    return rankedArticles.filter(
+      (item) => Boolean(item.rsocSite) && normalizeSiteHost(item.rsocSite || "") === selectedSiteHost
+    );
+  }, [rankedArticles, selectedSiteHost]);
+
+  const effectiveArticlePool = useMemo(() => {
+    if (selectedSiteScopedArticles.length > 0) return selectedSiteScopedArticles;
+    return rankedArticles;
+  }, [rankedArticles, selectedSiteScopedArticles]);
 
   const filteredArticles = useMemo(() => {
     const lowered = articleQuery.trim().toLowerCase();
-    if (!lowered) return rankedArticles;
-    return rankedArticles.filter((item) =>
+    if (!lowered) return effectiveArticlePool;
+    return effectiveArticlePool.filter((item) =>
       [item.label, item.articleSlug, item.articleUrl, item.articlePath, ...item.headlineHints]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(lowered))
     );
-  }, [rankedArticles, articleQuery]);
+  }, [effectiveArticlePool, articleQuery]);
 
   const selectedArticle =
     filteredArticles.find((item) => item.articleKey === selectedArticleKey) ||
     filteredArticles[0] ||
-    rankedArticles.find((item) => item.articleKey === selectedArticleKey) ||
-    rankedArticles[0] ||
+    effectiveArticlePool.find((item) => item.articleKey === selectedArticleKey) ||
+    effectiveArticlePool[0] ||
     null;
 
   const currentArticleValue = form.article.trim();
@@ -1283,6 +1315,36 @@ export default function BenLaunchWorkbench() {
     currentArticleValue.replace(/^https?:\/\/[^/]+\//i, "").replace(/^\/+|\/+$/g, "").split("/").filter(Boolean).pop() ||
     "";
   const hasCurrentArticle = currentArticleValue.length > 0;
+
+  const matchedCurrentArticle = useMemo(() => {
+    const items = articleCatalog?.items || [];
+    const normalizedValue = currentArticleValue.replace(/^\/+|\/+$/g, "").trim().toLowerCase();
+    if (!normalizedValue) return null;
+    return (
+      items.find((item) => (item.articleUrl || "").trim().toLowerCase() === currentArticleValue.toLowerCase()) ||
+      items.find((item) => (item.articlePath || "").replace(/^\/+|\/+$/g, "").trim().toLowerCase() === normalizedValue) ||
+      items.find((item) => (item.articleSlug || "").trim().toLowerCase() === normalizedValue) ||
+      null
+    );
+  }, [articleCatalog, currentArticleValue]);
+
+  const articleSiteHost = articleHostFromValue(currentArticleValue);
+  const articleCatalogSiteHost = matchedCurrentArticle?.rsocSite
+    ? normalizeSiteHost(matchedCurrentArticle.rsocSite)
+    : null;
+  const currentArticleRecord = matchedCurrentArticle || selectedArticle;
+  const articleSiteMismatch = Boolean(
+    selectedSiteHost &&
+      (
+        (articleSiteHost && articleSiteHost !== selectedSiteHost) ||
+        (articleCatalogSiteHost && articleCatalogSiteHost !== selectedSiteHost)
+      )
+  );
+  const articleSiteMismatchMessage = articleSiteMismatch
+    ? `This article is tied to ${
+        articleSiteHost || articleCatalogSiteHost
+      }, but the selected site is ${selectedSiteHost}. Paste a new article URL/path for ${selectedSiteHost}, or replace it from the ${selectedSiteHost} article list below.`
+    : null;
 
   useEffect(() => {
     if (!articleQuery.trim()) return;
@@ -1711,6 +1773,7 @@ export default function BenLaunchWorkbench() {
     Boolean(strategistPreview?.rsocSite) &&
     Boolean(form.article.trim()) &&
     Boolean(form.headline.trim()) &&
+    !articleSiteMismatch &&
     activeForcekeys.length >= 1;
 
   const canRunFacebookCloneBase =
@@ -1719,6 +1782,7 @@ export default function BenLaunchWorkbench() {
     Boolean((facebookPreview?.adAccountId || form.adAccountId).trim()) &&
     Boolean(form.article.trim()) &&
     Boolean(form.headline.trim()) &&
+    !articleSiteMismatch &&
     (form.creativeMode === "inherit" || Boolean(form.creativeAssetUrl.trim())) &&
     activeForcekeys.length >= 1;
 
@@ -1730,6 +1794,11 @@ export default function BenLaunchWorkbench() {
     { label: "Preset selected", ok: Boolean(selectedProfile) },
     { label: "Template selected", ok: Boolean(strategistPreview?.templateId) },
     { label: "RSOC site selected", ok: Boolean(strategistPreview?.rsocSite) },
+    {
+      label: "Article matches selected site",
+      ok: !articleSiteMismatch,
+      detail: articleSiteMismatchMessage || undefined,
+    },
     { label: "Article provided", ok: Boolean(form.article.trim()) },
     { label: "Headline provided", ok: Boolean(form.headline.trim()) },
     { label: "At least one forcekey", ok: activeForcekeys.length >= 1 },
@@ -1737,6 +1806,11 @@ export default function BenLaunchWorkbench() {
 
   const facebookCloneBaseReadinessChecks: ReadinessCheck[] = [
     { label: "Preset selected", ok: Boolean(selectedProfile) },
+    {
+      label: "Article matches selected site",
+      ok: !articleSiteMismatch,
+      detail: articleSiteMismatchMessage || undefined,
+    },
     { label: "Clone source selected", ok: Boolean(selectedCampaign?.campaignId) },
     {
       label: "Source Facebook shell found",
@@ -2570,9 +2644,15 @@ export default function BenLaunchWorkbench() {
                             placeholder="Article URL or path"
                             className={inputClass}
                           />
-                          {hasCurrentArticle && selectedArticle ? (
+                          {articleSiteMismatch ? (
+                            <div className="mt-2 rounded-xl bg-[#ff9500]/[0.10] px-3 py-2 text-xs text-[#a55a00] dark:text-[#ffb84a]">
+                              <div className="font-medium">Article/site mismatch</div>
+                              <div className="mt-1">{articleSiteMismatchMessage}</div>
+                            </div>
+                          ) : null}
+                          {hasCurrentArticle && currentArticleRecord ? (
                             <div className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">
-                              {selectedArticle.label} · used in {selectedArticle.campaignCount || 0} campaign{selectedArticle.campaignCount === 1 ? "" : "s"} · buyers: {selectedArticle.buyers.join(", ")}
+                              {currentArticleRecord.label} · used in {currentArticleRecord.campaignCount || 0} campaign{currentArticleRecord.campaignCount === 1 ? "" : "s"} · buyers: {currentArticleRecord.buyers.join(", ")}
                             </div>
                           ) : hasCurrentArticle ? (
                             <div className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">
@@ -2607,10 +2687,22 @@ export default function BenLaunchWorkbench() {
                               label: formatArticleBuyerLabel(item, buyer),
                             }))}
                             placeholder={hasCurrentArticle ? `Search ${buyerLabel}'s articles to replace…` : `Search ${buyerLabel}'s articles…`}
-                            emptyLabel={`No ${buyerLabel} articles match`}
+                            emptyLabel={
+                              selectedSiteHost
+                                ? `No ${buyerLabel} articles match ${selectedSiteHost}`
+                                : `No ${buyerLabel} articles match`
+                            }
                           />
                           <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                            {buyerLabel}&rsquo;s article history ranks first. If an article comes from another buyer&rsquo;s history, the buyer name appears in the result label.
+                            {selectedSiteScopedArticles.length > 0 ? (
+                              <>
+                                Showing articles on <span className="font-medium">{form.rsocSite || strategistPreview?.rsocSite || "the selected site"}</span> first. {buyerLabel}&rsquo;s history ranks next. If an article comes from another buyer&rsquo;s history, the buyer name appears in the result label.
+                              </>
+                            ) : (
+                              <>
+                                No site-matching article history was found for <span className="font-medium">{form.rsocSite || strategistPreview?.rsocSite || "the selected site"}</span>. Broader catalog results are shown instead.
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -2628,7 +2720,31 @@ export default function BenLaunchWorkbench() {
                       <div className="space-y-4">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
-                            <div className={sectionLabel}>Forcekey selector</div>
+                            <div className="flex items-center gap-2">
+                              <div className={sectionLabel}>Forcekey selector</div>
+                              <details className="group relative">
+                                <summary className="inline-flex h-5 w-5 cursor-pointer list-none items-center justify-center rounded-full bg-neutral-200 text-[11px] font-bold text-neutral-600 transition hover:bg-neutral-300 dark:bg-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-600 [&::-webkit-details-marker]:hidden">
+                                  i
+                                </summary>
+                                <div className="absolute left-0 top-7 z-30 w-[min(360px,calc(100vw-2rem))] rounded-xl border border-black/[0.08] bg-white p-3 text-sm text-neutral-700 shadow-[0_12px_32px_-8px_rgba(0,0,0,0.18)] dark:border-white/[0.10] dark:bg-neutral-900 dark:text-neutral-200">
+                                  <div className="font-semibold text-neutral-900 dark:text-neutral-50">How to use this section</div>
+                                  <div className="mt-2 space-y-2">
+                                    <div>
+                                      <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Step 1</div>
+                                      <div className="mt-0.5">Click <code>Add</code> on ranked keywords or use <code>Autofill top 6/12</code>.</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Step 2</div>
+                                      <div className="mt-0.5">Use <code>Show all ranked keywords</code> to investigate beyond the default list.</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Step 3</div>
+                                      <div className="mt-0.5">Selected rows show slot badges and reorder controls directly in the table.</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </details>
+                            </div>
                             <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
                               {forcekeySelector?.dateWindow.label ||
                                 `Trailing 14 complete days: ${forcekeyWindow.startDate} - ${forcekeyWindow.endDate}`}
@@ -2679,32 +2795,6 @@ export default function BenLaunchWorkbench() {
                               </span>
                             </>
                           ) : null}
-                        </div>
-
-                        <div className="rounded-[20px] border border-black/[0.06] bg-black/[0.02] px-4 py-3 text-sm text-neutral-700 dark:border-white/[0.10] dark:bg-white/[0.03] dark:text-neutral-200">
-                          <div className="font-semibold text-neutral-900 dark:text-neutral-50">
-                            How to use this section
-                          </div>
-                          <div className="mt-2 grid gap-2 md:grid-cols-3">
-                            <div>
-                              <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
-                                Step 1
-                              </span>
-                              <div className="mt-1">Click `Add` on ranked keywords or use `Autofill top 6/12`.</div>
-                            </div>
-                            <div>
-                              <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
-                                Step 2
-                              </span>
-                              <div className="mt-1">Use `Show all ranked keywords` if you want to investigate beyond the default list.</div>
-                            </div>
-                            <div>
-                              <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
-                                Step 3
-                              </span>
-                              <div className="mt-1">Selected rows show slot badges and reorder controls directly in the table.</div>
-                            </div>
-                          </div>
                         </div>
 
                         {forcekeySelectorLoading ? (
