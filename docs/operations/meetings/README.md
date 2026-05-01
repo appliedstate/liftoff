@@ -29,7 +29,18 @@ docs/operations/meetings/
 
 ## Index
 
+- 2026-04-29 — Team — Media Buying — Facebook Ops Sync
+  - Folder: `docs/operations/meetings/2026/2026-04-29-team-media-buying-facebook-ops-sync/`
+  - Files: `transcript.md`, `outcomes.md`
+
+- 2026-04-29 — Ad Hoc — Eric & Codex — Operating System Ground Truth
+  - Folder: `docs/operations/meetings/2026/2026-04-29-ad-hoc-eric-codex-operating-system-ground-truth/`
+  - Files: `transcript.md`, `outcomes.md`
+
+- 2026-04-22 — Team — Media Buying — Facebook Restrictions Review
+  - Folder: `docs/operations/meetings/2026/2026-04-22-team-media-buying-facebook-restrictions/`
+  - Files: `transcript.md`, `outcomes.md`
+
 - 2025-10-24 — 1:1 — Eric & Ben — Facebook Discovery + Iterate
   - Folder: `docs/operations/meetings/2025/2025-10-24-1on1-ben-eric-facebook-discovery-iterate/`
   - Files: `transcript.md`, `outcomes.md`
-

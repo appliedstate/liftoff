@@ -1,0 +1,24 @@
+{
+  "active_batch": {
+    "batch_id": "2026-04-30-batch-03",
+    "status": "active",
+    "batch_size": 10,
+    "checkpoint_rule": "review every 10 meaningful changes or 10 commits, whichever comes first",
+    "reasoning_standard": [
+      "prime directive",
+      "first principles",
+      "board-guided judgment"
+    ],
+    "guardrails_ref": "/Users/ericroach/code/liftoff/docs/prd/operator-delegated-approval-protocol.md",
+    "started_at": "2026-04-30",
+    "meaningful_changes_completed": 1,
+    "commits_completed": 0,
+    "history": [
+      {
+        "timestamp": "2026-05-01T02:25:00-07:00",
+        "type": "meaningful_change",
+        "summary": "Buyer daily command packet report added as an operator-only preview that turns scorecards, allocation policy, upstream queues, and surface work into a per-buyer daily plan without outbound messaging."
+      }
+    ]
+  }
+}

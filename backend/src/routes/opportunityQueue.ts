@@ -7,6 +7,7 @@
 import express from 'express';
 import { OpportunityQueue, Opportunity, CampaignBlueprint } from '../services/opportunityQueue';
 import { CampaignPlanPreviewService } from '../services/campaignPlanPreview';
+import { getOpportunityOwnershipReport, upsertOpportunityOwnership } from '../lib/opportunityOwnershipQueue';
 
 const router = express.Router();
 const opportunityQueue = new OpportunityQueue();
@@ -115,6 +116,46 @@ router.patch('/:id/status', async (req, res) => {
     console.error('Error updating opportunity status:', error);
     res.status(500).json({
       error: 'Failed to update opportunity status',
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+router.post('/:id/ownership', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await upsertOpportunityOwnership({
+      opportunityId: id,
+      ownerPersonId: req.body?.ownerPersonId ? String(req.body.ownerPersonId) : null,
+      ownerName: req.body?.ownerName ? String(req.body.ownerName) : null,
+      queueStatus: req.body?.queueStatus ? String(req.body.queueStatus) : undefined,
+      priority: req.body?.priority ? String(req.body.priority) : undefined,
+      nextStep: req.body?.nextStep ? String(req.body.nextStep) : null,
+      nextStepDueAt: req.body?.nextStepDueAt ? String(req.body.nextStepDueAt) : null,
+      blockerSummary: req.body?.blockerSummary ? String(req.body.blockerSummary) : null,
+      lastReviewedAt: req.body?.lastReviewedAt ? String(req.body.lastReviewedAt) : null,
+      metadata: req.body?.metadata && typeof req.body.metadata === 'object' ? req.body.metadata : undefined,
+    });
+    res.status(201).json(result);
+  } catch (error) {
+    console.error('Error upserting opportunity ownership:', error);
+    res.status(500).json({
+      error: 'Failed to upsert opportunity ownership',
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+router.get('/ownership-report', async (req, res) => {
+  try {
+    const result = await getOpportunityOwnershipReport({
+      limit: req.query.limit ? Number(req.query.limit) : undefined,
+    });
+    res.json(result);
+  } catch (error) {
+    console.error('Error building opportunity ownership report:', error);
+    res.status(500).json({
+      error: 'Failed to build opportunity ownership report',
       message: error instanceof Error ? error.message : String(error),
     });
   }
@@ -312,4 +353,3 @@ router.get('/:id/required-info', async (req, res) => {
 });
 
 export default router;
-

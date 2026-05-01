@@ -220,10 +220,134 @@ export async function initMonitoringSchema(conn: any): Promise<void> {
       rpc DOUBLE
     )
     `,
+    `
+    CREATE TABLE IF NOT EXISTS campaign_assignment_queue (
+      queue_id TEXT PRIMARY KEY,
+      source_file TEXT NOT NULL,
+      source_row INTEGER NOT NULL,
+      status TEXT,
+      requested_buyer TEXT,
+      assigned_buyer TEXT,
+      assignment_state TEXT NOT NULL DEFAULT 'unassigned',
+      request_date DATE,
+      category TEXT,
+      notes TEXT,
+      target_market TEXT,
+      device_target TEXT,
+      headline TEXT,
+      rsoc_site TEXT,
+      article_url TEXT,
+      campaign_url TEXT,
+      launch_campaign_id TEXT,
+      launch_date DATE,
+      launch_owner TEXT,
+      launch_media_source TEXT,
+      last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      raw_payload JSON,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    `,
+    `
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_campaign_assignment_source_row
+    ON campaign_assignment_queue(source_file, source_row)
+    `,
+    `
+    ALTER TABLE campaign_assignment_queue ADD COLUMN IF NOT EXISTS assigned_buyer TEXT
+    `,
+    `
+    ALTER TABLE campaign_assignment_queue ADD COLUMN IF NOT EXISTS assignment_state TEXT
+    `,
+    `
+    ALTER TABLE campaign_assignment_queue ADD COLUMN IF NOT EXISTS launch_campaign_id TEXT
+    `,
+    `
+    ALTER TABLE campaign_assignment_queue ADD COLUMN IF NOT EXISTS launch_date DATE
+    `,
+    `
+    ALTER TABLE campaign_assignment_queue ADD COLUMN IF NOT EXISTS launch_owner TEXT
+    `,
+    `
+    ALTER TABLE campaign_assignment_queue ADD COLUMN IF NOT EXISTS launch_media_source TEXT
+    `,
+    `
+    ALTER TABLE campaign_assignment_queue ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMP
+    `,
+    `
+    CREATE TABLE IF NOT EXISTS intent_packet_observations (
+      observation_id TEXT PRIMARY KEY,
+      observed_at TIMESTAMP NOT NULL,
+      source TEXT NOT NULL,
+      market TEXT,
+      packet_id TEXT,
+      packet_name TEXT,
+      campaign_id TEXT,
+      primary_keyword TEXT NOT NULL,
+      supporting_keywords_json JSON,
+      searches DOUBLE,
+      monetized_clicks DOUBLE,
+      revenue DOUBLE,
+      paid_impressions DOUBLE,
+      paid_clicks DOUBLE,
+      paid_spend DOUBLE,
+      approved BOOLEAN,
+      rejected BOOLEAN,
+      review_flag BOOLEAN,
+      metadata_json JSON
+    )
+    `,
+    `
+    CREATE TABLE IF NOT EXISTS intent_packet_observation_axioms (
+      observation_id TEXT NOT NULL,
+      namespace TEXT NOT NULL,
+      axiom_key TEXT NOT NULL,
+      axiom_label TEXT NOT NULL
+    )
+    `,
+    `
+    CREATE INDEX IF NOT EXISTS idx_intent_packet_observations_source_date
+    ON intent_packet_observations(source, observed_at)
+    `,
+    `
+    CREATE INDEX IF NOT EXISTS idx_intent_packet_observations_primary_keyword
+    ON intent_packet_observations(primary_keyword)
+    `,
+    `
+    CREATE INDEX IF NOT EXISTS idx_intent_packet_axioms_observation
+    ON intent_packet_observation_axioms(observation_id)
+    `,
+    `
+    CREATE INDEX IF NOT EXISTS idx_intent_packet_axioms_namespace_key
+    ON intent_packet_observation_axioms(namespace, axiom_key)
+    `,
+    `
+    CREATE TABLE IF NOT EXISTS intent_packet_exploration_queue (
+      queue_key TEXT PRIMARY KEY,
+      primary_keyword TEXT NOT NULL,
+      packet_name TEXT,
+      market TEXT,
+      owner_name TEXT,
+      queue_status TEXT NOT NULL DEFAULT 'new',
+      priority TEXT NOT NULL DEFAULT 'medium',
+      next_step TEXT,
+      next_review_at TIMESTAMP,
+      blocker_summary TEXT,
+      metadata_json JSON,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    `,
+    `
+    CREATE INDEX IF NOT EXISTS idx_intent_packet_exploration_queue_owner
+    ON intent_packet_exploration_queue(owner_name)
+    `,
+    `
+    CREATE INDEX IF NOT EXISTS idx_intent_packet_exploration_queue_status
+    ON intent_packet_exploration_queue(queue_status)
+    `,
   ];
 
   for (const stmt of statements) {
     await runSql(conn, stmt);
   }
 }
-
