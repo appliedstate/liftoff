@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
 
     for (const base of getBackendBases()) {
       const response = await fetch(
-        `${base}/api/campaign-factory/ben-campaign-catalog?buyer=${encodeURIComponent(
+        `${base}/api/campaign-factory/buyer-launch-intelligence?buyer=${encodeURIComponent(
           buyer
         )}&organization=${encodeURIComponent(organization)}`,
         {
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       {
-        error: "Failed to load buyer campaign catalog",
+        error: "Failed to load buyer launch intelligence",
         message: lastError,
       },
       { status: 500 }

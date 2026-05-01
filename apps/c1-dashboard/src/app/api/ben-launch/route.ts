@@ -3,9 +3,10 @@ import OpenAI from "openai";
 import { transformStream } from "@crayonai/stream";
 import { DBMessage, getMessageStore } from "./messageStore";
 import { buildSystemPrompt, loadBenCatalogs } from "./catalogs";
+import { resolveBuyerFromRequest } from "@/lib/backendProxy";
 
 export async function POST(req: NextRequest) {
-  const buyer = req.nextUrl.searchParams.get("buyer") || "Ben";
+  const buyer = resolveBuyerFromRequest(req, req.nextUrl.searchParams.get("buyer"));
   const { prompt, threadId, responseId } = (await req.json()) as {
     prompt: DBMessage;
     threadId: string;

@@ -15,6 +15,29 @@ export default function HomePage() {
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Link
+            href="/operator-review"
+            className="block p-6 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors md:col-span-2"
+          >
+            <h2 className="text-2xl font-semibold mb-2">🧭 Operator Review</h2>
+            <p className="text-gray-300">
+              Review synthesized meetings as approval packets. See why each item belongs in the system, why it matters now,
+              the bottleneck it relieves, and what you need to approve.
+            </p>
+          </Link>
+
+          <Link
+            href="/buyer-launch"
+            className="block p-6 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors md:col-span-2"
+          >
+            <h2 className="text-2xl font-semibold mb-2">⚙️ Buyer Launch Workbench</h2>
+            <p className="text-gray-300">
+              Single-screen preset workbench for buyer profiles like Ben and Andrew Cook. Choose a proven category
+              setup, fill article and forcekeys, and prepare the final Strategis and Facebook shell without rebuilding
+              everything by hand.
+            </p>
+          </Link>
+
+          <Link
             href="/analytics"
             className="block p-6 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors"
           >
@@ -60,4 +83,3 @@ export default function HomePage() {
     </div>
   );
 }
-

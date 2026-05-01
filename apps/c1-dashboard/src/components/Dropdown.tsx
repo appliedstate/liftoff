@@ -11,16 +11,21 @@ export function Dropdown({
   options,
   placeholder,
   className,
+  openSignal,
+  emptyLabel,
 }: {
   value: string;
   onChange: (value: string) => void;
   options: DropdownOption[];
   placeholder?: string;
   className?: string;
+  openSignal?: string | number | null;
+  emptyLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const selected = options.find((o) => o.value === value);
+  const lastOpenSignalRef = useRef<string>("");
 
   useEffect(() => {
     if (!open) return;
@@ -37,6 +42,18 @@ export function Dropdown({
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
+
+  useEffect(() => {
+    const next = String(openSignal ?? "").trim();
+    if (!next) {
+      lastOpenSignalRef.current = "";
+      return;
+    }
+    if (next !== lastOpenSignalRef.current) {
+      setOpen(true);
+      lastOpenSignalRef.current = next;
+    }
+  }, [openSignal]);
 
   return (
     <div ref={ref} className={`relative ${open ? "z-[140]" : "z-10"} ${className || ""}`}>
@@ -67,7 +84,11 @@ export function Dropdown({
           role="listbox"
           className="absolute left-0 right-0 z-[160] mt-1.5 max-h-72 overflow-auto rounded-lg bg-white dark:bg-neutral-900 p-1 ring-1 ring-black/[0.08] dark:ring-white/[0.10] shadow-[0_12px_32px_-8px_rgba(0,0,0,0.18),0_4px_8px_-4px_rgba(0,0,0,0.08)] dark:shadow-[0_12px_32px_-8px_rgba(0,0,0,0.6),0_4px_8px_-4px_rgba(0,0,0,0.4)]"
         >
-          {options.map((option) => {
+          {options.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-neutral-500 dark:text-neutral-400">
+              {emptyLabel || "No matches"}
+            </div>
+          ) : options.map((option) => {
             const isSelected = option.value === value;
             return (
               <button

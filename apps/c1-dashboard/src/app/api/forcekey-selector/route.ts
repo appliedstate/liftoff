@@ -4,16 +4,21 @@ import { getBackendBases, getBackendProxyHeaders, resolveBuyerFromRequest } from
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const buyer = resolveBuyerFromRequest(request, searchParams.get("buyer"));
-  const organization = searchParams.get("organization") || "Interlincx";
+  const category = searchParams.get("category") || "";
+  const startDate = searchParams.get("startDate") || "";
+  const endDate = searchParams.get("endDate") || "";
+  const limit = searchParams.get("limit") || "24";
 
   try {
     let lastError = "No backend base configured";
 
     for (const base of getBackendBases()) {
       const response = await fetch(
-        `${base}/api/campaign-factory/ben-campaign-catalog?buyer=${encodeURIComponent(
+        `${base}/api/strategist/forcekey-selector?buyer=${encodeURIComponent(
           buyer
-        )}&organization=${encodeURIComponent(organization)}`,
+        )}&category=${encodeURIComponent(category)}&startDate=${encodeURIComponent(
+          startDate
+        )}&endDate=${encodeURIComponent(endDate)}&limit=${encodeURIComponent(limit)}`,
         {
           method: "GET",
           cache: "no-store",
@@ -31,7 +36,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       {
-        error: "Failed to load buyer campaign catalog",
+        error: "Failed to load forcekey selector data",
         message: lastError,
       },
       { status: 500 }

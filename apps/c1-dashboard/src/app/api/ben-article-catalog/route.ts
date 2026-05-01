@@ -1,24 +1,20 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { getBackendBases, getBackendProxyHeaders, resolveBuyerFromRequest } from "@/lib/backendProxy";
 
-const BACKEND_BASES = [
-  process.env.NEXT_PUBLIC_SERVICE_URL,
-  process.env.NEXT_PUBLIC_BACKEND_URL,
-  "http://localhost:3001",
-].filter(Boolean) as string[];
-
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const buyer = searchParams.get("buyer") || "Ben";
+  const buyer = resolveBuyerFromRequest(request, searchParams.get("buyer"));
 
   try {
     let lastError = "No backend base configured";
 
-    for (const base of BACKEND_BASES) {
+    for (const base of getBackendBases()) {
       const response = await fetch(
         `${base}/api/campaign-factory/ben-article-catalog?buyer=${encodeURIComponent(buyer)}`,
         {
           method: "GET",
           cache: "no-store",
+          headers: getBackendProxyHeaders(),
         }
       );
 

@@ -1,13 +1,13 @@
-const BACKEND_BASES = [
-  process.env.NEXT_PUBLIC_SERVICE_URL,
-  process.env.NEXT_PUBLIC_BACKEND_URL,
-  "http://localhost:3001",
-].filter(Boolean) as string[];
+import { getBackendBases, getBackendProxyHeaders } from "@/lib/backendProxy";
 
 async function fetchFromBackend(path: string): Promise<unknown | null> {
-  for (const base of BACKEND_BASES) {
+  for (const base of getBackendBases()) {
     try {
-      const response = await fetch(`${base}${path}`, { method: "GET", cache: "no-store" });
+      const response = await fetch(`${base}${path}`, {
+        method: "GET",
+        cache: "no-store",
+        headers: getBackendProxyHeaders(),
+      });
       if (response.ok) return await response.json();
     } catch {
       // try next base
