@@ -465,12 +465,17 @@ function buildDropdownOptions(
     merged.push({ value, label });
   };
 
+  // Primary = historical association for this exact site. Prefix with a green
+  // bullet so it reads as 'past use' next to non-history options.
   for (const option of primary) {
-    push(option.value, `Recommended · ${option.label}${supportSuffix(option)}`);
+    push(option.value, `● ${option.label}${supportSuffix(option)}`);
   }
 
+  // 'all' may include further history items used on other sites — keep the
+  // bullet for those too so users can see they're previously-used.
   for (const option of all) {
-    push(option.value, option.label + supportSuffix(option));
+    const usedBefore = option.support.count > 0;
+    push(option.value, `${usedBefore ? "● " : ""}${option.label}${supportSuffix(option)}`);
   }
 
   if (currentValue && !seen.has(currentValue)) {
@@ -552,6 +557,10 @@ function copyJson(value: unknown) {
   return navigator.clipboard.writeText(JSON.stringify(value, null, 2));
 }
 
+function copyText(value: string) {
+  return navigator.clipboard.writeText(value);
+}
+
 function normalizeErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return normalizeErrorMessage(error.message);
@@ -581,7 +590,7 @@ function setupModeLabel(mode: SetupMode): string {
 
 function facebookDestinationLabel(result: DryRunResponse): string {
   return result.mode === "facebook"
-    ? "Current fallback destination before Strategis route exists"
+    ? "Required Strategis route URL for Facebook setup"
     : "Final Facebook destination after Strategis create";
 }
 
@@ -640,6 +649,13 @@ type SetupResponse = {
     };
     warnings?: string[];
   };
+};
+
+type StrategisShellState = {
+  id: string;
+  name: string;
+  trackingUrl: string;
+  fingerprint: string;
 };
 
 type LaunchHistoryItem = {
@@ -907,6 +923,7 @@ export default function BenLaunchWorkbench() {
   });
   const [runningSetup, setRunningSetup] = useState<SetupMode | null>(null);
   const [setupResult, setSetupResult] = useState<SetupResponse | null>(null);
+  const [strategisShell, setStrategisShell] = useState<StrategisShellState | null>(null);
   const [setupError, setSetupError] = useState<string | null>(null);
   const [runningDryRun, setRunningDryRun] = useState<SetupMode | null>(null);
   const [dryRunResult, setDryRunResult] = useState<DryRunResponse | null>(null);
@@ -999,6 +1016,7 @@ export default function BenLaunchWorkbench() {
     setPacketPreview(null);
     setPacketPreviewError(null);
     setSetupResult(null);
+    setStrategisShell(null);
     setSetupError(null);
     setDryRunResult(null);
     setDryRunError(null);
@@ -1398,6 +1416,42 @@ export default function BenLaunchWorkbench() {
         }
       : null;
 
+  const currentStrategisFingerprint = useMemo(
+    () =>
+      JSON.stringify({
+        buyer,
+        category: selectedProfile?.category || "",
+        article: form.article.trim(),
+        headline: form.headline.trim(),
+        forcekeys: activeForcekeys,
+        rsocSite: strategistPreview?.rsocSite || "",
+        subdirectory: strategistPreview?.subdirectory || "",
+        templateId: strategistPreview?.templateId || "",
+        redirectDomain: strategistPreview?.redirectDomain || "",
+        language: strategistPreview?.language || "",
+        networkAccountId: strategistPreview?.networkAccountId || "",
+        fbAdAccount: strategistPreview?.fbAdAccount || "",
+      }),
+    [
+      activeForcekeys,
+      buyer,
+      form.article,
+      form.headline,
+      selectedProfile?.category,
+      strategistPreview?.fbAdAccount,
+      strategistPreview?.language,
+      strategistPreview?.networkAccountId,
+      strategistPreview?.redirectDomain,
+      strategistPreview?.rsocSite,
+      strategistPreview?.subdirectory,
+      strategistPreview?.templateId,
+    ]
+  );
+
+  const currentStrategisShell =
+    strategisShell && strategisShell.fingerprint === currentStrategisFingerprint ? strategisShell : null;
+  const currentStrategisRouteUrl = currentStrategisShell?.trackingUrl || "";
+
   const currentSiteAssociation =
     strategistPreview?.rsocSite ? siteAssociationBySite.get(strategistPreview.rsocSite) || null : null;
 
@@ -1659,7 +1713,7 @@ export default function BenLaunchWorkbench() {
     Boolean(form.headline.trim()) &&
     activeForcekeys.length >= 1;
 
-  const canRunFacebookSetup =
+  const canRunFacebookCloneBase =
     Boolean(selectedProfile) &&
     Boolean(selectedCampaign?.campaignId) &&
     Boolean((facebookPreview?.adAccountId || form.adAccountId).trim()) &&
@@ -1668,7 +1722,9 @@ export default function BenLaunchWorkbench() {
     (form.creativeMode === "inherit" || Boolean(form.creativeAssetUrl.trim())) &&
     activeForcekeys.length >= 1;
 
-  const canRunBothSetup = canRunStrategisSetup && canRunFacebookSetup;
+  const canRunFacebookSetup = canRunFacebookCloneBase && Boolean(currentStrategisRouteUrl);
+
+  const canRunBothSetup = canRunStrategisSetup && canRunFacebookCloneBase;
 
   const strategisReadinessChecks: ReadinessCheck[] = [
     { label: "Preset selected", ok: Boolean(selectedProfile) },
@@ -1679,7 +1735,7 @@ export default function BenLaunchWorkbench() {
     { label: "At least one forcekey", ok: activeForcekeys.length >= 1 },
   ];
 
-  const facebookReadinessChecks: ReadinessCheck[] = [
+  const facebookCloneBaseReadinessChecks: ReadinessCheck[] = [
     { label: "Preset selected", ok: Boolean(selectedProfile) },
     { label: "Clone source selected", ok: Boolean(selectedCampaign?.campaignId) },
     {
@@ -1699,7 +1755,26 @@ export default function BenLaunchWorkbench() {
     },
   ];
 
-  const bothReadinessChecks: ReadinessCheck[] = [...strategisReadinessChecks, ...facebookReadinessChecks];
+  const facebookReadinessChecks: ReadinessCheck[] = [
+    {
+      label: "Strategis route URL available",
+      ok: Boolean(currentStrategisRouteUrl),
+      detail: currentStrategisRouteUrl
+        ? undefined
+        : "Run Setup in Strategis first so Facebook can use the created route URL.",
+    },
+    ...facebookCloneBaseReadinessChecks,
+  ];
+
+  const bothReadinessChecks: ReadinessCheck[] = [
+    ...strategisReadinessChecks,
+    {
+      label: "Strategis route URL will be created during setup",
+      ok: true,
+      detail: "Setup in Both creates the Strategis shell first, then uses that route URL for Facebook.",
+    },
+    ...facebookCloneBaseReadinessChecks,
+  ];
 
   function buildSetupPayload(mode: SetupMode, dryRun: boolean) {
     if (!selectedProfile || !strategistPreview) return null;
@@ -1732,6 +1807,8 @@ export default function BenLaunchWorkbench() {
       dryRun,
       mode,
       buyer,
+      strategisCampaignId: currentStrategisShell?.id || undefined,
+      strategisRouteUrl: currentStrategisRouteUrl || undefined,
       category: selectedProfile.category,
       article: form.article.trim(),
       headline: form.headline.trim(),
@@ -1829,6 +1906,19 @@ export default function BenLaunchWorkbench() {
         throw new Error(json?.message || json?.error || "Setup failed");
       }
       setSetupResult(json);
+      const createdStrategisShell = json?.result?.strategisCampaigns?.[0];
+      if (
+        createdStrategisShell?.id &&
+        createdStrategisShell?.trackingUrl &&
+        typeof createdStrategisShell.trackingUrl === "string"
+      ) {
+        setStrategisShell({
+          id: createdStrategisShell.id,
+          name: createdStrategisShell.name || json?.result?.campaignName || createdStrategisShell.id,
+          trackingUrl: createdStrategisShell.trackingUrl,
+          fingerprint: currentStrategisFingerprint,
+        });
+      }
       setConfirmMode(null);
       setConfirmPreview(null);
       try {
@@ -2362,23 +2452,89 @@ export default function BenLaunchWorkbench() {
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-2">
-                      {selectedProfile.strategist.rsocSite?.value ? (
-                        <span className={pillPublishClass}>{selectedProfile.strategist.rsocSite.value}</span>
-                      ) : null}
-                      {selectedProfile.facebook.adAccountId?.value ? (
-                        <span className={pillPublishClass}>acct {selectedProfile.facebook.adAccountId.value}</span>
-                      ) : null}
-                      {selectedProfile.facebook.pageId?.value ? (
-                        <span className={pillPublishClass}>page {selectedProfile.facebook.pageId.value}</span>
-                      ) : null}
-                      {selectedSelector ? <span className={pillPublishClass}>{selectedSelector.label}</span> : null}
-                      {selectedArticle?.articleSlug ? (
-                        <span className={pillPublishClass}>article {selectedArticle.articleSlug}</span>
-                      ) : null}
-                      {launchMode === "clone" && selectedCampaign ? (
+                    {launchMode === "clone" && selectedCampaign ? (
+                      <div className="flex flex-wrap gap-2">
                         <span className={pillClass}>clone {selectedCampaign.campaignId}</span>
-                      ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {/* Launch controls — where this campaign is going to land.
+                      Site cascade: changing site auto-recommends redirect, page,
+                      and ad account. Historical associations show with a green
+                      bullet inside the dropdowns. */}
+                  <div className="space-y-3">
+                    <div className={sectionLabel}>Launch controls</div>
+                    <div className="grid grid-cols-[minmax(0,1fr)] gap-3 md:grid-cols-2">
+                      <div className="min-w-0 md:col-span-2">
+                        <div className={fieldLabel}>RSOC site</div>
+                        <Dropdown
+                          value={form.rsocSite || strategistPreview?.rsocSite || ""}
+                          onChange={applySiteSelection}
+                          options={siteDropdownOptions}
+                          placeholder="Select site"
+                        />
+                        <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                          Changing the site recommends the redirect, page, and ad account that {buyerLabel} has historically paired with it.
+                        </div>
+                      </div>
+
+                      <div className="min-w-0">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <div className={fieldLabel}>Redirect domain</div>
+                          <button type="button" onClick={() => openEntityPicker("redirect")} className="text-xs font-medium text-[#0071e3] hover:underline">
+                            Show more
+                          </button>
+                        </div>
+                        <Dropdown
+                          value={form.redirectDomain}
+                          onChange={(value) => setForm((c) => ({ ...c, redirectDomain: value }))}
+                          options={redirectDropdownOptions}
+                          placeholder="Select redirect domain"
+                        />
+                      </div>
+
+                      <div className="min-w-0">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <div className={fieldLabel}>Facebook page</div>
+                          <button type="button" onClick={() => openEntityPicker("page")} className="text-xs font-medium text-[#0071e3] hover:underline">
+                            Show more
+                          </button>
+                        </div>
+                        <Dropdown
+                          value={form.pageId}
+                          onChange={(value) => setForm((c) => ({ ...c, pageId: value }))}
+                          options={pageDropdownOptions}
+                          placeholder="Select page"
+                        />
+                      </div>
+
+                      <div className="min-w-0">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <div className={fieldLabel}>Ad account</div>
+                          <button type="button" onClick={() => openEntityPicker("adAccount")} className="text-xs font-medium text-[#0071e3] hover:underline">
+                            Show more
+                          </button>
+                        </div>
+                        <Dropdown
+                          value={form.adAccountId}
+                          onChange={(value) => setForm((c) => ({ ...c, adAccountId: value }))}
+                          options={adAccountDropdownOptions}
+                          placeholder="Select ad account"
+                        />
+                      </div>
+
+                      <div className="min-w-0">
+                        <div className={fieldLabel}>Selector variant</div>
+                        <Dropdown
+                          value={form.selectorVariant}
+                          onChange={(v) => setForm((c) => ({ ...c, selectorVariant: v }))}
+                          options={selectorOptions.map((entry) => ({
+                            value: entry.key,
+                            label: entry.option.label,
+                          }))}
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -2857,162 +3013,9 @@ export default function BenLaunchWorkbench() {
                     <div className="h-px bg-black/[0.06] dark:bg-white/[0.10]" />
 
                     <div className="space-y-4">
-                      <div className={sectionLabel}>Launch controls</div>
+                      <div className={sectionLabel}>Budget &amp; bidding</div>
 
-                      <div className="grid grid-cols-[minmax(0,1fr)] gap-3 md:grid-cols-2 xl:grid-cols-4">
-                        <div className="xl:col-span-4">
-                          <div className={fieldLabel}>RSOC site</div>
-                          <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-                            Change the site here first. The workbench will recommend the redirect, page, and ad account that {buyerLabel} has historically used with that site, while still letting you pick a different option.
-                          </div>
-                          <div className="mt-2">
-                            <Dropdown
-                              value={form.rsocSite || strategistPreview?.rsocSite || ""}
-                              onChange={applySiteSelection}
-                              options={siteDropdownOptions}
-                              placeholder="Select site"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="xl:col-span-4">
-                          {currentSiteAssociation ? (
-                            <div className="rounded-xl bg-neutral-100/80 dark:bg-neutral-800/60 px-3 py-3">
-                              <div className="flex flex-wrap items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <div className="text-xs font-medium uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
-                                    Historical associations for {currentSiteAssociation.site}
-                                  </div>
-                                  <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-                                    Based on {currentSiteAssociation.campaignCount} prior {buyerLabel} campaigns on this site.
-                                  </div>
-                                </div>
-                                {form.networkAccountId ? (
-                                  <span className={pillPublishClass}>Network account: {form.networkAccountId}</span>
-                                ) : null}
-                              </div>
-
-                              <div className="mt-3 space-y-3">
-                                {/* Redirects */}
-                                <div className="min-w-0">
-                                  <div className="flex items-baseline justify-between gap-2">
-                                    <div className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
-                                      Redirects
-                                    </div>
-                                    <button type="button" onClick={() => openEntityPicker("redirect")} className="text-xs font-medium text-[#0071e3] hover:underline">
-                                      Show more
-                                    </button>
-                                  </div>
-                                  <div className="mt-2 flex flex-wrap gap-2">
-                                    {pinActiveFirst(
-                                      currentSiteAssociation.redirectDomains,
-                                      form.redirectDomain,
-                                    ).slice(0, 5).map((option) => {
-                                      const active = form.redirectDomain === option.value;
-                                      return (
-                                        <button
-                                          key={`redirect-${option.value}`}
-                                          type="button"
-                                          onClick={() => setForm((c) => ({ ...c, redirectDomain: option.value }))}
-                                          className={active ? pickButtonActive : buttonGhost}
-                                        >
-                                          {option.value}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-
-                                {/* Pages */}
-                                <div className="min-w-0">
-                                  <div className="flex items-baseline justify-between gap-2">
-                                    <div className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
-                                      Pages
-                                    </div>
-                                    <button type="button" onClick={() => openEntityPicker("page")} className="text-xs font-medium text-[#0071e3] hover:underline">
-                                      Show more
-                                    </button>
-                                  </div>
-                                  <div className="mt-2 flex flex-wrap gap-2">
-                                    {currentSiteAssociation.pages.length || form.pageId ? pinActiveFirst(
-                                      currentSiteAssociation.pages,
-                                      form.pageId,
-                                    ).slice(0, 5).map((option) => {
-                                      const active = form.pageId === option.value;
-                                      return (
-                                        <button
-                                          key={`page-${option.value}`}
-                                          type="button"
-                                          onClick={() => setForm((c) => ({ ...c, pageId: option.value }))}
-                                          className={active ? pickButtonActive : buttonGhost}
-                                          title={option.label}
-                                        >
-                                          {option.label}
-                                        </button>
-                                      );
-                                    }) : (
-                                      <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                                        No page history found for this site. Use Show more to search.
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {/* Ad accounts */}
-                                <div className="min-w-0">
-                                  <div className="flex items-baseline justify-between gap-2">
-                                    <div className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
-                                      Ad accounts
-                                    </div>
-                                    <button type="button" onClick={() => openEntityPicker("adAccount")} className="text-xs font-medium text-[#0071e3] hover:underline">
-                                      Show more
-                                    </button>
-                                  </div>
-                                  <div className="mt-2 flex flex-wrap gap-2">
-                                    {currentSiteAssociation.adAccounts.length || form.adAccountId ? pinActiveFirst(
-                                      currentSiteAssociation.adAccounts,
-                                      form.adAccountId,
-                                    ).slice(0, 5).map((option) => {
-                                      const active = form.adAccountId === option.value;
-                                      return (
-                                        <button
-                                          key={`account-${option.value}`}
-                                          type="button"
-                                          onClick={() => setForm((c) => ({ ...c, adAccountId: option.value }))}
-                                          className={active ? pickButtonActive : buttonGhost}
-                                          title={option.label}
-                                        >
-                                          {option.label}
-                                        </button>
-                                      );
-                                    }) : (
-                                      <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                                        No ad account history found for this site. Use Show more to search.
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          ) : launchIntelligence?.notes?.length ? (
-                            <div className="rounded-xl bg-neutral-100/80 dark:bg-neutral-800/60 px-3 py-3 text-sm text-neutral-600 dark:text-neutral-400">
-                              {launchIntelligence.notes[0]}
-                            </div>
-                          ) : null}
-                        </div>
-
-                        <div>
-                          <div className={fieldLabel}>Selector variant</div>
-                          <Dropdown
-                            value={form.selectorVariant}
-                            onChange={(v) => setForm((c) => ({ ...c, selectorVariant: v }))}
-                            options={selectorOptions.map((entry) => ({
-                              value: entry.key,
-                              label: entry.option.label,
-                            }))}
-                          />
-                        </div>
-
+                      <div className="grid grid-cols-[minmax(0,1fr)] gap-3 md:grid-cols-2">
                         <label className="block">
                           <div className={fieldLabel}>Budget per ad set ($)</div>
                           <input
@@ -3145,7 +3148,8 @@ export default function BenLaunchWorkbench() {
                         <div className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
                           Strategis creates the tracking shell only. Facebook currently clones the selected source
                           campaign shell, creates a fresh creative, and swaps that creative onto the cloned ad while
-                          keeping the clone paused.
+                          keeping the clone paused. Setup in Facebook requires the route URL returned by Setup in
+                          Strategis.
                         </div>
                         {runningSetup ? (
                           <div className="mt-3 rounded-xl bg-[#0071e3]/[0.10] px-3 py-3 text-sm text-[#0b63ce] dark:text-[#72b7ff]">
@@ -3155,12 +3159,37 @@ export default function BenLaunchWorkbench() {
                         ) : null}
                         {!runningSetup && setupResult ? (
                           <div className="mt-3 rounded-xl bg-[#34c759]/[0.10] px-3 py-3 text-sm text-[#0a7d2e] dark:text-[#5dd680]">
-                            {setupModeLabel(setupResult.mode)} setup complete for{" "}
-                            <span className="font-semibold">{setupResult.result.campaignName}</span>
-                            {setupResult.result.strategisCampaigns?.[0]?.id
-                              ? ` (${setupResult.result.strategisCampaigns[0].id})`
-                              : ""}
-                            .
+                            <div>
+                              {setupModeLabel(setupResult.mode)} setup complete for{" "}
+                              <span className="font-semibold">{setupResult.result.campaignName}</span>
+                              {setupResult.result.strategisCampaigns?.[0]?.id
+                                ? ` (${setupResult.result.strategisCampaigns[0].id})`
+                                : ""}
+                              .
+                            </div>
+                            {setupResult.result.strategisCampaigns?.[0]?.trackingUrl ? (
+                              <div className="mt-3 rounded-lg bg-white/70 px-3 py-3 text-xs text-[#063d15] dark:bg-neutral-950/40 dark:text-[#a3e8b8]">
+                                <div className="font-medium uppercase tracking-[0.14em] text-[#0a7d2e] dark:text-[#5dd680]">
+                                  New campaign URL
+                                </div>
+                                <div className="mt-2 break-all font-mono">
+                                  {setupResult.result.strategisCampaigns[0].trackingUrl}
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      await copyText(setupResult.result.strategisCampaigns![0].trackingUrl);
+                                      setCopied("strategis-route-url");
+                                      window.setTimeout(() => setCopied(null), 1200);
+                                    }}
+                                    className={buttonGhost}
+                                  >
+                                    {copied === "strategis-route-url" ? "Copied route URL" : "Copy route URL"}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
                         ) : null}
                       </div>
@@ -3510,6 +3539,9 @@ export default function BenLaunchWorkbench() {
                       ) : null}
                       {setupResult.result.strategisCampaigns?.[0]?.id ? (
                         <div>Strategis campaign: {setupResult.result.strategisCampaigns[0].id}</div>
+                      ) : null}
+                      {setupResult.result.strategisCampaigns?.[0]?.trackingUrl ? (
+                        <div>Route URL: {setupResult.result.strategisCampaigns[0].trackingUrl}</div>
                       ) : null}
                       {setupResult.mode === "both" ? (
                         <div>
