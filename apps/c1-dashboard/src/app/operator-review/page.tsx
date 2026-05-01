@@ -178,6 +178,20 @@ type BuyerScorecard = {
     }>;
     reasons: string[];
   };
+  opportunityQuality?: {
+    total: number;
+    pending: number;
+    launched: number;
+    rejected: number;
+    stalePending: number;
+    avgConfidenceScore: number | null;
+    pendingPredictedDeltaCm: number;
+    blueprintCoverage: number | null;
+    launchRate: number | null;
+    stalePendingRate: number | null;
+    qualityBand: "green" | "yellow" | "red";
+    reasons: string[];
+  };
   activity?: {
     recentLaunches: number;
     launchDaysActive: number;
@@ -848,29 +862,63 @@ type BuyerDailyCommandPacketReport = {
     high: number;
     previewOnly: boolean;
     outboundMessagingEnabled: boolean;
+    readyToDelegate: number;
+    overrideOnly: number;
+    hardBlockedForDelegation: number;
     buyersNeedingExplore: number;
     buyersNeedingFollowThrough: number;
     buyersWithSurfaceWork: number;
+    buyersWithWeakSupplyQuality: number;
+    actFirstCount: number;
   };
   packets: Array<{
     packetKey: string;
+    sequenceIndex: number;
     ownerKey: string;
     ownerLabel: string;
     priority: string;
     posture: string;
     policyAction: string;
     triggerState: string;
+    commandScore: number;
     previewOnly: boolean;
     outboundMessagingEnabled: boolean;
     topFocus: string;
     whyNow: string;
+    orderingReasons: string[];
+    firstAction: string | null;
     draftPreview: string;
+    delegationBoundary: {
+      status: "ready" | "needs_operator_work" | "blocked";
+      safeToDelegate: boolean;
+      reasons: string[];
+      hardStops: string[];
+      softStops: string[];
+      becomesReadyWhen: string[];
+      override: {
+        allowed: boolean;
+        mode: "preview_only" | "none";
+        guidance: string;
+        riskLevel: "low" | "medium" | "high";
+        requiredBeforeOverride: string[];
+      };
+      cleanliness: {
+        firstActionDefined: boolean;
+        blockerFree: boolean;
+        supplyQualified: boolean;
+        operatorTouched: boolean;
+        capitalClear: boolean;
+      };
+    };
     metrics: {
       netMargin: number;
       executionScore: number;
       recentLaunches: number;
       stalePendingOpportunities: number;
       activeConstraintCount: number;
+      supplyQualityBand: string;
+      supplyLaunchRate: number;
+      supplyBlueprintCoverage: number;
     };
     todayAsks: string[];
     blockers: string[];
@@ -885,6 +933,13 @@ type BuyerDailyCommandPacketReport = {
       objective: string;
     }>;
     upstream: {
+      quality: {
+        qualityBand: string;
+        launchRate: number | null;
+        stalePendingRate: number | null;
+        blueprintCoverage: number | null;
+        reasons: string[];
+      };
       opportunities: Array<{
         opportunityId: string;
         angle: string;
@@ -902,6 +957,304 @@ type BuyerDailyCommandPacketReport = {
       }>;
     };
   }>;
+  operatorRead: string;
+};
+
+type OperatorCommandQueueReport = {
+  window: {
+    lookbackDays: number;
+    through: string;
+  };
+  summary: {
+    total: number;
+    actNow: number;
+    critical: number;
+    blocked: number;
+    weakSupply: number;
+    readyToDelegate: number;
+    overrideOnly: number;
+    blockedForDelegation: number;
+    meaningfulSinceYesterday: number;
+    validatedSinceYesterday: number;
+    cosmeticTouchesSinceYesterday: number;
+    queued: number;
+    seen: number;
+    inProgress: number;
+    cleared: number;
+    promoted: number;
+  };
+  queue: Array<{
+    commandKey: string;
+    sequenceIndex: number;
+    ownerKey: string;
+    ownerLabel: string;
+    priority: string;
+    capitalPriority: string;
+    actionScore: number;
+    topFocus: string;
+    whyNow: string;
+    firstAction: string | null;
+    capitalAction: string;
+    policyAction: string;
+    triggerState: string;
+    blockerToClear: string | null;
+    promotionCondition: string | null;
+    supplyQualityBand: string;
+    posture: string;
+    state: "queued" | "seen" | "in_progress" | "cleared" | "promoted" | "deferred";
+    stateChangedAt: string | null;
+    stateNote: string | null;
+    delegationReadiness: "ready" | "needs_operator_work" | "blocked";
+    delegationReadinessReasons: string[];
+    delegationBoundary: {
+      status: "ready" | "needs_operator_work" | "blocked";
+      safeToDelegate: boolean;
+      reasons: string[];
+      hardStops: string[];
+      softStops: string[];
+      becomesReadyWhen: string[];
+      override: {
+        allowed: boolean;
+        mode: "preview_only" | "none";
+        guidance: string;
+        riskLevel: "low" | "medium" | "high";
+        requiredBeforeOverride: string[];
+      };
+      cleanliness: {
+        firstActionDefined: boolean;
+        blockerFree: boolean;
+        supplyQualified: boolean;
+        operatorTouched: boolean;
+        capitalClear: boolean;
+      };
+    };
+    movementStatus: string | null;
+    movementMeaningful: boolean;
+    movementState: string | null;
+    movementHeadline: string | null;
+    movementChangedAt: string | null;
+    movementPositiveSignals: string[];
+    movementNegativeSignals: string[];
+    orderingReasons: string[];
+    spendGuardrail: string | null;
+    draftPreview: string;
+    explainability: {
+      buyerDriver: string;
+      capitalDriver: string;
+      blockerDriver: string | null;
+      promotionDriver: string | null;
+    };
+  }>;
+  operatorRead: string;
+};
+
+type OvernightSprintScorecardReport = {
+  generatedAt: string;
+  summary: {
+    activeSprint: string;
+    activeNorthStar: string;
+    activeCurrentValue: number | null;
+    activeTrendDirection: string | null;
+  };
+  sprints: Array<{
+    sprintKey: string;
+    sprintLabel: string;
+    status: string;
+    northStar: {
+      metricKey: string;
+      label: string;
+      value: number | null;
+      unit: string;
+      definition: string;
+    };
+    diagnostics: {
+      candidateCommands?: number;
+      closedCommands?: number;
+      avgTimeToFirstTouchHours?: number | null;
+      avgTimeToResolutionHours?: number | null;
+      stuckOver24h?: number;
+      noStateChangeRate?: number | null;
+      blocker?: string;
+    };
+    trend: {
+      current: number | null;
+      rolling7: number | null;
+      previous: number | null;
+      delta: number | null;
+      direction: string;
+      averageDailyDelta: number | null;
+    };
+    operatorRead: string;
+  }>;
+};
+
+type CommandOutcomeTelemetryReport = {
+  generatedAt: string;
+  summary: {
+    resolvedCount: number;
+    validated: number;
+    worsened: number;
+    mixed: number;
+    noSignal: number;
+    notEnoughHistory: number;
+    validatedRate: number;
+    avgHoursSinceResolution: number | null;
+  };
+  nextMorning: {
+    lookbackHours: number;
+    changedCount: number;
+    meaningfulMovementCount: number;
+    validatedImprovementCount: number;
+    advancedButUnvalidatedCount: number;
+    cosmeticTouchCount: number;
+    worsenedCount: number;
+    deferredCount: number;
+    operatorRead: string;
+  };
+  items: Array<{
+    commandKey: string;
+    ownerKey: string;
+    ownerLabel: string;
+    state: string;
+    stateChangedAt: string | null;
+    hoursSinceResolution: number | null;
+    outcomeStatus: "validated" | "mixed" | "no_signal" | "worsened" | "not_enough_history";
+    positiveSignals: string[];
+    negativeSignals: string[];
+    metrics: {
+      netMarginDelta: number | null;
+      executionScoreDelta: number | null;
+      queuePressureImprovement: number | null;
+      overdueActionImprovement: number | null;
+      bandBefore: string | null;
+      bandAfter: string | null;
+      surfaceRiskBefore: string | null;
+      surfaceRiskAfter: string | null;
+    };
+  }>;
+  recentMovement: Array<{
+    commandKey: string;
+    ownerKey: string;
+    ownerLabel: string;
+    state: string;
+    movementState: string;
+    movementChangedAt: string | null;
+    hoursSinceMovement: number | null;
+    outcomeStatus: "validated" | "mixed" | "no_signal" | "worsened" | "not_enough_history";
+    movementStatus: string;
+    meaningfulMovement: boolean;
+    headline: string;
+    positiveSignals: string[];
+    negativeSignals: string[];
+    metrics: {
+      executionScoreDelta: number | null;
+      queuePressureImprovement: number | null;
+      overdueActionImprovement: number | null;
+      bandBefore: string | null;
+      bandAfter: string | null;
+      surfaceRiskBefore: string | null;
+      surfaceRiskAfter: string | null;
+    };
+  }>;
+  operatorRead: string;
+};
+
+type MorningOperatorPacketReport = {
+  generatedAt: string;
+  summary: {
+    topOwner: string | null;
+    actNowCount: number;
+    criticalCount: number;
+    blockedCount: number;
+    escalationCount: number;
+    validatedOutcomeRate: number;
+    meaningfulMovementCount: number;
+    cosmeticTouchCount: number;
+    activeSprint: string | null;
+    activeSprintMetric: string | null;
+  };
+  opening: string;
+  actFirst: {
+    ownerLabel: string;
+    firstAction: string | null;
+    capitalAction: string;
+    blockerToClear: string | null;
+    promotionCondition: string | null;
+    orderingReasons: string[];
+  } | null;
+  sprint: {
+    label: string;
+    metricLabel: string | null;
+    metricValue: number | null;
+    trendDirection: string | null;
+    operatorRead: string | null;
+  } | null;
+  validatedOutcomes: Array<{
+    ownerLabel: string;
+    outcomeStatus: string;
+    positiveSignals: string[];
+    negativeSignals: string[];
+  }>;
+  nextMorningMovement: {
+    summary: {
+      lookbackHours: number;
+      changedCount: number;
+      meaningfulMovementCount: number;
+      validatedImprovementCount: number;
+      advancedButUnvalidatedCount: number;
+      cosmeticTouchCount: number;
+      worsenedCount: number;
+      deferredCount: number;
+      operatorRead: string;
+    };
+    items: Array<{
+      commandKey: string;
+      ownerLabel: string;
+      movementState: string;
+      movementStatus: string;
+      movementChangedAt: string | null;
+      hoursSinceMovement: number | null;
+      headline: string;
+      positiveSignals: string[];
+      negativeSignals: string[];
+    }>;
+  };
+  stateRollup: {
+    generatedAt: string;
+    summary: {
+      lookbackHours: number;
+      changedCount: number;
+      seen: number;
+      inProgress: number;
+      cleared: number;
+      promoted: number;
+      deferred: number;
+    };
+    changes: Array<{
+      commandKey: string;
+      ownerKey: string;
+      ownerLabel: string;
+      status: string;
+      noteMd: string | null;
+      changedAt: string | null;
+      hoursSinceChange: number | null;
+    }>;
+    operatorRead: string;
+  };
+  escalations: Array<{
+    commandKey: string;
+    ownerLabel: string;
+    state: string;
+    severity: string;
+    triggerState: string;
+    hoursStale: number | null;
+    blockerToClear: string | null;
+    priority: string;
+    recommendedTouch: string;
+    reasons: string[];
+  }>;
+  followThroughToday: string[];
+  escalationRead?: string;
   operatorRead: string;
 };
 
@@ -994,6 +1347,71 @@ type OpportunityOwnershipReport = {
   operatorRead: string;
 };
 
+type OpportunitySupplyQualityLoopReport = {
+  summary: {
+    total: number;
+    pending: number;
+    launched: number;
+    rejected: number;
+    stalePending: number;
+    blueprintBacked: number;
+    approvedBlueprintBacked: number;
+    avgConfidenceScore: number | null;
+    pendingPredictedDeltaCm: number;
+    launchRate: number | null;
+    stalePendingRate: number | null;
+    blueprintCoverage: number | null;
+    closedLoopRate: number | null;
+  };
+  owners: Array<{
+    ownerLabel: string;
+    total: number;
+    pending: number;
+    launched: number;
+    rejected: number;
+    stalePending: number;
+    avgConfidenceScore: number | null;
+    pendingPredictedDeltaCm: number;
+    blueprintCoverage: number | null;
+    launchRate: number | null;
+    stalePendingRate: number | null;
+    qualityBand: "green" | "yellow" | "red";
+    reasons: string[];
+  }>;
+  sources: Array<{
+    source: string;
+    total: number;
+    pending: number;
+    launched: number;
+    rejected: number;
+    stalePending: number;
+    avgConfidenceScore: number | null;
+    pendingPredictedDeltaCm: number;
+    blueprintCoverage: number | null;
+    launchRate: number | null;
+    stalePendingRate: number | null;
+    qualityBand: "green" | "yellow" | "red";
+    reasons: string[];
+  }>;
+  categories: Array<{
+    category: string;
+    total: number;
+    pending: number;
+    launched: number;
+    rejected: number;
+    stalePending: number;
+    avgConfidenceScore: number | null;
+    pendingPredictedDeltaCm: number;
+    blueprintCoverage: number | null;
+    launchRate: number | null;
+    stalePendingRate: number | null;
+    qualityBand: "green" | "yellow" | "red";
+    reasons: string[];
+  }>;
+  systemicIssues: string[];
+  operatorRead: string;
+};
+
 type IntentPacketOwnershipReport = {
   window: {
     lookbackDays: number;
@@ -1055,6 +1473,11 @@ function formatPercent(value: number | null | undefined) {
   return `${(value * 100).toFixed(1)}%`;
 }
 
+function formatNumber(value: number | null | undefined, digits: number = 0) {
+  if (value == null) return "N/A";
+  return Number(value).toFixed(digits);
+}
+
 export default function OperatorReviewPage() {
   const [meetings, setMeetings] = useState<MeetingListItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -1075,9 +1498,14 @@ export default function OperatorReviewPage() {
   const [allocatorGroundingReport, setAllocatorGroundingReport] = useState<AllocatorGroundingReport | null>(null);
   const [allocationExecutionEngineReport, setAllocationExecutionEngineReport] = useState<AllocationExecutionEngineReport | null>(null);
   const [buyerDailyCommandPacketReport, setBuyerDailyCommandPacketReport] = useState<BuyerDailyCommandPacketReport | null>(null);
+  const [operatorCommandQueueReport, setOperatorCommandQueueReport] = useState<OperatorCommandQueueReport | null>(null);
+  const [overnightSprintScorecardReport, setOvernightSprintScorecardReport] = useState<OvernightSprintScorecardReport | null>(null);
+  const [commandOutcomeTelemetryReport, setCommandOutcomeTelemetryReport] = useState<CommandOutcomeTelemetryReport | null>(null);
+  const [morningOperatorPacketReport, setMorningOperatorPacketReport] = useState<MorningOperatorPacketReport | null>(null);
   const [packetLineageGraphReport, setPacketLineageGraphReport] = useState<PacketLineageGraphReport | null>(null);
   const [surfacePreservationCommandLayerReport, setSurfacePreservationCommandLayerReport] = useState<SurfacePreservationCommandLayerReport | null>(null);
   const [opportunityOwnershipReport, setOpportunityOwnershipReport] = useState<OpportunityOwnershipReport | null>(null);
+  const [opportunitySupplyQualityLoopReport, setOpportunitySupplyQualityLoopReport] = useState<OpportunitySupplyQualityLoopReport | null>(null);
   const [intentPacketOwnershipReport, setIntentPacketOwnershipReport] = useState<IntentPacketOwnershipReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -1087,6 +1515,7 @@ export default function OperatorReviewPage() {
   const [snapshottingScorecards, setSnapshottingScorecards] = useState(false);
   const [runningAutomation, setRunningAutomation] = useState(false);
   const [rebuildingLocalReport, setRebuildingLocalReport] = useState(false);
+  const [updatingCommandKey, setUpdatingCommandKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [approvalNotes, setApprovalNotes] = useState("");
   const [operatorName, setOperatorName] = useState("Eric");
@@ -1308,6 +1737,56 @@ export default function OperatorReviewPage() {
     }
   }
 
+  async function loadOperatorCommandQueueReport() {
+    try {
+      const response = await fetch("/api/meeting-intelligence/operator-command-queue?lookbackDays=7&limitBuyers=8", {
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      setOperatorCommandQueueReport((await response.json()) as OperatorCommandQueueReport);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function loadOvernightSprintScorecardReport() {
+    try {
+      const response = await fetch("/api/meeting-intelligence/overnight-sprint-scorecards", { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      setOvernightSprintScorecardReport((await response.json()) as OvernightSprintScorecardReport);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function loadCommandOutcomeTelemetryReport() {
+    try {
+      const response = await fetch("/api/meeting-intelligence/command-outcomes?lookbackDays=7&limit=12", { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      setCommandOutcomeTelemetryReport((await response.json()) as CommandOutcomeTelemetryReport);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function loadMorningOperatorPacketReport() {
+    try {
+      const response = await fetch("/api/meeting-intelligence/morning-operator-packet", { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      setMorningOperatorPacketReport((await response.json()) as MorningOperatorPacketReport);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   async function loadPacketLineageGraphReport() {
     try {
       const response = await fetch("/api/meeting-intelligence/packet-lineage-graph?limit=10", { cache: "no-store" });
@@ -1341,6 +1820,20 @@ export default function OperatorReviewPage() {
         throw new Error(await response.text());
       }
       setOpportunityOwnershipReport((await response.json()) as OpportunityOwnershipReport);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function loadOpportunitySupplyQualityLoopReport() {
+    try {
+      const response = await fetch("/api/meeting-intelligence/upstream/opportunity-supply-quality?limit=8", {
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      setOpportunitySupplyQualityLoopReport((await response.json()) as OpportunitySupplyQualityLoopReport);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -1396,9 +1889,14 @@ export default function OperatorReviewPage() {
       void loadAllocatorGroundingReport();
       void loadAllocationExecutionEngineReport();
       void loadBuyerDailyCommandPacketReport();
+      void loadOperatorCommandQueueReport();
+      void loadOvernightSprintScorecardReport();
+      void loadCommandOutcomeTelemetryReport();
+      void loadMorningOperatorPacketReport();
       void loadPacketLineageGraphReport();
       void loadSurfacePreservationCommandLayerReport();
       void loadOpportunityOwnershipReport();
+      void loadOpportunitySupplyQualityLoopReport();
     void loadIntentPacketOwnershipReport();
   }, []);
 
@@ -1440,6 +1938,7 @@ export default function OperatorReviewPage() {
       await loadAllocatorGroundingReport();
       await loadBuyerDailyCommandPacketReport();
       await loadOpportunityOwnershipReport();
+      await loadOpportunitySupplyQualityLoopReport();
       await loadIntentPacketOwnershipReport();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -1587,6 +2086,34 @@ export default function OperatorReviewPage() {
     }
   }
 
+  async function updateOperatorCommandState(
+    item: OperatorCommandQueueReport["queue"][number],
+    status: "seen" | "in_progress" | "cleared" | "promoted"
+  ) {
+    setUpdatingCommandKey(item.commandKey);
+    setError(null);
+    try {
+      const response = await fetch(`/api/meeting-intelligence/operator-command-queue/${encodeURIComponent(item.commandKey)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ownerKey: item.ownerKey,
+          ownerLabel: item.ownerLabel,
+          status,
+        }),
+      });
+      if (!response.ok) throw new Error(await response.text());
+      await loadOperatorCommandQueueReport();
+      await loadOvernightSprintScorecardReport();
+      await loadCommandOutcomeTelemetryReport();
+      await loadMorningOperatorPacketReport();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setUpdatingCommandKey(null);
+    }
+  }
+
   async function rebuildLocalReport() {
     setRebuildingLocalReport(true);
     setError(null);
@@ -1691,6 +2218,703 @@ export default function OperatorReviewPage() {
           </aside>
 
           <main className="space-y-6">
+            <section className={`${cardClass} p-6`}>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className={sectionLabel}>Morning Operator Packet</h2>
+                  <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
+                    This is the condensed morning control brief: who to start with, what to clear, what the sprint metric says, and what is escalating.
+                  </p>
+                </div>
+                <button type="button" onClick={() => void loadMorningOperatorPacketReport()} className={buttonGhost}>
+                  Refresh morning packet
+                </button>
+              </div>
+
+              {morningOperatorPacketReport ? (
+                <div className="mt-4 space-y-4">
+                  <div className="rounded-2xl border border-[#0071e3]/20 bg-[#0071e3]/[0.06] px-4 py-4 text-sm text-neutral-800 dark:border-[#0071e3]/30 dark:bg-[#0071e3]/[0.12] dark:text-neutral-100">
+                    {morningOperatorPacketReport.operatorRead}
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Start Here</div>
+                      <div className="mt-2 text-lg font-semibold">{morningOperatorPacketReport.summary.topOwner || "N/A"}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">top operator lane</div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Act Now</div>
+                      <div className="mt-2 text-2xl font-semibold">{morningOperatorPacketReport.summary.actNowCount}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">urgent command lanes</div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Critical</div>
+                      <div className="mt-2 text-2xl font-semibold">{morningOperatorPacketReport.summary.criticalCount}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">repair-first lanes</div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Blocked</div>
+                      <div className="mt-2 text-2xl font-semibold">{morningOperatorPacketReport.summary.blockedCount}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">still carrying hard blockers</div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Sprint 02 Rate</div>
+                      <div className="mt-2 text-2xl font-semibold">{formatPercent(morningOperatorPacketReport.summary.validatedOutcomeRate)}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">validated outcome rate</div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Meaningful Moves</div>
+                      <div className="mt-2 text-2xl font-semibold">{morningOperatorPacketReport.summary.meaningfulMovementCount}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">yesterday work with real movement</div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Cosmetic Touches</div>
+                      <div className="mt-2 text-2xl font-semibold">{morningOperatorPacketReport.summary.cosmeticTouchCount}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">acknowledged, not yet meaningful</div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-neutral-200 bg-white px-4 py-4 dark:border-neutral-700 dark:bg-neutral-900">
+                    <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Opening</div>
+                    <div className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-100">{morningOperatorPacketReport.opening}</div>
+                  </div>
+
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-sm font-semibold">Act First</div>
+                      {morningOperatorPacketReport.actFirst ? (
+                        <div className="mt-3 space-y-3 text-sm text-neutral-700 dark:text-neutral-200">
+                          <div><span className="font-medium">Owner:</span> {morningOperatorPacketReport.actFirst.ownerLabel}</div>
+                          <div><span className="font-medium">First action:</span> {morningOperatorPacketReport.actFirst.firstAction || "N/A"}</div>
+                          <div><span className="font-medium">Capital action:</span> {morningOperatorPacketReport.actFirst.capitalAction}</div>
+                          <div><span className="font-medium">Blocker:</span> {morningOperatorPacketReport.actFirst.blockerToClear || "None recorded"}</div>
+                          <div><span className="font-medium">Promote when:</span> {morningOperatorPacketReport.actFirst.promotionCondition || "None recorded"}</div>
+                          <div className="flex flex-wrap gap-2 text-xs">
+                            {morningOperatorPacketReport.actFirst.orderingReasons.map((reason) => (
+                              <span key={reason} className={pillClass}>{reason}</span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-3 text-sm text-neutral-500 dark:text-neutral-400">No act-first lane generated yet.</div>
+                      )}
+                    </div>
+
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-sm font-semibold">Sprint Read</div>
+                      {morningOperatorPacketReport.sprint ? (
+                        <div className="mt-3 space-y-3 text-sm text-neutral-700 dark:text-neutral-200">
+                          <div><span className="font-medium">{morningOperatorPacketReport.sprint.label}</span></div>
+                          <div><span className="font-medium">{morningOperatorPacketReport.sprint.metricLabel}:</span> {morningOperatorPacketReport.sprint.metricValue == null ? "N/A" : formatPercent(morningOperatorPacketReport.sprint.metricValue)}</div>
+                          <div><span className="font-medium">Trend:</span> {prettyLabel(morningOperatorPacketReport.sprint.trendDirection)}</div>
+                          <div>{morningOperatorPacketReport.sprint.operatorRead}</div>
+                        </div>
+                      ) : (
+                        <div className="mt-3 text-sm text-neutral-500 dark:text-neutral-400">No sprint summary generated yet.</div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-sm font-semibold">Yesterday → This Morning</div>
+                      <div className="mt-2 text-sm text-neutral-700 dark:text-neutral-200">
+                        {morningOperatorPacketReport.nextMorningMovement.summary.operatorRead}
+                      </div>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3 text-sm dark:border-neutral-700 dark:bg-neutral-900">
+                          <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Validated</div>
+                          <div className="mt-2 text-2xl font-semibold">{morningOperatorPacketReport.nextMorningMovement.summary.validatedImprovementCount}</div>
+                        </div>
+                        <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3 text-sm dark:border-neutral-700 dark:bg-neutral-900">
+                          <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Advanced</div>
+                          <div className="mt-2 text-2xl font-semibold">{morningOperatorPacketReport.nextMorningMovement.summary.advancedButUnvalidatedCount}</div>
+                        </div>
+                        <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3 text-sm dark:border-neutral-700 dark:bg-neutral-900">
+                          <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Worsened</div>
+                          <div className="mt-2 text-2xl font-semibold">{morningOperatorPacketReport.nextMorningMovement.summary.worsenedCount}</div>
+                        </div>
+                      </div>
+                      <div className="mt-3 space-y-3 text-sm text-neutral-700 dark:text-neutral-200">
+                        {morningOperatorPacketReport.nextMorningMovement.items.length ? morningOperatorPacketReport.nextMorningMovement.items.map((item) => (
+                          <div key={`${item.commandKey}:${item.movementChangedAt || "movement"}`}>
+                            <div className="font-medium">{item.ownerLabel}</div>
+                            <div>{item.headline}</div>
+                            <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                              {prettyLabel(item.movementStatus)} · {prettyLabel(item.movementState)}{item.movementChangedAt ? ` · ${formatDate(item.movementChangedAt)}` : ""}
+                            </div>
+                            {item.positiveSignals[0] ? <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-200">Positive: {item.positiveSignals[0]}</div> : null}
+                            {item.negativeSignals[0] ? <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-200">Negative: {item.negativeSignals[0]}</div> : null}
+                          </div>
+                        )) : <div>No next-morning movement recorded yet.</div>}
+                      </div>
+                      {morningOperatorPacketReport.validatedOutcomes.length ? (
+                        <div className="mt-4 rounded-xl border border-neutral-200 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-900">
+                          <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Best Validated Outcomes</div>
+                          <div className="mt-2 space-y-2 text-sm text-neutral-700 dark:text-neutral-200">
+                            {morningOperatorPacketReport.validatedOutcomes.map((item) => (
+                              <div key={`${item.ownerLabel}:${item.outcomeStatus}`}>
+                                <span className="font-medium">{item.ownerLabel}</span>: {item.positiveSignals[0] || "Validated improvement recorded."}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-sm font-semibold">Escalations</div>
+                      <div className="mt-2 text-sm text-neutral-700 dark:text-neutral-200">
+                        {morningOperatorPacketReport.escalationRead || "Escalations summarize blocked or stale command lanes that now need explicit operator intervention."}
+                      </div>
+                      <div className="mt-3 space-y-3 text-sm text-neutral-700 dark:text-neutral-200">
+                        {morningOperatorPacketReport.escalations.length ? morningOperatorPacketReport.escalations.map((item) => (
+                          <div key={item.commandKey}>
+                            <div className="font-medium">{item.ownerLabel}</div>
+                            <div>{prettyLabel(item.severity)} escalation · {prettyLabel(item.priority)} priority · {prettyLabel(item.state)} · {prettyLabel(item.triggerState)}</div>
+                            <div>{item.blockerToClear || "No blocker recorded."}</div>
+                            <div>Touch next: {item.recommendedTouch}</div>
+                            {item.hoursStale != null ? <div>Stale for {formatNumber(item.hoursStale, 1)}h</div> : null}
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {item.reasons.map((reason) => (
+                                <span key={reason} className={pillClass}>{reason}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )) : <div>No escalations generated yet.</div>}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className={subCardClass + " p-4"}>
+                    <div className="text-sm font-semibold">State Changes In Last {morningOperatorPacketReport.stateRollup.summary.lookbackHours}h</div>
+                    <div className="mt-2 text-sm text-neutral-700 dark:text-neutral-200">{morningOperatorPacketReport.stateRollup.operatorRead}</div>
+                    <div className="mt-3 grid gap-3 md:grid-cols-5">
+                      <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3 text-sm dark:border-neutral-700 dark:bg-neutral-900">
+                        <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Changed</div>
+                        <div className="mt-2 text-2xl font-semibold">{morningOperatorPacketReport.stateRollup.summary.changedCount}</div>
+                      </div>
+                      <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3 text-sm dark:border-neutral-700 dark:bg-neutral-900">
+                        <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Seen</div>
+                        <div className="mt-2 text-2xl font-semibold">{morningOperatorPacketReport.stateRollup.summary.seen}</div>
+                      </div>
+                      <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3 text-sm dark:border-neutral-700 dark:bg-neutral-900">
+                        <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">In Progress</div>
+                        <div className="mt-2 text-2xl font-semibold">{morningOperatorPacketReport.stateRollup.summary.inProgress}</div>
+                      </div>
+                      <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3 text-sm dark:border-neutral-700 dark:bg-neutral-900">
+                        <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Cleared</div>
+                        <div className="mt-2 text-2xl font-semibold">{morningOperatorPacketReport.stateRollup.summary.cleared}</div>
+                      </div>
+                      <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3 text-sm dark:border-neutral-700 dark:bg-neutral-900">
+                        <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Promoted</div>
+                        <div className="mt-2 text-2xl font-semibold">{morningOperatorPacketReport.stateRollup.summary.promoted}</div>
+                      </div>
+                    </div>
+                    <div className="mt-3 space-y-2 text-sm text-neutral-700 dark:text-neutral-200">
+                      {morningOperatorPacketReport.stateRollup.changes.length ? morningOperatorPacketReport.stateRollup.changes.map((item) => (
+                        <div key={item.commandKey}>
+                          <span className="font-medium">{item.ownerLabel}</span>: {prettyLabel(item.status)}{item.changedAt ? ` · ${formatDate(item.changedAt)}` : ""}{item.noteMd ? ` · ${item.noteMd}` : ""}
+                        </div>
+                      )) : <div>No state changes recorded yet.</div>}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 px-4 py-4 dark:border-neutral-700 dark:bg-neutral-950">
+                    <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Follow Through Today</div>
+                    <div className="mt-2 space-y-1 text-sm text-neutral-700 dark:text-neutral-200">
+                      {morningOperatorPacketReport.followThroughToday.length ? morningOperatorPacketReport.followThroughToday.map((entry) => (
+                        <div key={entry}>{entry}</div>
+                      )) : <div>No explicit follow-through items generated yet.</div>}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4 text-sm text-neutral-500 dark:text-neutral-400">
+                  Morning operator packet not loaded yet.
+                </div>
+              )}
+            </section>
+
+            <section className={`${cardClass} p-6`}>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className={sectionLabel}>Command Outcome Telemetry</h2>
+                  <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
+                    This is the first real Sprint 02 proof layer: it tests whether cleared or promoted commands actually improved buyer posture, queue pressure, or surface conditions.
+                  </p>
+                </div>
+                <button type="button" onClick={() => void loadCommandOutcomeTelemetryReport()} className={buttonGhost}>
+                  Refresh command outcomes
+                </button>
+              </div>
+
+              {commandOutcomeTelemetryReport ? (
+                <div className="mt-4 space-y-4">
+                  <div className="rounded-2xl border border-[#0071e3]/20 bg-[#0071e3]/[0.06] px-4 py-4 text-sm text-neutral-800 dark:border-[#0071e3]/30 dark:bg-[#0071e3]/[0.12] dark:text-neutral-100">
+                    {commandOutcomeTelemetryReport.operatorRead}
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Validated</div>
+                      <div className="mt-2 text-2xl font-semibold">{commandOutcomeTelemetryReport.summary.validated}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">resolved commands with positive proof</div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Validated Rate</div>
+                      <div className="mt-2 text-2xl font-semibold">{formatPercent(commandOutcomeTelemetryReport.summary.validatedRate)}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">Sprint 02 north-star</div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Mixed</div>
+                      <div className="mt-2 text-2xl font-semibold">{commandOutcomeTelemetryReport.summary.mixed}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">some positive, some negative</div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Worsened</div>
+                      <div className="mt-2 text-2xl font-semibold">{commandOutcomeTelemetryReport.summary.worsened}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">resolved commands with negative drift</div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">No Signal</div>
+                      <div className="mt-2 text-2xl font-semibold">{commandOutcomeTelemetryReport.summary.noSignal}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">resolved but no measured shift</div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Avg Hours Since Resolution</div>
+                      <div className="mt-2 text-2xl font-semibold">{commandOutcomeTelemetryReport.summary.avgHoursSinceResolution == null ? "N/A" : commandOutcomeTelemetryReport.summary.avgHoursSinceResolution}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">aging of measured outcomes</div>
+                    </div>
+                  </div>
+
+                  <div className={subCardClass + " p-4"}>
+                    <div className="text-sm font-semibold">Next-Morning Movement Read</div>
+                    <div className="mt-2 text-sm text-neutral-700 dark:text-neutral-200">
+                      {commandOutcomeTelemetryReport.nextMorning.operatorRead}
+                    </div>
+                    <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                      <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3 text-sm dark:border-neutral-700 dark:bg-neutral-900">
+                        <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Changed</div>
+                        <div className="mt-2 text-2xl font-semibold">{commandOutcomeTelemetryReport.nextMorning.changedCount}</div>
+                      </div>
+                      <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3 text-sm dark:border-neutral-700 dark:bg-neutral-900">
+                        <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Meaningful</div>
+                        <div className="mt-2 text-2xl font-semibold">{commandOutcomeTelemetryReport.nextMorning.meaningfulMovementCount}</div>
+                      </div>
+                      <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3 text-sm dark:border-neutral-700 dark:bg-neutral-900">
+                        <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Advanced</div>
+                        <div className="mt-2 text-2xl font-semibold">{commandOutcomeTelemetryReport.nextMorning.advancedButUnvalidatedCount}</div>
+                      </div>
+                      <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3 text-sm dark:border-neutral-700 dark:bg-neutral-900">
+                        <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Cosmetic</div>
+                        <div className="mt-2 text-2xl font-semibold">{commandOutcomeTelemetryReport.nextMorning.cosmeticTouchCount}</div>
+                      </div>
+                      <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3 text-sm dark:border-neutral-700 dark:bg-neutral-900">
+                        <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Deferred</div>
+                        <div className="mt-2 text-2xl font-semibold">{commandOutcomeTelemetryReport.nextMorning.deferredCount}</div>
+                      </div>
+                    </div>
+                    <div className="mt-3 space-y-3 text-sm text-neutral-700 dark:text-neutral-200">
+                      {commandOutcomeTelemetryReport.recentMovement.length ? commandOutcomeTelemetryReport.recentMovement.slice(0, 4).map((item) => (
+                        <div key={`${item.commandKey}:${item.movementChangedAt || "recent"}`}>
+                          <span className="font-medium">{item.ownerLabel}</span>: {item.headline}
+                        </div>
+                      )) : <div>No recent next-morning movement recorded yet.</div>}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    {commandOutcomeTelemetryReport.items.length ? commandOutcomeTelemetryReport.items.map((item) => (
+                      <div key={item.commandKey} className={subCardClass + " p-4"}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-semibold">{item.ownerLabel}</div>
+                            <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                              {prettyLabel(item.state)} · {item.stateChangedAt ? formatDate(item.stateChangedAt) : "no state change timestamp"} · {item.hoursSinceResolution == null ? "N/A" : `${item.hoursSinceResolution}h`} since resolution
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <span className={pillClass}>{prettyLabel(item.outcomeStatus)}</span>
+                            {item.metrics.bandAfter ? <span className={pillClass}>{item.metrics.bandBefore || "unknown"} → {item.metrics.bandAfter}</span> : null}
+                          </div>
+                        </div>
+
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-900">
+                            <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Positive Signals</div>
+                            <div className="mt-2 space-y-1 text-xs text-neutral-700 dark:text-neutral-200">
+                              {item.positiveSignals.length ? item.positiveSignals.map((signal) => (
+                                <div key={signal}>{signal}</div>
+                              )) : <div>No positive signal recorded yet.</div>}
+                            </div>
+                          </div>
+                          <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-900">
+                            <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Negative Signals</div>
+                            <div className="mt-2 space-y-1 text-xs text-neutral-700 dark:text-neutral-200">
+                              {item.negativeSignals.length ? item.negativeSignals.map((signal) => (
+                                <div key={signal}>{signal}</div>
+                              )) : <div>No negative signal recorded.</div>}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-900">
+                            <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Buyer Deltas</div>
+                            <div className="mt-2 space-y-1 text-xs text-neutral-700 dark:text-neutral-200">
+                              <div>Net margin Δ: {item.metrics.netMarginDelta == null ? "N/A" : formatMoney(item.metrics.netMarginDelta)}</div>
+                              <div>Execution Δ: {item.metrics.executionScoreDelta == null ? "N/A" : item.metrics.executionScoreDelta}</div>
+                              <div>Queue pressure improvement: {item.metrics.queuePressureImprovement == null ? "N/A" : item.metrics.queuePressureImprovement}</div>
+                              <div>Overdue improvement: {item.metrics.overdueActionImprovement == null ? "N/A" : item.metrics.overdueActionImprovement}</div>
+                            </div>
+                          </div>
+                          <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-900">
+                            <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Surface / Band</div>
+                            <div className="mt-2 space-y-1 text-xs text-neutral-700 dark:text-neutral-200">
+                              <div>Band: {item.metrics.bandBefore || "N/A"} → {item.metrics.bandAfter || "N/A"}</div>
+                              <div>Surface risk: {item.metrics.surfaceRiskBefore || "N/A"} → {item.metrics.surfaceRiskAfter || "N/A"}</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )) : (
+                      <div className="text-sm text-neutral-500 dark:text-neutral-400">No resolved command outcomes recorded yet.</div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4 text-sm text-neutral-500 dark:text-neutral-400">
+                  Command outcome telemetry not loaded yet.
+                </div>
+              )}
+            </section>
+
+            <section className={`${cardClass} p-6`}>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className={sectionLabel}>Overnight Sprint Scorecards</h2>
+                  <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
+                    One north-star metric per sprint, with trend and speed, so the overnight builds are judged by outcome rather than volume of work.
+                  </p>
+                </div>
+                <button type="button" onClick={() => void loadOvernightSprintScorecardReport()} className={buttonGhost}>
+                  Refresh sprint scorecards
+                </button>
+              </div>
+
+              {overnightSprintScorecardReport ? (
+                <div className="mt-4 space-y-4">
+                  <div className="rounded-2xl border border-[#0071e3]/20 bg-[#0071e3]/[0.06] px-4 py-4 text-sm text-neutral-800 dark:border-[#0071e3]/30 dark:bg-[#0071e3]/[0.12] dark:text-neutral-100">
+                    Active sprint: {overnightSprintScorecardReport.summary.activeSprint} · north-star {overnightSprintScorecardReport.summary.activeNorthStar} · current {formatPercent(overnightSprintScorecardReport.summary.activeCurrentValue)} · trend {prettyLabel(overnightSprintScorecardReport.summary.activeTrendDirection)}
+                  </div>
+
+                  <div className="grid gap-4 xl:grid-cols-3">
+                    {overnightSprintScorecardReport.sprints.map((sprint) => (
+                      <div key={sprint.sprintKey} className={subCardClass + " p-4"}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-semibold">{sprint.sprintLabel}</div>
+                            <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{prettyLabel(sprint.status)}</div>
+                          </div>
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <span className={pillClass}>{sprint.northStar.label}</span>
+                            <span className={pillClass}>{prettyLabel(sprint.trend.direction)}</span>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 rounded-xl border border-neutral-200 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-900">
+                          <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">North-Star</div>
+                          <div className="mt-2 text-2xl font-semibold text-neutral-900 dark:text-neutral-50">
+                            {sprint.northStar.value == null ? "N/A" : formatPercent(sprint.northStar.value)}
+                          </div>
+                          <div className="mt-2 text-xs text-neutral-700 dark:text-neutral-200">{sprint.northStar.definition}</div>
+                        </div>
+
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-900">
+                            <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Trend</div>
+                            <div className="mt-2 space-y-1 text-xs text-neutral-700 dark:text-neutral-200">
+                              <div>Current: {sprint.trend.current == null ? "N/A" : formatPercent(sprint.trend.current)}</div>
+                              <div>7-day avg: {sprint.trend.rolling7 == null ? "N/A" : formatPercent(sprint.trend.rolling7)}</div>
+                              <div>Delta: {sprint.trend.delta == null ? "N/A" : formatPercent(sprint.trend.delta)}</div>
+                              <div>Speed: {sprint.trend.averageDailyDelta == null ? "N/A" : formatPercent(sprint.trend.averageDailyDelta)} / day</div>
+                            </div>
+                          </div>
+                          <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-900">
+                            <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Diagnostics</div>
+                            <div className="mt-2 space-y-1 text-xs text-neutral-700 dark:text-neutral-200">
+                              {typeof sprint.diagnostics.candidateCommands === "number" ? <div>Candidates: {sprint.diagnostics.candidateCommands}</div> : null}
+                              {typeof sprint.diagnostics.closedCommands === "number" ? <div>Closed: {sprint.diagnostics.closedCommands}</div> : null}
+                              {typeof sprint.diagnostics.avgTimeToFirstTouchHours === "number" ? <div>First touch: {sprint.diagnostics.avgTimeToFirstTouchHours}h</div> : null}
+                              {typeof sprint.diagnostics.avgTimeToResolutionHours === "number" ? <div>Resolution: {sprint.diagnostics.avgTimeToResolutionHours}h</div> : null}
+                              {typeof sprint.diagnostics.stuckOver24h === "number" ? <div>Stuck &gt;24h: {sprint.diagnostics.stuckOver24h}</div> : null}
+                              {typeof sprint.diagnostics.noStateChangeRate === "number" ? <div>No state change: {formatPercent(sprint.diagnostics.noStateChangeRate)}</div> : null}
+                              {sprint.diagnostics.blocker ? <div>{sprint.diagnostics.blocker}</div> : null}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 text-sm text-neutral-700 dark:text-neutral-200">{sprint.operatorRead}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4 text-sm text-neutral-500 dark:text-neutral-400">
+                  Overnight sprint scorecards not loaded yet.
+                </div>
+              )}
+            </section>
+
+            <section className={`${cardClass} p-6`}>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className={sectionLabel}>Unified Operator Command Queue</h2>
+                  <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
+                    This is the merged control surface: buyer steering order, capital action, blocker to clear, and promotion condition in one ranked queue.
+                  </p>
+                </div>
+                <button type="button" onClick={() => void loadOperatorCommandQueueReport()} className={buttonGhost}>
+                  Refresh unified queue
+                </button>
+              </div>
+
+              {operatorCommandQueueReport ? (
+                <div className="mt-4 space-y-4">
+                  <div className="rounded-2xl border border-[#0071e3]/20 bg-[#0071e3]/[0.06] px-4 py-4 text-sm text-neutral-800 dark:border-[#0071e3]/30 dark:bg-[#0071e3]/[0.12] dark:text-neutral-100">
+                    {operatorCommandQueueReport.operatorRead}
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Act Now</div>
+                      <div className="mt-2 text-2xl font-semibold">{operatorCommandQueueReport.summary.actNow}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">top-ranked intervention lanes</div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Critical</div>
+                      <div className="mt-2 text-2xl font-semibold">{operatorCommandQueueReport.summary.critical}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">capital or buyer-critical lanes</div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Blocked</div>
+                      <div className="mt-2 text-2xl font-semibold">{operatorCommandQueueReport.summary.blocked}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">blocked by current trigger state</div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Weak Supply</div>
+                      <div className="mt-2 text-2xl font-semibold">{operatorCommandQueueReport.summary.weakSupply}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">red upstream quality lanes</div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Ready To Delegate</div>
+                      <div className="mt-2 text-2xl font-semibold">{operatorCommandQueueReport.summary.readyToDelegate}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">preview-only buyer-ready lanes</div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Override Only</div>
+                      <div className="mt-2 text-2xl font-semibold">{operatorCommandQueueReport.summary.overrideOnly}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">supervised exception lanes</div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Meaningful Since Yesterday</div>
+                      <div className="mt-2 text-2xl font-semibold">{operatorCommandQueueReport.summary.meaningfulSinceYesterday}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">lanes with real next-morning movement</div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Cosmetic Touches</div>
+                      <div className="mt-2 text-2xl font-semibold">{operatorCommandQueueReport.summary.cosmeticTouchesSinceYesterday}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">acknowledged but not yet proving out</div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Queue Size</div>
+                      <div className="mt-2 text-2xl font-semibold">{operatorCommandQueueReport.summary.total}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">merged operator commands</div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">In Progress</div>
+                      <div className="mt-2 text-2xl font-semibold">{operatorCommandQueueReport.summary.inProgress}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">commands actively being worked</div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Cleared</div>
+                      <div className="mt-2 text-2xl font-semibold">{operatorCommandQueueReport.summary.cleared}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">commands moved out of blockage</div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    {operatorCommandQueueReport.queue.length ? operatorCommandQueueReport.queue.map((item) => (
+                      <div key={item.commandKey} className={subCardClass + " p-4"}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">#{item.sequenceIndex} in operator queue</div>
+                            <div className="mt-1 text-sm font-semibold">{item.ownerLabel}</div>
+                            <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                              Score {Math.round(item.actionScore)} · buyer {prettyLabel(item.priority)} · capital {prettyLabel(item.capitalPriority)} · state {prettyLabel(item.state)}
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <span className={pillClass}>{prettyLabel(item.policyAction)}</span>
+                            <span className={pillClass}>{prettyLabel(item.triggerState)}</span>
+                            <span className={pillClass}>supply {prettyLabel(item.supplyQualityBand)}</span>
+                            <span className={pillClass}>delegation {prettyLabel(item.delegationReadiness)}</span>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 rounded-xl border border-[#0071e3]/20 bg-[#0071e3]/[0.06] px-3 py-3 dark:border-[#0071e3]/30 dark:bg-[#0071e3]/[0.12]">
+                          <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">First Action</div>
+                          <div className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-100">
+                            {item.firstAction || "No first action generated yet."}
+                          </div>
+                        </div>
+
+                        {item.movementHeadline ? (
+                          <div className="mt-3 rounded-xl border border-neutral-200 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-900">
+                            <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Next-Morning Movement</div>
+                            <div className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-100">{item.movementHeadline}</div>
+                            <div className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+                              {prettyLabel(item.movementStatus || "unknown")} · {prettyLabel(item.movementState || "unknown")}
+                              {item.movementChangedAt ? ` · ${formatDate(item.movementChangedAt)}` : ""}
+                            </div>
+                            {item.movementPositiveSignals.length ? (
+                              <div className="mt-2 text-xs text-neutral-700 dark:text-neutral-200">
+                                Positive: {item.movementPositiveSignals[0]}
+                              </div>
+                            ) : null}
+                            {item.movementNegativeSignals.length ? (
+                              <div className="mt-1 text-xs text-neutral-700 dark:text-neutral-200">
+                                Negative: {item.movementNegativeSignals[0]}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button type="button" disabled={updatingCommandKey === item.commandKey} onClick={() => void updateOperatorCommandState(item, "seen")} className={buttonGhost}>
+                            Mark seen
+                          </button>
+                          <button type="button" disabled={updatingCommandKey === item.commandKey} onClick={() => void updateOperatorCommandState(item, "in_progress")} className={buttonGhost}>
+                            Mark in progress
+                          </button>
+                          <button type="button" disabled={updatingCommandKey === item.commandKey} onClick={() => void updateOperatorCommandState(item, "cleared")} className={buttonGhost}>
+                            Mark cleared
+                          </button>
+                          <button type="button" disabled={updatingCommandKey === item.commandKey} onClick={() => void updateOperatorCommandState(item, "promoted")} className={buttonGhost}>
+                            Mark promoted
+                          </button>
+                        </div>
+
+                        <div className="mt-3 rounded-xl border border-neutral-200 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-900">
+                          <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Why Now</div>
+                          <div className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-100">{item.topFocus}</div>
+                          <div className="mt-2 text-sm text-neutral-700 dark:text-neutral-200">{item.whyNow}</div>
+                        </div>
+
+                        <div className="mt-3 rounded-xl border border-neutral-200 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-900">
+                          <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Delegation Readiness</div>
+                          <div className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-100">{prettyLabel(item.delegationReadiness)}</div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {item.delegationReadinessReasons.map((reason) => (
+                              <span key={reason} className={pillClass}>{reason}</span>
+                            ))}
+                          </div>
+                          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                            <div>
+                              <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Hard Stops</div>
+                              <div className="mt-2 space-y-1 text-xs text-neutral-700 dark:text-neutral-200">
+                                {item.delegationBoundary.hardStops.length ? item.delegationBoundary.hardStops.map((stop) => (
+                                  <div key={stop}>{stop}</div>
+                                )) : <div>No hard boundary is active.</div>}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Becomes Buyer-Ready When</div>
+                              <div className="mt-2 space-y-1 text-xs text-neutral-700 dark:text-neutral-200">
+                                {item.delegationBoundary.becomesReadyWhen.length ? item.delegationBoundary.becomesReadyWhen.map((condition) => (
+                                  <div key={condition}>{condition}</div>
+                                )) : <div>No additional work required.</div>}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="mt-3 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 px-3 py-3 dark:border-neutral-700 dark:bg-neutral-950">
+                            <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Preview-Only Override</div>
+                            <div className="mt-2 text-xs text-neutral-700 dark:text-neutral-200">{item.delegationBoundary.override.guidance}</div>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <span className={pillClass}>risk {prettyLabel(item.delegationBoundary.override.riskLevel)}</span>
+                              <span className={pillClass}>{item.delegationBoundary.override.allowed ? "override allowed" : "override blocked"}</span>
+                            </div>
+                            {item.delegationBoundary.override.requiredBeforeOverride.length ? (
+                              <div className="mt-2 space-y-1 text-xs text-neutral-700 dark:text-neutral-200">
+                                {item.delegationBoundary.override.requiredBeforeOverride.map((step) => (
+                                  <div key={step}>{step}</div>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-900">
+                            <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Capital Action</div>
+                            <div className="mt-2 text-xs text-neutral-700 dark:text-neutral-200">{item.capitalAction}</div>
+                            <div className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+                              {item.spendGuardrail || "No explicit spend guardrail recorded."}
+                            </div>
+                          </div>
+                          <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-900">
+                            <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Blocker To Clear</div>
+                            <div className="mt-2 text-xs text-neutral-700 dark:text-neutral-200">{item.blockerToClear || "No primary blocker recorded."}</div>
+                            <div className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+                              Promote when: {item.promotionCondition || "No promotion condition recorded."}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-900">
+                            <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Explainability</div>
+                            <div className="mt-2 space-y-1 text-xs text-neutral-700 dark:text-neutral-200">
+                              <div><span className="font-medium">Buyer:</span> {item.explainability.buyerDriver}</div>
+                              <div><span className="font-medium">Capital:</span> {item.explainability.capitalDriver}</div>
+                              <div><span className="font-medium">Blocker:</span> {item.explainability.blockerDriver || "None recorded"}</div>
+                              <div><span className="font-medium">Promote:</span> {item.explainability.promotionDriver || "None recorded"}</div>
+                            </div>
+                          </div>
+                          <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-900">
+                            <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">State</div>
+                            <div className="mt-2 text-xs text-neutral-700 dark:text-neutral-200">
+                              {prettyLabel(item.state)}
+                            </div>
+                            <div className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+                              {item.stateChangedAt ? `Changed ${formatDate(item.stateChangedAt)}` : "No state transition recorded yet."}
+                            </div>
+                            {item.stateNote ? (
+                              <div className="mt-2 text-xs text-neutral-700 dark:text-neutral-200">{item.stateNote}</div>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                          {item.orderingReasons.length ? item.orderingReasons.map((reason) => (
+                            <span key={reason} className={pillClass}>{reason}</span>
+                          )) : <span className={pillClass}>No ordering reasons generated yet</span>}
+                        </div>
+                      </div>
+                    )) : (
+                      <div className="text-sm text-neutral-500 dark:text-neutral-400">Unified operator command queue has no rows in this environment yet.</div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4 text-sm text-neutral-500 dark:text-neutral-400">
+                  Unified operator command queue not loaded yet.
+                </div>
+              )}
+            </section>
+
             <section className={`${cardClass} p-6`}>
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -2108,6 +3332,168 @@ export default function OperatorReviewPage() {
               ) : (
                 <div className="mt-4 text-sm text-neutral-500 dark:text-neutral-400">
                   Meeting entity link report not loaded yet.
+                </div>
+              )}
+            </section>
+
+            <section className={`${cardClass} p-6`}>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className={sectionLabel}>Opportunity Supply Quality Loop</h2>
+                  <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
+                    This layer scores whether upstream opportunity supply is actually converting into blueprint-backed and launch-proven work, instead of only measuring how much inventory exists.
+                  </p>
+                </div>
+                <button type="button" onClick={() => void loadOpportunitySupplyQualityLoopReport()} className={buttonGhost}>
+                  Refresh quality loop
+                </button>
+              </div>
+
+              {opportunitySupplyQualityLoopReport ? (
+                <div className="mt-4 space-y-4">
+                  <div className="rounded-2xl border border-[#0071e3]/20 bg-[#0071e3]/[0.06] px-4 py-4 text-sm text-neutral-800 dark:border-[#0071e3]/30 dark:bg-[#0071e3]/[0.12] dark:text-neutral-100">
+                    {opportunitySupplyQualityLoopReport.operatorRead}
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Launch Rate</div>
+                      <div className="mt-2 text-2xl font-semibold">{formatPercent(opportunitySupplyQualityLoopReport.summary.launchRate)}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
+                        {opportunitySupplyQualityLoopReport.summary.launched} launched of {opportunitySupplyQualityLoopReport.summary.total}
+                      </div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Blueprint Coverage</div>
+                      <div className="mt-2 text-2xl font-semibold">{formatPercent(opportunitySupplyQualityLoopReport.summary.blueprintCoverage)}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
+                        {opportunitySupplyQualityLoopReport.summary.blueprintBacked} blueprint-backed
+                      </div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Closed Loop</div>
+                      <div className="mt-2 text-2xl font-semibold">{formatPercent(opportunitySupplyQualityLoopReport.summary.closedLoopRate)}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
+                        launched or rejected
+                      </div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Stale Pending</div>
+                      <div className="mt-2 text-2xl font-semibold">{opportunitySupplyQualityLoopReport.summary.stalePending}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
+                        {formatPercent(opportunitySupplyQualityLoopReport.summary.stalePendingRate)} of pending
+                      </div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Pending ΔCM</div>
+                      <div className="mt-2 text-2xl font-semibold">{formatMoney(opportunitySupplyQualityLoopReport.summary.pendingPredictedDeltaCm)}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
+                        upside still in queue
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className={subCardClass + " p-4"}>
+                    <div className="text-sm font-semibold">Systemic Issues</div>
+                    <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                      {opportunitySupplyQualityLoopReport.systemicIssues.map((issue) => (
+                        <span key={issue} className={pillClass}>{issue}</span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 xl:grid-cols-3">
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-sm font-semibold">By Owner</div>
+                      <div className="mt-3 space-y-3">
+                        {opportunitySupplyQualityLoopReport.owners.length ? opportunitySupplyQualityLoopReport.owners.map((item) => (
+                          <div key={item.ownerLabel} className="rounded-xl border border-neutral-200 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-900">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="text-sm font-medium">{item.ownerLabel}</div>
+                                <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                                  {item.total} total · {item.pending} pending · {item.launched} launched
+                                </div>
+                              </div>
+                              <span className={pillClass}>{prettyLabel(item.qualityBand)}</span>
+                            </div>
+                            <div className="mt-2 text-xs text-neutral-600 dark:text-neutral-300">
+                              launch {formatPercent(item.launchRate)} · stale {formatPercent(item.stalePendingRate)} · blueprint {formatPercent(item.blueprintCoverage)}
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                              {item.reasons.map((reason) => (
+                                <span key={reason} className={pillClass}>{reason}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )) : (
+                          <div className="text-sm text-neutral-500 dark:text-neutral-400">No owner quality rows yet.</div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-sm font-semibold">By Source</div>
+                      <div className="mt-3 space-y-3">
+                        {opportunitySupplyQualityLoopReport.sources.length ? opportunitySupplyQualityLoopReport.sources.map((item) => (
+                          <div key={item.source} className="rounded-xl border border-neutral-200 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-900">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="text-sm font-medium">{item.source}</div>
+                                <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                                  {item.total} total · {item.pending} pending · {item.launched} launched
+                                </div>
+                              </div>
+                              <span className={pillClass}>{prettyLabel(item.qualityBand)}</span>
+                            </div>
+                            <div className="mt-2 text-xs text-neutral-600 dark:text-neutral-300">
+                              launch {formatPercent(item.launchRate)} · stale {formatPercent(item.stalePendingRate)} · blueprint {formatPercent(item.blueprintCoverage)}
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                              {item.reasons.map((reason) => (
+                                <span key={reason} className={pillClass}>{reason}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )) : (
+                          <div className="text-sm text-neutral-500 dark:text-neutral-400">No source quality rows yet.</div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-sm font-semibold">By Category</div>
+                      <div className="mt-3 space-y-3">
+                        {opportunitySupplyQualityLoopReport.categories.length ? opportunitySupplyQualityLoopReport.categories.map((item) => (
+                          <div key={item.category} className="rounded-xl border border-neutral-200 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-900">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="text-sm font-medium">{item.category}</div>
+                                <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                                  {item.total} total · {item.pending} pending · {item.launched} launched
+                                </div>
+                              </div>
+                              <span className={pillClass}>{prettyLabel(item.qualityBand)}</span>
+                            </div>
+                            <div className="mt-2 text-xs text-neutral-600 dark:text-neutral-300">
+                              launch {formatPercent(item.launchRate)} · stale {formatPercent(item.stalePendingRate)} · blueprint {formatPercent(item.blueprintCoverage)}
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                              {item.reasons.map((reason) => (
+                                <span key={reason} className={pillClass}>{reason}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )) : (
+                          <div className="text-sm text-neutral-500 dark:text-neutral-400">No category quality rows yet.</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4 text-sm text-neutral-500 dark:text-neutral-400">
+                  Opportunity supply quality loop not loaded yet.
                 </div>
               )}
             </section>
@@ -2967,6 +4353,41 @@ export default function OperatorReviewPage() {
                         packets linked to surface commands
                       </div>
                     </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Act First</div>
+                      <div className="mt-2 text-2xl font-semibold">{buyerDailyCommandPacketReport.summary.actFirstCount}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
+                        packets above the act-now threshold
+                      </div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Weak Supply</div>
+                      <div className="mt-2 text-2xl font-semibold">{buyerDailyCommandPacketReport.summary.buyersWithWeakSupplyQuality}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
+                        packets with red supply quality
+                      </div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Buyer-Ready</div>
+                      <div className="mt-2 text-2xl font-semibold">{buyerDailyCommandPacketReport.summary.readyToDelegate}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
+                        clean preview-only packets
+                      </div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Override Only</div>
+                      <div className="mt-2 text-2xl font-semibold">{buyerDailyCommandPacketReport.summary.overrideOnly}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
+                        supervised exception packets
+                      </div>
+                    </div>
+                    <div className={subCardClass + " p-4"}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400">Hard Stop</div>
+                      <div className="mt-2 text-2xl font-semibold">{buyerDailyCommandPacketReport.summary.hardBlockedForDelegation}</div>
+                      <div className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">
+                        not safe to delegate yet
+                      </div>
+                    </div>
                   </div>
 
                   <div className="grid gap-4 xl:grid-cols-2">
@@ -2974,15 +4395,29 @@ export default function OperatorReviewPage() {
                       <div key={item.packetKey} className={subCardClass + " p-4"}>
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <div className="text-sm font-semibold">{item.ownerLabel}</div>
+                            <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">#{item.sequenceIndex} in operator queue</div>
+                            <div className="mt-1 text-sm font-semibold">{item.ownerLabel}</div>
                             <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-                              Margin {formatMoney(item.metrics.netMargin)} · exec {Math.round(item.metrics.executionScore)} · launches {item.metrics.recentLaunches}
+                              Score {Math.round(item.commandScore)} · margin {formatMoney(item.metrics.netMargin)} · exec {Math.round(item.metrics.executionScore)} · launches {item.metrics.recentLaunches}
                             </div>
                           </div>
                           <div className="flex flex-wrap justify-end gap-2">
                             <span className={pillClass}>{prettyLabel(item.priority)}</span>
                             <span className={pillClass}>{prettyLabel(item.policyAction)}</span>
+                            <span className={pillClass}>supply {prettyLabel(item.metrics.supplyQualityBand)}</span>
                             <span className={pillClass}>Preview only</span>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 rounded-xl border border-[#0071e3]/20 bg-[#0071e3]/[0.06] px-3 py-3 dark:border-[#0071e3]/30 dark:bg-[#0071e3]/[0.12]">
+                          <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Act First Because</div>
+                          <div className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-100">
+                            {item.firstAction || "No first action generated yet."}
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                            {item.orderingReasons.length ? item.orderingReasons.map((reason) => (
+                              <span key={reason} className={pillClass}>{reason}</span>
+                            )) : <span className={pillClass}>No ordering reasons generated yet</span>}
                           </div>
                         </div>
 
@@ -3008,6 +4443,18 @@ export default function OperatorReviewPage() {
                                 <div key={blocker}>{blocker}</div>
                               )) : <div>No active blockers recorded.</div>}
                             </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 rounded-xl border border-neutral-200 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-900">
+                          <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Supply Quality</div>
+                          <div className="mt-2 text-sm text-neutral-800 dark:text-neutral-100">
+                            {prettyLabel(item.upstream.quality.qualityBand)} · launch {formatPercent(item.upstream.quality.launchRate)} · blueprint {formatPercent(item.upstream.quality.blueprintCoverage)}
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                            {item.upstream.quality.reasons.length ? item.upstream.quality.reasons.map((reason) => (
+                              <span key={reason} className={pillClass}>{reason}</span>
+                            )) : <span className={pillClass}>No quality signal yet</span>}
                           </div>
                         </div>
 
@@ -3041,6 +4488,49 @@ export default function OperatorReviewPage() {
                         <div className="mt-3 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 px-3 py-3 dark:border-neutral-700 dark:bg-neutral-950">
                           <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Draft Preview For Operator Review</div>
                           <div className="mt-2 text-sm text-neutral-700 dark:text-neutral-200">{item.draftPreview}</div>
+                        </div>
+
+                        <div className="mt-3 rounded-xl border border-neutral-200 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-900">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Delegation Boundary</div>
+                              <div className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-100">{prettyLabel(item.delegationBoundary.status)}</div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <span className={pillClass}>preview only</span>
+                              <span className={pillClass}>{item.delegationBoundary.override.allowed ? "override allowed" : "override blocked"}</span>
+                              <span className={pillClass}>risk {prettyLabel(item.delegationBoundary.override.riskLevel)}</span>
+                            </div>
+                          </div>
+                          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                            <div>
+                              <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Why Not Safe Yet</div>
+                              <div className="mt-2 space-y-1 text-xs text-neutral-700 dark:text-neutral-200">
+                                {item.delegationBoundary.reasons.length ? item.delegationBoundary.reasons.map((reason) => (
+                                  <div key={reason}>{reason}</div>
+                                )) : <div>No active delegation boundary.</div>}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">What Must Change</div>
+                              <div className="mt-2 space-y-1 text-xs text-neutral-700 dark:text-neutral-200">
+                                {item.delegationBoundary.becomesReadyWhen.length ? item.delegationBoundary.becomesReadyWhen.map((condition) => (
+                                  <div key={condition}>{condition}</div>
+                                )) : <div>This lane is already clean enough for preview-only delegation.</div>}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="mt-3 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 px-3 py-3 dark:border-neutral-700 dark:bg-neutral-950">
+                            <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Operator Override Semantics</div>
+                            <div className="mt-2 text-xs text-neutral-700 dark:text-neutral-200">{item.delegationBoundary.override.guidance}</div>
+                            {item.delegationBoundary.override.requiredBeforeOverride.length ? (
+                              <div className="mt-2 space-y-1 text-xs text-neutral-700 dark:text-neutral-200">
+                                {item.delegationBoundary.override.requiredBeforeOverride.map((step) => (
+                                  <div key={step}>{step}</div>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
                         </div>
 
                         {item.surfaceCommands.length || item.upstream.opportunities.length || item.upstream.intentPackets.length ? (
@@ -3523,6 +5013,7 @@ export default function OperatorReviewPage() {
                           <span className={pillClass}>exec {prettyLabel(card.health?.executionBand)}</span>
                           <span className={pillClass}>data {prettyLabel(card.health?.dataConfidence)}</span>
                           <span className={pillClass}>attr {prettyLabel(card.attribution?.confidence)}</span>
+                          <span className={pillClass}>supply {prettyLabel(card.opportunityQuality?.qualityBand)}</span>
                         </div>
                       </div>
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -3560,6 +5051,15 @@ export default function OperatorReviewPage() {
                           </div>
                           <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
                             {card.activity?.distinctLaunchCategories || 0} categories · {card.activity?.distinctLaunchSources || 0} sources
+                          </div>
+                        </div>
+                        <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-900">
+                          <div className="text-xs uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">Supply Quality</div>
+                          <div className="mt-2 text-sm text-neutral-800 dark:text-neutral-100">
+                            {prettyLabel(card.opportunityQuality?.qualityBand)} · launch {formatPercent(card.opportunityQuality?.launchRate)}
+                          </div>
+                          <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                            blueprint {formatPercent(card.opportunityQuality?.blueprintCoverage)} · stale {formatPercent(card.opportunityQuality?.stalePendingRate)}
                           </div>
                         </div>
                         <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3 dark:border-neutral-700 dark:bg-neutral-900">
@@ -3602,6 +5102,9 @@ export default function OperatorReviewPage() {
                         ))}
                         {(card.opportunityMix?.reasons || []).slice(0, 2).map((reason) => (
                           <span key={`opp-${reason}`} className={pillClass}>{reason}</span>
+                        ))}
+                        {(card.opportunityQuality?.reasons || []).slice(0, 2).map((reason) => (
+                          <span key={`supply-${reason}`} className={pillClass}>{reason}</span>
                         ))}
                         {(card.exploreExploit?.reasons || []).slice(0, 2).map((reason) => (
                           <span key={`lane-${reason}`} className={pillClass}>{reason}</span>
@@ -3694,8 +5197,9 @@ export default function OperatorReviewPage() {
                       <th className="pb-3 pr-4">Active</th>
                       <th className="pb-3 pr-4">Launches</th>
                       <th className="pb-3 pr-4">Owned Opps</th>
-                      <th className="pb-3 pr-4">Pending Opps</th>
-                      <th className="pb-3 pr-4">Explore / Exploit</th>
+                        <th className="pb-3 pr-4">Pending Opps</th>
+                        <th className="pb-3 pr-4">Supply Quality</th>
+                        <th className="pb-3 pr-4">Explore / Exploit</th>
                       <th className="pb-3 pr-4">Surface</th>
                       <th className="pb-3 pr-4">Throughput</th>
                       <th className="pb-3 pr-4">Open Actions</th>
@@ -3728,6 +5232,9 @@ export default function OperatorReviewPage() {
                         <td className="py-3 pr-4">{card.performance.launchCount}</td>
                         <td className="py-3 pr-4">{card.opportunityMix?.totalOwned || 0}</td>
                         <td className="py-3 pr-4">{card.opportunityMix?.pending || 0}</td>
+                        <td className="py-3 pr-4">
+                          {prettyLabel(card.opportunityQuality?.qualityBand)} · {formatPercent(card.opportunityQuality?.launchRate)}
+                        </td>
                         <td className="py-3 pr-4">
                           {card.exploreExploit?.estimatedExploreLaunches || 0} / {card.exploreExploit?.estimatedExploitLaunches || 0}
                         </td>
