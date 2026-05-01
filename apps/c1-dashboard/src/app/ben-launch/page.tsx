@@ -14,8 +14,11 @@ import {
   buttonPrimary,
   buttonSecondary,
   cardClass,
+  currentValueCardEmpty,
+  currentValueCardSet,
   fieldLabel,
   inputClass,
+  pickButtonActive,
   pillClass,
   pillPublishClass,
   sectionLabel,
@@ -502,6 +505,19 @@ function siteOptionLabel(option: LaunchAssociationOption) {
   return `${option.value} · Available site`;
 }
 
+function formatArticleBuyerLabel(item: BenArticleCatalogItem, currentBuyer: string) {
+  const normalizedCurrentBuyer = currentBuyer.trim().toLowerCase();
+  const normalizedBuyers = item.buyers.map((value) => value.trim()).filter(Boolean);
+  const ownedByCurrentBuyer = normalizedBuyers.some((value) => value.toLowerCase() === normalizedCurrentBuyer);
+  if (ownedByCurrentBuyer) {
+    return `${item.label} (${item.campaignCount})`;
+  }
+  if (normalizedBuyers.length === 0) {
+    return `${item.label} (${item.campaignCount})`;
+  }
+  return `${item.label} (${item.campaignCount}) · ${normalizedBuyers.join(", ")}`;
+}
+
 function copyJson(value: unknown) {
   return navigator.clipboard.writeText(JSON.stringify(value, null, 2));
 }
@@ -812,7 +828,6 @@ export default function BenLaunchWorkbench() {
   const [packetPreviewLoading, setPacketPreviewLoading] = useState(false);
   const [packetPreviewError, setPacketPreviewError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [showAllForcekeys, setShowAllForcekeys] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -1185,13 +1200,16 @@ export default function BenLaunchWorkbench() {
     const items = articleCatalog?.items || [];
     if (!selectedProfile) return items;
     return [...items].sort((a, b) => {
+      const aBuyerMatch = a.buyers.some((value) => value.toLowerCase() === buyer.toLowerCase()) ? 0 : 1;
+      const bBuyerMatch = b.buyers.some((value) => value.toLowerCase() === buyer.toLowerCase()) ? 0 : 1;
+      if (aBuyerMatch !== bBuyerMatch) return aBuyerMatch - bBuyerMatch;
       const aMatch = a.category === selectedProfile.category ? 0 : 1;
       const bMatch = b.category === selectedProfile.category ? 0 : 1;
       if (aMatch !== bMatch) return aMatch - bMatch;
       if (a.campaignCount !== b.campaignCount) return b.campaignCount - a.campaignCount;
       return a.label.localeCompare(b.label);
     });
-  }, [articleCatalog, selectedProfile]);
+  }, [articleCatalog, buyer, selectedProfile]);
 
   const filteredArticles = useMemo(() => {
     const lowered = articleQuery.trim().toLowerCase();
@@ -2363,7 +2381,7 @@ export default function BenLaunchWorkbench() {
                           />
                           {hasCurrentArticle && selectedArticle ? (
                             <div className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">
-                              {selectedArticle.label} · used in {selectedArticle.campaignCount || 0} {buyerLabel} campaign{selectedArticle.campaignCount === 1 ? "" : "s"}
+                              {selectedArticle.label} · used in {selectedArticle.campaignCount || 0} campaign{selectedArticle.campaignCount === 1 ? "" : "s"} · buyers: {selectedArticle.buyers.join(", ")}
                             </div>
                           ) : hasCurrentArticle ? (
                             <div className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">
@@ -2393,13 +2411,16 @@ export default function BenLaunchWorkbench() {
                                 headline: nextArticle?.headlineHints?.[0] || current.headline,
                               }));
                             }}
-                            options={(articleCatalog?.items || []).map((item) => ({
+                            options={filteredArticles.map((item) => ({
                               value: item.articleKey,
-                              label: `${item.label} (${item.campaignCount})`,
+                              label: formatArticleBuyerLabel(item, buyer),
                             }))}
                             placeholder={hasCurrentArticle ? `Search ${buyerLabel}'s articles to replace…` : `Search ${buyerLabel}'s articles…`}
                             emptyLabel={`No ${buyerLabel} articles match`}
                           />
+                          <div className="text-xs text-neutral-500 dark:text-neutral-400">
+                            {buyerLabel}&rsquo;s article history ranks first. If an article comes from another buyer&rsquo;s history, the buyer name appears in the result label.
+                          </div>
                         </div>
                       </div>
 
@@ -2806,18 +2827,9 @@ export default function BenLaunchWorkbench() {
                     <div className="h-px bg-black/[0.06] dark:bg-white/[0.10]" />
 
                     <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className={sectionLabel}>Launch controls</div>
-                        <button
-                          type="button"
-                          onClick={() => setShowAdvanced((v) => !v)}
-                          className={buttonGhost}
-                        >
-                          {showAdvanced ? "Hide advanced" : "Show advanced"}
-                        </button>
-                      </div>
+                      <div className={sectionLabel}>Launch controls</div>
 
-                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                      <div className="grid grid-cols-[minmax(0,1fr)] gap-3 md:grid-cols-2 xl:grid-cols-4">
                         <div className="xl:col-span-4">
                           <div className={fieldLabel}>RSOC site</div>
                           <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
@@ -2836,8 +2848,8 @@ export default function BenLaunchWorkbench() {
                         <div className="xl:col-span-4">
                           {currentSiteAssociation ? (
                             <div className="rounded-xl bg-neutral-100/80 dark:bg-neutral-800/60 px-3 py-3">
-                              <div className="flex items-center justify-between gap-3">
-                                <div>
+                              <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div className="min-w-0">
                                   <div className="text-xs font-medium uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
                                     Historical associations for {currentSiteAssociation.site}
                                   </div>
@@ -2846,26 +2858,29 @@ export default function BenLaunchWorkbench() {
                                   </div>
                                 </div>
                                 {form.networkAccountId ? (
-                                  <span className={pillClass}>Network account: {form.networkAccountId}</span>
+                                  <span className={pillPublishClass}>Network account: {form.networkAccountId}</span>
                                 ) : null}
                               </div>
 
-                              <div className="mt-3 grid gap-3 md:grid-cols-3">
+                              <div className="mt-3 grid grid-cols-[minmax(0,1fr)] gap-3 md:grid-cols-3">
                                 <div>
                                   <div className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
                                     Redirects
                                   </div>
                                   <div className="mt-2 flex flex-wrap gap-2">
-                                    {currentSiteAssociation.redirectDomains.slice(0, 4).map((option) => (
-                                      <button
-                                        key={`redirect-${option.value}`}
-                                        type="button"
-                                        onClick={() => setForm((c) => ({ ...c, redirectDomain: option.value }))}
-                                        className={buttonGhost}
-                                      >
-                                        {option.value}
-                                      </button>
-                                    ))}
+                                    {currentSiteAssociation.redirectDomains.slice(0, 4).map((option) => {
+                                      const active = form.redirectDomain === option.value;
+                                      return (
+                                        <button
+                                          key={`redirect-${option.value}`}
+                                          type="button"
+                                          onClick={() => setForm((c) => ({ ...c, redirectDomain: option.value }))}
+                                          className={active ? pickButtonActive : buttonGhost}
+                                        >
+                                          {option.value}
+                                        </button>
+                                      );
+                                    })}
                                   </div>
                                 </div>
                                 <div>
@@ -2873,17 +2888,20 @@ export default function BenLaunchWorkbench() {
                                     Pages
                                   </div>
                                   <div className="mt-2 flex flex-wrap gap-2">
-                                    {currentSiteAssociation.pages.length ? currentSiteAssociation.pages.slice(0, 4).map((option) => (
-                                      <button
-                                        key={`page-${option.value}`}
-                                        type="button"
-                                        onClick={() => setForm((c) => ({ ...c, pageId: option.value }))}
-                                        className={buttonGhost}
-                                        title={option.label}
-                                      >
-                                        {option.label}
-                                      </button>
-                                    )) : (
+                                    {currentSiteAssociation.pages.length ? currentSiteAssociation.pages.slice(0, 4).map((option) => {
+                                      const active = form.pageId === option.value;
+                                      return (
+                                        <button
+                                          key={`page-${option.value}`}
+                                          type="button"
+                                          onClick={() => setForm((c) => ({ ...c, pageId: option.value }))}
+                                          className={active ? pickButtonActive : buttonGhost}
+                                          title={option.label}
+                                        >
+                                          {option.label}
+                                        </button>
+                                      );
+                                    }) : (
                                       <span className="text-xs text-neutral-500 dark:text-neutral-400">
                                         No page history found for this site in the current catalog.
                                       </span>
@@ -2895,22 +2913,25 @@ export default function BenLaunchWorkbench() {
                                     Ad accounts
                                   </div>
                                   <div className="mt-2 flex flex-wrap gap-2">
-                                    {currentSiteAssociation.adAccounts.length ? currentSiteAssociation.adAccounts.slice(0, 4).map((option) => (
-                                      <button
-                                        key={`account-${option.value}`}
-                                        type="button"
-                                        onClick={() =>
-                                          setForm((c) => ({
-                                            ...c,
-                                            adAccountId: option.value,
-                                          }))
-                                        }
-                                        className={buttonGhost}
-                                        title={option.label}
-                                      >
-                                        {option.label}
-                                      </button>
-                                    )) : (
+                                    {currentSiteAssociation.adAccounts.length ? currentSiteAssociation.adAccounts.slice(0, 4).map((option) => {
+                                      const active = form.adAccountId === option.value;
+                                      return (
+                                        <button
+                                          key={`account-${option.value}`}
+                                          type="button"
+                                          onClick={() =>
+                                            setForm((c) => ({
+                                              ...c,
+                                              adAccountId: option.value,
+                                            }))
+                                          }
+                                          className={active ? pickButtonActive : buttonGhost}
+                                          title={option.label}
+                                        >
+                                          {option.label}
+                                        </button>
+                                      );
+                                    }) : (
                                       <span className="text-xs text-neutral-500 dark:text-neutral-400">
                                         No ad account history found for this site in the current catalog.
                                       </span>
@@ -2926,34 +2947,34 @@ export default function BenLaunchWorkbench() {
                                 <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
                                   These dropdowns start with {buyerLabel}&rsquo;s historical associations for this site, then continue into the broader available option set.
                                 </div>
-                                <div className="mt-3 grid gap-2 md:grid-cols-3">
-                                  <div className="rounded-lg border border-black/[0.06] bg-black/[0.02] px-3 py-2 dark:border-white/[0.10] dark:bg-white/[0.03]">
+                                <div className="mt-3 grid grid-cols-[minmax(0,1fr)] gap-2 md:grid-cols-3">
+                                  <div className={form.redirectDomain ? currentValueCardSet : currentValueCardEmpty}>
                                     <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
                                       Current redirect
                                     </div>
-                                    <div className="mt-1 text-sm font-semibold text-neutral-900 dark:text-neutral-50">
+                                    <div className="mt-1 break-words text-sm font-semibold text-neutral-900 dark:text-neutral-50">
                                       {currentRedirectLabel || "No redirect selected"}
                                     </div>
                                   </div>
-                                  <div className="rounded-lg border border-black/[0.06] bg-black/[0.02] px-3 py-2 dark:border-white/[0.10] dark:bg-white/[0.03]">
+                                  <div className={form.pageId ? currentValueCardSet : currentValueCardEmpty}>
                                     <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
                                       Current page
                                     </div>
-                                    <div className="mt-1 text-sm font-semibold text-neutral-900 dark:text-neutral-50">
+                                    <div className="mt-1 break-words text-sm font-semibold text-neutral-900 dark:text-neutral-50">
                                       {currentPageLabel || "No page selected"}
                                     </div>
                                   </div>
-                                  <div className="rounded-lg border border-black/[0.06] bg-black/[0.02] px-3 py-2 dark:border-white/[0.10] dark:bg-white/[0.03]">
+                                  <div className={form.adAccountId ? currentValueCardSet : currentValueCardEmpty}>
                                     <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
                                       Current ad account
                                     </div>
-                                    <div className="mt-1 text-sm font-semibold text-neutral-900 dark:text-neutral-50">
+                                    <div className="mt-1 break-words text-sm font-semibold text-neutral-900 dark:text-neutral-50">
                                       {currentAdAccountLabel || "No ad account selected"}
                                     </div>
                                   </div>
                                 </div>
-                                <div className="mt-3 grid gap-3 md:grid-cols-3">
-                                  <div>
+                                <div className="mt-3 grid grid-cols-[minmax(0,1fr)] gap-3 md:grid-cols-3">
+                                  <div className="min-w-0">
                                     <div className="flex items-center justify-between gap-2">
                                       <div className={fieldLabel}>Redirect domain</div>
                                       <button type="button" onClick={() => openEntityPicker("redirect")} className="text-xs font-medium text-[#0071e3] hover:underline">
@@ -2967,7 +2988,7 @@ export default function BenLaunchWorkbench() {
                                       placeholder="Select redirect domain"
                                     />
                                   </div>
-                                  <div>
+                                  <div className="min-w-0">
                                     <div className="flex items-center justify-between gap-2">
                                       <div className={fieldLabel}>Facebook page</div>
                                       <button type="button" onClick={() => openEntityPicker("page")} className="text-xs font-medium text-[#0071e3] hover:underline">
@@ -2981,7 +3002,7 @@ export default function BenLaunchWorkbench() {
                                       placeholder="Select page"
                                     />
                                   </div>
-                                  <div>
+                                  <div className="min-w-0">
                                     <div className="flex items-center justify-between gap-2">
                                       <div className={fieldLabel}>Ad account</div>
                                       <button type="button" onClick={() => openEntityPicker("adAccount")} className="text-xs font-medium text-[#0071e3] hover:underline">
@@ -3041,14 +3062,6 @@ export default function BenLaunchWorkbench() {
                           />
                         </label>
                       </div>
-
-                      {showAdvanced ? (
-                        <div className="space-y-4">
-                          <div className="rounded-xl bg-neutral-100/80 px-3 py-3 text-sm text-neutral-600 dark:bg-neutral-800/60 dark:text-neutral-400">
-                            Site, redirect, page, and ad account selection now live above. Advanced mode is reserved for lower-frequency overrides.
-                          </div>
-                        </div>
-                      ) : null}
 
                       <div className="rounded-xl bg-neutral-100/80 dark:bg-neutral-800/60 px-3 py-3">
                         <div className="mb-3 text-xs font-medium uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">

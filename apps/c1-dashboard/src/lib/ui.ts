@@ -40,6 +40,19 @@ export const pillPublishClass =
 export const buttonGhost =
   "rounded-lg bg-neutral-100 dark:bg-neutral-800 px-3 py-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-200 transition hover:bg-neutral-200 dark:hover:bg-neutral-700";
 
+// Quick-pick button (e.g. Redirects / Pages / Ad accounts shortcuts) when its
+// value matches the form's current selection — same Apple-green palette as
+// pillPublishClass so 'this is what's selected' reads consistently.
+export const pickButtonActive =
+  "rounded-lg bg-[#34c759]/[0.12] dark:bg-[#34c759]/[0.22] px-3 py-1.5 text-xs font-semibold text-[#1f8a3a] dark:text-[#5fd97e] ring-1 ring-inset ring-[#34c759]/30 transition";
+
+// Current redirect / page / ad account summary cards (Use-a-different-option):
+// 'set' state mirrors the green publish palette, 'empty' is neutral.
+export const currentValueCardSet =
+  "min-w-0 rounded-lg bg-[#34c759]/[0.10] dark:bg-[#34c759]/[0.18] px-3 py-2 ring-1 ring-inset ring-[#34c759]/25";
+export const currentValueCardEmpty =
+  "min-w-0 rounded-lg border border-black/[0.06] bg-black/[0.02] px-3 py-2 dark:border-white/[0.10] dark:bg-white/[0.03]";
+
 // Inverts in dark — primary CTA goes white-on-near-black in light, near-black-on-white in dark (Apple/Framer pattern).
 export const buttonPrimary =
   "rounded-lg bg-neutral-900 dark:bg-white px-3 py-2 text-xs font-semibold text-white dark:text-neutral-900 transition hover:bg-neutral-800 dark:hover:bg-neutral-100 disabled:cursor-not-allowed disabled:bg-neutral-300 dark:disabled:bg-neutral-700 dark:disabled:text-neutral-500";
