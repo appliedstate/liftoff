@@ -80,7 +80,7 @@ export function Dropdown({
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className={`ml-2 shrink-0 text-neutral-500 dark:text-neutral-400 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
+          className={`ml-2 shrink-0 transition-transform duration-150 ${tone === "publish" && selected ? "text-[#1f8a3a] dark:text-[#5fd97e]" : "text-neutral-500 dark:text-neutral-400"} ${open ? "rotate-180" : ""}`}
         >
           <path d="M6 9l6 6 6-6" />
         </svg>
