@@ -20,6 +20,20 @@ STRATEGIS_METRICS_LOG=true
 STRATEGIS_METRICS_DIR=
 STRATEGIS_WEBHOOK_URL=
 
+# -----------------------------
+# Required: Strategis auth (used by remote ingest + API calls)
+# NOTE: Set these in `backend/.env` (do not commit secrets).
+IX_ID_EMAIL=
+IX_ID_PASSWORD=
+STRATEGIS_EMAIL=
+STRATEGIS_PASSWORD=
+STRATEGIS_API_BASE_URL=https://strategis.lincx.in
+STRATEGIS_AUTH_BASE_URL=https://ix-id.lincx.la
+STRATEGIS_AUTH_TOKEN=
+
+# Internal ad library defaults
+AD_LIBRARY_DEFAULT_DAYS=30
+
 # Snapshot pruning
 SNAPSHOT_MAX_GB=50
 SNAPSHOT_RETENTION_DAYS=14
@@ -81,6 +95,43 @@ OPENAI_MODEL=gpt-4.1-mini
 GEMINI_API_KEY=
 
 # -----------------------------
+# Optional: System1 RAMP article generation
+# Supports either one shared key or one key per domain.
+# Example:
+# SYSTEM1_RAMP_API_KEYS_JSON={"wesoughtit.com":"key1","trivia-library.com":"key2"}
+# SYSTEM1_RAMP_API_KEY_WESOUGHTIT_COM=key1
+SYSTEM1_RAMP_BASE_URL=https://api.system1.com
+SYSTEM1_RAMP_TIMEOUT_MS=60000
+SYSTEM1_RAMP_API_KEY=
+SYSTEM1_RAMP_API_KEYS_JSON=
+
+# -----------------------------
+# Optional: Sora (video generation)
+# NOTE: Requires OpenAI project access to video generation.
+SORA_MODEL=sora-2
+SORA_SECONDS=8
+SORA_SIZE=1280x720
+SORA_QUALITY=standard
+SORA_OUTPUT_DIR=generated/sora
+SORA_POLL_MS=5000
+SORA_MAX_WAIT_MS=600000
+SORA_AUTODOWNLOAD=true
+SORA_DOWNLOAD_RETRIES=3
+SORA_DOWNLOAD_MIN_DISK_MB=500
+
+# -----------------------------
+# Optional: xAI video generation
+XAI_API_KEY=
+XAI_VIDEO_MODEL=grok-imagine-video
+XAI_VIDEO_OUTPUT_DIR=generated/xai
+XAI_VIDEO_POLL_MS=5000
+XAI_VIDEO_MAX_WAIT_MS=900000
+XAI_VIDEO_AUTODOWNLOAD=true
+XAI_VIDEO_DURATION=8
+XAI_VIDEO_ASPECT_RATIO=9:16
+XAI_VIDEO_RESOLUTION=720p
+
+# -----------------------------
 # Optional: Vector Search (pgvector)
 PGVECTOR_URL=
 EMBEDDING_MODEL=text-embedding-3-small
@@ -122,4 +173,3 @@ HEADLESS=false
 # -----------------------------
 # Optional: Local CSV ingest for reconciled (ingestReconciled.ts)
 LOCAL_CSV_PATH=
-
