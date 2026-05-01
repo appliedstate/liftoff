@@ -2208,10 +2208,10 @@ export default function BenLaunchWorkbench() {
               <section>
               {!selectedProfile ? null : (
                 <div className="space-y-8">
-                  {/* Preset row */}
-                  <div>
+                  {/* Start mode */}
+                  <div className="space-y-3">
                     <div className={sectionLabel}>Start mode</div>
-                    <div className="mt-3 inline-flex max-w-full flex-wrap items-center gap-1 rounded-full bg-neutral-100 p-1 dark:bg-neutral-800">
+                    <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-full bg-neutral-100 p-1 dark:bg-neutral-800">
                       {LAUNCH_MODE_OPTIONS.map((option) => {
                         const active = launchMode === option.value;
                         return (
@@ -2230,22 +2230,25 @@ export default function BenLaunchWorkbench() {
                         );
                       })}
                     </div>
-                    <div className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+                    <div className="text-xs text-neutral-500 dark:text-neutral-400">
                       {LAUNCH_MODE_OPTIONS.find((option) => option.value === launchMode)?.description}
                     </div>
+                  </div>
 
+                  {/* Launch preset */}
+                  <div className="space-y-3">
                     <div className={sectionLabel}>Launch preset</div>
-                    <div className="mt-3 grid grid-cols-[minmax(0,1fr)] gap-4">
+                    <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
                       {launchMode !== "clone" ? (
-                      <div>
+                      <div className="space-y-2">
                         <label className={fieldLabel}>Category preset</label>
                         <input
                           value={query}
                           onChange={(e) => setQuery(e.target.value)}
                           placeholder="Search categories…"
-                          className={`${inputClass} mb-2`}
+                          className={inputClass}
                         />
-                        <div className="mb-2 text-xs text-neutral-500 dark:text-neutral-400">
+                        <div className="text-xs text-neutral-500 dark:text-neutral-400">
                           {query.trim()
                             ? `${filteredProfiles.length} matching preset${filteredProfiles.length === 1 ? "" : "s"} shown below for “${query.trim()}”.`
                             : `${catalog.profiles.length} category preset${catalog.profiles.length === 1 ? "" : "s"} available.`}
@@ -2269,15 +2272,15 @@ export default function BenLaunchWorkbench() {
                       ) : null}
 
                       {launchMode === "clone" ? (
-                      <div>
+                      <div className="space-y-2">
                         <label className={fieldLabel}>Clone existing campaign</label>
                         <input
                           value={campaignQuery}
                           onChange={(e) => setCampaignQuery(e.target.value)}
                           placeholder={`Search ${buyerLabel} campaigns…`}
-                          className={`${inputClass} mb-2`}
+                          className={inputClass}
                         />
-                        <div className="mb-2 text-xs text-neutral-500 dark:text-neutral-400">
+                        <div className="text-xs text-neutral-500 dark:text-neutral-400">
                           {campaignQuery.trim()
                             ? `${filteredCampaigns.length} matching campaign${filteredCampaigns.length === 1 ? "" : "s"} shown below for “${campaignQuery.trim()}”.`
                             : `${campaignItems.length} ${buyerLabel} campaign${campaignItems.length === 1 ? "" : "s"} available for cloning.`}
@@ -2303,7 +2306,7 @@ export default function BenLaunchWorkbench() {
                           openSignal={campaignQuery}
                           emptyLabel={`No ${buyerLabel} campaigns match “${campaignQuery.trim()}”.`}
                         />
-                        <div className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+                        <div className="text-xs text-neutral-500 dark:text-neutral-400">
                           {campaignItems.length > 0
                             ? `${campaignItems.length} ${buyerLabel} campaigns available for cloning`
                             : campaignCatalog?.notes?.[0] || "Campaign clone catalog unavailable"}
@@ -2311,8 +2314,11 @@ export default function BenLaunchWorkbench() {
                       </div>
                       ) : null}
                     </div>
+                  </div>
 
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  {/* Preset summary */}
+                  <div className="space-y-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
                       <div className="space-y-1 rounded-xl bg-neutral-100 dark:bg-neutral-800 px-3.5 py-2.5">
                         <div className="text-xs text-neutral-500 dark:text-neutral-400">Current preset</div>
                         <div className="font-semibold text-neutral-900 dark:text-neutral-50">{selectedProfile.label}</div>
@@ -2328,7 +2334,7 @@ export default function BenLaunchWorkbench() {
                       </div>
                     </div>
 
-                    <div className="mt-3 flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2">
                       {selectedProfile.strategist.rsocSite?.value ? (
                         <span className={pillClass}>{selectedProfile.strategist.rsocSite.value}</span>
                       ) : null}
