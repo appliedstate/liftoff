@@ -25,7 +25,21 @@
   --foreground: #ededed;
 }
 
+/* iOS Safari otherwise lets the page rubber-band horizontally even with
+   overflow-x:hidden on body. Locking width + overscroll on html and body
+   stops the sideways drift when scrolling vertically. */
+html,
 body {
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+}
+
+body {
+  /* Allow vertical scroll + pinch-zoom only — block horizontal pan
+     gestures so a stray finger swipe can't drift the page sideways. */
+  touch-action: pan-y pinch-zoom;
   background: var(--background);
   color: var(--foreground);
   /* Inter is loaded via next/font in layout.tsx — these features unlock the
