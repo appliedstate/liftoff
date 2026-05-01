@@ -17,6 +17,7 @@ import {
   fieldLabel,
   inputClass,
   pillClass,
+  pillPublishClass,
   sectionLabel,
 } from "@/lib/ui";
 import { Dropdown } from "@/components/Dropdown";
@@ -2195,7 +2196,7 @@ export default function BenLaunchWorkbench() {
               {Object.entries(catalog.lockedDefaults)
                 .filter(([key]) => key !== "buyer")
                 .map(([key, value]) => (
-                  <span key={key} className={pillClass}>
+                  <span key={key} className={pillPublishClass}>
                     {key}: {value}
                   </span>
                 ))}
@@ -2336,17 +2337,17 @@ export default function BenLaunchWorkbench() {
 
                     <div className="flex flex-wrap gap-2">
                       {selectedProfile.strategist.rsocSite?.value ? (
-                        <span className={pillClass}>{selectedProfile.strategist.rsocSite.value}</span>
+                        <span className={pillPublishClass}>{selectedProfile.strategist.rsocSite.value}</span>
                       ) : null}
                       {selectedProfile.facebook.adAccountId?.value ? (
-                        <span className={pillClass}>acct {selectedProfile.facebook.adAccountId.value}</span>
+                        <span className={pillPublishClass}>acct {selectedProfile.facebook.adAccountId.value}</span>
                       ) : null}
                       {selectedProfile.facebook.pageId?.value ? (
-                        <span className={pillClass}>page {selectedProfile.facebook.pageId.value}</span>
+                        <span className={pillPublishClass}>page {selectedProfile.facebook.pageId.value}</span>
                       ) : null}
-                      {selectedSelector ? <span className={pillClass}>{selectedSelector.label}</span> : null}
+                      {selectedSelector ? <span className={pillPublishClass}>{selectedSelector.label}</span> : null}
                       {selectedArticle?.articleSlug ? (
-                        <span className={pillClass}>article {selectedArticle.articleSlug}</span>
+                        <span className={pillPublishClass}>article {selectedArticle.articleSlug}</span>
                       ) : null}
                       {launchMode === "clone" && selectedCampaign ? (
                         <span className={pillClass}>clone {selectedCampaign.campaignId}</span>

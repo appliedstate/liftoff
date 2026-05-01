@@ -31,6 +31,12 @@ export const fieldLabel =
 export const pillClass =
   "inline-flex min-w-0 max-w-full items-center rounded-full bg-[#0071e3]/[0.06] dark:bg-[#0071e3]/[0.18] px-2.5 py-1 text-xs font-semibold text-[#0071e3] dark:text-[#4a9fff] [overflow-wrap:anywhere]";
 
+// Used for values that get published downstream (Strategis or Facebook payload).
+// Apple system green (#34c759) so they read as 'live data', distinct from the
+// blue informational pillClass.
+export const pillPublishClass =
+  "inline-flex min-w-0 max-w-full items-center rounded-full bg-[#34c759]/[0.10] dark:bg-[#34c759]/[0.20] px-2.5 py-1 text-xs font-semibold text-[#1f8a3a] dark:text-[#5fd97e] [overflow-wrap:anywhere]";
+
 export const buttonGhost =
   "rounded-lg bg-neutral-100 dark:bg-neutral-800 px-3 py-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-200 transition hover:bg-neutral-200 dark:hover:bg-neutral-700";
 
