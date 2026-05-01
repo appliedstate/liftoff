@@ -362,12 +362,12 @@ const CTA_OPTIONS = [
 const LAUNCH_MODE_OPTIONS = [
   {
     value: "preset",
-    label: "Category preset",
+    label: "Category",
     description: "Start from learned defaults for the category without inheriting a specific campaign shell.",
   },
   {
     value: "clone",
-    label: "Clone existing campaign",
+    label: "Clone",
     description: "Start from a specific historical campaign shell and make controlled changes.",
   },
   {
