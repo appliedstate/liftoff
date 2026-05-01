@@ -2217,7 +2217,7 @@ export default function BenLaunchWorkbench() {
           ) : null}
 
           {/* Flow layout — no canvas card; form and rail sit on the page bg */}
-          <div className="grid gap-x-8 gap-y-8 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-x-8 gap-y-8 xl:grid-cols-[minmax(0,1fr)_320px]">
               {/* Form column */}
               <section>
               {!selectedProfile ? null : (
