@@ -175,6 +175,17 @@ meta_rejections_*
 meta_rejected_ads_*
 system1-query-ui.html
 
+# Claude Code workspace state (per-machine)
+.claude/
+
+# SQLite demo / scratch dbs
+*.sqlite
+
+# server/ runtime data (keep configs, ignore runtime artifacts)
+server/**/data/
+server/**/.env
+server/**/node_modules/
+
 # Environment files
 .env
 backend/.env
