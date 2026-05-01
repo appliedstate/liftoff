@@ -159,6 +159,21 @@ backend/reports/
 backend/runs/
 backend/logs/
 backend/assets/1123579293306083/
+backend/generated/
+backend/generated/**/*
+
+# Local analysis data (keep out of git)
+data/*
+!data/operator_batch_state.json
+
+# Local knowledge / scratch exports
+Knowledge/
+backend/.local/
+scripts/__pycache__/
+artifacts/
+meta_rejections_*
+meta_rejected_ads_*
+system1-query-ui.html
 
 # Environment files
 .env
