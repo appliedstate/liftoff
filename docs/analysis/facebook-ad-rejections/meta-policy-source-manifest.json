@@ -1,0 +1,182 @@
+{
+  "version": "2026-04-22",
+  "description": "Seed manifest of official Meta/Facebook policy and enforcement sources relevant to ad compliance, review, business assets, and circumvention risk.",
+  "sources": [
+    {
+      "id": "meta_ads_intro",
+      "title": "Introduction to the Advertising Standards",
+      "url": "https://www.facebook.com/policies/ads/",
+      "category": "advertising_standards",
+      "subcategories": ["overview", "policy_root"],
+      "official": true,
+      "public_access": "partial_public",
+      "priority": "critical",
+      "notes": "Root entry point for Meta Advertising Standards."
+    },
+    {
+      "id": "meta_ads_review_guide",
+      "title": "Ads Review Policy for Businesses on Facebook & Instagram",
+      "url": "https://www.facebook.com/business/ads/review-policy-guidelines",
+      "category": "review_and_enforcement",
+      "subcategories": ["review", "restrictions", "connected_assets", "evasion"],
+      "official": true,
+      "public_access": "partial_public",
+      "priority": "critical",
+      "notes": "Best official summary of ad review, restrictions, repeated violations, evasion, connected abusive assets."
+    },
+    {
+      "id": "meta_ml_targeting",
+      "title": "How Facebook ads use machine learning",
+      "url": "https://www.facebook.com/help/447278887528796",
+      "category": "targeting_and_delivery",
+      "subcategories": ["age", "location", "special_ad_category_limits", "ad_quality"],
+      "official": true,
+      "public_access": "partial_public",
+      "priority": "critical",
+      "notes": "Useful for age/location targeting and special-category audience limitations."
+    },
+    {
+      "id": "meta_about_ads",
+      "title": "About Facebook Ads",
+      "url": "https://www.facebook.com/help/769828729705201/",
+      "category": "targeting_and_delivery",
+      "subcategories": ["ad_delivery", "profile_signals", "special_protections"],
+      "official": true,
+      "public_access": "partial_public",
+      "priority": "high",
+      "notes": "Contains important statements on information with special protections."
+    },
+    {
+      "id": "meta_why_ads_shown",
+      "title": "How Facebook decides which ads to show you",
+      "url": "https://www.facebook.com/help/562973647153813/",
+      "category": "targeting_and_delivery",
+      "subcategories": ["special_protections", "health_status", "ad_delivery"],
+      "official": true,
+      "public_access": "partial_public",
+      "priority": "high",
+      "notes": "Useful for grounding health-status sensitivity."
+    },
+    {
+      "id": "meta_ad_targeting",
+      "title": "Ad targeting: Options to reach your audience online",
+      "url": "https://www.facebook.com/business/ads/ad-targeting",
+      "category": "targeting_and_delivery",
+      "subcategories": ["age", "location", "audiences"],
+      "official": true,
+      "public_access": "public",
+      "priority": "high",
+      "notes": "Strong source for the fact that age and location targeting are generally available for adults."
+    },
+    {
+      "id": "meta_special_ad_category_campaigns",
+      "title": "Create ad campaigns in Meta Ads Manager",
+      "url": "https://www.facebook.com/help/messenger-app/621956575422138/",
+      "category": "special_ad_categories",
+      "subcategories": ["employment", "credit", "housing", "social_issues"],
+      "official": true,
+      "public_access": "public",
+      "priority": "high",
+      "notes": "Confirms requirement to choose Special Ad Category when applicable."
+    },
+    {
+      "id": "meta_special_ad_category_reels",
+      "title": "How to boost Instagram Reels",
+      "url": "https://www.facebook.com/help/instagram/570215404599013",
+      "category": "special_ad_categories",
+      "subcategories": ["employment", "credit", "housing", "social_issues"],
+      "official": true,
+      "public_access": "public",
+      "priority": "medium",
+      "notes": "Useful cross-check for Special Ad Category language."
+    },
+    {
+      "id": "meta_reaching_new_audiences",
+      "title": "About reaching new audiences",
+      "url": "https://www.facebook.com/help/157306091096340",
+      "category": "targeting_and_delivery",
+      "subcategories": ["employment_restrictions", "audience_controls", "teens"],
+      "official": true,
+      "public_access": "public",
+      "priority": "medium",
+      "notes": "Contains audience control and age-targeting limitation context."
+    },
+    {
+      "id": "meta_drugs_pharma",
+      "title": "Drugs and Pharmaceuticals",
+      "url": "https://www.facebook.com/policies/ads/restricted_content/pharmacies",
+      "category": "restricted_content",
+      "subcategories": ["health", "medical_claims", "pharma"],
+      "official": true,
+      "public_access": "public",
+      "priority": "high",
+      "notes": "Relevant for medical claims and disease-treatment language."
+    },
+    {
+      "id": "meta_financial_products",
+      "title": "Prohibited Financial Products and Services",
+      "url": "https://www.facebook.com/policies/ads/prohibited_content/prohibited_financial_products_and_services",
+      "category": "restricted_content",
+      "subcategories": ["financial_services", "misleading_practices"],
+      "official": true,
+      "public_access": "public",
+      "priority": "high",
+      "notes": "Useful template for how Meta describes deceptive-promotion risk."
+    },
+    {
+      "id": "meta_hateful_conduct_ads",
+      "title": "Hateful Conduct",
+      "url": "https://www.facebook.com/policies/ads/prohibited_content/inflammatory_content",
+      "category": "prohibited_content",
+      "subcategories": ["protected_characteristics", "serious_disease"],
+      "official": true,
+      "public_access": "public",
+      "priority": "medium",
+      "notes": "Useful for protected characteristics and serious-disease references."
+    },
+    {
+      "id": "meta_page_takedowns",
+      "title": "Why Facebook Pages get taken down or have limits placed on them",
+      "url": "https://www.facebook.com/help/348805468517220/",
+      "category": "pages_and_assets",
+      "subcategories": ["pages", "limits", "misleading_name", "spam"],
+      "official": true,
+      "public_access": "public",
+      "priority": "high",
+      "notes": "Important for Page-level trust and operational guidance."
+    },
+    {
+      "id": "meta_page_status",
+      "title": "About Facebook Page Status",
+      "url": "https://www.facebook.com/help/1985220725104252/",
+      "category": "pages_and_assets",
+      "subcategories": ["page_status", "violations", "page_management"],
+      "official": true,
+      "public_access": "public",
+      "priority": "medium",
+      "notes": "Useful for Page moderation/status behavior."
+    },
+    {
+      "id": "meta_scam_enforcement_2026",
+      "title": "Meta Takes Legal Action Against Scam Advertisers",
+      "url": "https://about.fb.com/news/2026/02/meta-takes-legal-action-against-scam-advertisers/",
+      "category": "review_and_enforcement",
+      "subcategories": ["scams", "cloaking", "evasion", "trusted_account_rental"],
+      "official": true,
+      "public_access": "public",
+      "priority": "critical",
+      "notes": "Key current enforcement posture around scams, cloaking, and services that help evade enforcement."
+    },
+    {
+      "id": "meta_business_help_circumvention_url",
+      "title": "Business Help URL provided by user",
+      "url": "https://www.facebook.com/business/help/488043719226449?id=434838534925385",
+      "category": "review_and_enforcement",
+      "subcategories": ["circumvention", "business_help"],
+      "official": true,
+      "public_access": "login_blocked",
+      "priority": "critical",
+      "notes": "Specific page supplied by user. Needs authenticated/manual capture because public crawling currently redirects to login and temporary block."
+    }
+  ]
+}

@@ -18,6 +18,10 @@ The goal is to increase execution velocity while preserving:
 - board-guided reasoning
 - operator control at explicit checkpoints
 
+Related bounded sprint program:
+
+- [overnight-sprint-contract-2026-04-30.md](/Users/ericroach/code/liftoff/docs/prd/overnight-sprint-contract-2026-04-30.md)
+
 ## Governing Rule
 
 The operator may pre-approve a bounded batch of changes.

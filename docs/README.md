@@ -7,11 +7,14 @@ title: The Scale Machine — README
 purpose: One-page mental model + operating manual for our AI-driven performance system that turns Facebook signals into RSOC revenue at compounding velocity.
 dependencies:
   - strategy/11-machine-strategy.md
+  - operations/buyer-incentive-system.md
   - operations/60-launch-protocol.md
   - operations/61-promotion-prune-scale.md
   - operations/61-intraday-optimization.md
   - operations/62-budget-bump-protocol.md
   - operations/63-dashboards-and-alerts.md
+  - operations/64-l2l-flywheel.md
+  - operations/65-l2l-human-companion.md
   - operations/55-entity-roadmap-and-orchestrator.md
   - infra/capi-setup.md
   - content/30-article-factory.md
@@ -172,6 +175,7 @@ If a higher tier is red, **no scaling action** from lower tiers.
 - **Frequency:** prospecting **< 3.0** (if CTR WoW −20%, rotate 3–5 creatives)  
 - **Contextual:** keep only stacks with **vRPS ≥ +10%** vs account median  
 - **Emergency brake:** Session ROAS (24h) ≤ **1.20×** and drop ≥ **−15%** vs 7d → **−30%** prospecting budgets; diagnose
+- **Knowledge sharing:** net-new buyer wins can be protected briefly, then must become reusable team assets per `/operations/buyer-incentive-system.md`
 
 ---
 

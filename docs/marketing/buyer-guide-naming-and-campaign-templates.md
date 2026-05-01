@@ -11,6 +11,17 @@ Media buyers and strategists. This guide defines cross-platform naming conventio
 ### Cross-Platform Naming Conventions
 Applies to Facebook at launch; extendable to other platforms (Google, TikTok, etc.). Use "|" as delimiter and avoid commas.
 
+#### Category naming (the missing standard)
+We use **CategorySlug** as the canonical, machine-readable category/angle name.
+
+- **CategorySlug**
+  - Format: kebab-case, short, stable (no dates, no initials)
+  - Examples: `tree-cutting-service`, `erectile-dysfunction`, `solar`, `dental-implants`
+
+- **Site / Domain key**
+  - Use the site name (e.g., `Knowledge Warehouse`, `Hidden Bonus`) as the human label, and a short key in automation (e.g., `KW`, `HB`).
+  - The goal is: **same-domain duplication is easy** and reporting is consistent.
+
 - Campaign name
   - `{Brand} | {Objective} | {HookSet} | {Market} | {Channel} | {YYYY-MM-DD}`
   - Example: `BrandX | CONVERSIONS | hookset_juvederm_2025_10_21 | US | FB | 2025-10-22`
@@ -27,6 +38,13 @@ Notes
 - `{HookSet}` is the internal Attention Engine run identifier (e.g., `hookset_{theme}_{date}`) for traceability.
 - `{PlacementKey}` is a shorthand mapping (e.g., `advplus_all_auto`), resolved per platform.
 - `v{N}` increments when material changes are made (targeting or optimization change).
+
+Recommended HookSet format (includes CategorySlug + Site):
+- `hookset_{siteKey}_{categorySlug}_{YYYY_MM_DD}`
+  - Example: `hookset_KW_tree-cutting-service_2026_01_16`
+
+Optional prefix for cross-system traceability:
+- If you have a Strateg.is tracking campaign ID, prefix the FB campaign name with `SID:{id} | ...`
 
 ### Facebook Templates (Launch Defaults)
 These templates are starting points. Buyers may edit per account.

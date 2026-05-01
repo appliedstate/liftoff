@@ -112,7 +112,7 @@ At checkpoint, report:
 ## Batch 3
 
 - `batch_id`: `2026-04-30-batch-03`
-- `status`: `active`
+- `status`: `checkpoint_complete`
 - `batch_size`: `10`
 - `checkpoint_rule`: `review every 10 meaningful changes or 10 commits, whichever comes first`
 - `reasoning_standard`:
@@ -129,9 +129,50 @@ At checkpoint, report:
 
 ### Batch Progress
 
-- `meaningful_changes_completed`: `1 / 10`
+- `meaningful_changes_completed`: `10 / 10`
 - `commits_completed`: `0 / 10`
 
 ### Progress Review Packets
 
 - [2026-04-30-batch-03-progress-01.md](/Users/ericroach/code/liftoff/docs/operations/batch-reviews/2026-04-30-batch-03-progress-01.md)
+- [2026-04-30-batch-03-progress-02.md](/Users/ericroach/code/liftoff/docs/operations/batch-reviews/2026-04-30-batch-03-progress-02.md)
+- [2026-04-30-batch-03-progress-03.md](/Users/ericroach/code/liftoff/docs/operations/batch-reviews/2026-04-30-batch-03-progress-03.md)
+- [2026-04-30-batch-03-progress-04.md](/Users/ericroach/code/liftoff/docs/operations/batch-reviews/2026-04-30-batch-03-progress-04.md)
+- [2026-04-30-batch-03-progress-05.md](/Users/ericroach/code/liftoff/docs/operations/batch-reviews/2026-04-30-batch-03-progress-05.md)
+- [2026-04-30-batch-03-progress-06.md](/Users/ericroach/code/liftoff/docs/operations/batch-reviews/2026-04-30-batch-03-progress-06.md)
+- [2026-04-30-batch-03-progress-07.md](/Users/ericroach/code/liftoff/docs/operations/batch-reviews/2026-04-30-batch-03-progress-07.md)
+- [2026-04-30-batch-03-progress-08.md](/Users/ericroach/code/liftoff/docs/operations/batch-reviews/2026-04-30-batch-03-progress-08.md)
+- [2026-04-30-batch-03-progress-09.md](/Users/ericroach/code/liftoff/docs/operations/batch-reviews/2026-04-30-batch-03-progress-09.md)
+- [2026-04-30-batch-03-progress-10.md](/Users/ericroach/code/liftoff/docs/operations/batch-reviews/2026-04-30-batch-03-progress-10.md)
+
+### Checkpoint Packet
+
+- [2026-04-30-batch-03-checkpoint.md](/Users/ericroach/code/liftoff/docs/operations/batch-reviews/2026-04-30-batch-03-checkpoint.md)
+
+## Batch 4
+
+- `batch_id`: `2026-04-30-batch-04`
+- `status`: `active`
+- `batch_size`: `10`
+- `checkpoint_rule`: `review every 10 meaningful changes or 10 commits, whichever comes first`
+- `reasoning_standard`:
+  - prime directive
+  - first principles
+  - board-guided judgment
+- `guardrails_ref`: [operator-delegated-approval-protocol.md](/Users/ericroach/code/liftoff/docs/prd/operator-delegated-approval-protocol.md)
+- `started_at`: `2026-04-30`
+- `operator_instruction`:
+  - Continue building using first principles and the board.
+  - This batch is focused on morning control-loop delivery, auto-rollups, and escalation behavior.
+  - Do not stop for normal approval asks inside the batch.
+
+### Batch Progress
+
+- `meaningful_changes_completed`: `3 / 10`
+- `commits_completed`: `0 / 10`
+
+### Progress Review Packets
+
+- [2026-04-30-batch-04-progress-01.md](/Users/ericroach/code/liftoff/docs/operations/batch-reviews/2026-04-30-batch-04-progress-01.md)
+- [2026-04-30-batch-04-progress-02.md](/Users/ericroach/code/liftoff/docs/operations/batch-reviews/2026-04-30-batch-04-progress-02.md)
+- [2026-04-30-batch-04-progress-03.md](/Users/ericroach/code/liftoff/docs/operations/batch-reviews/2026-04-30-batch-04-progress-03.md)

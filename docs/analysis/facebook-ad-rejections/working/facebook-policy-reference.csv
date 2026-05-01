@@ -1,0 +1,13 @@
+reason_code_normalized,reason_family,policy_area,policy_reference_url,notes
+UNREALISTIC_CLAIMS,Claims and Outcomes,Unacceptable Business Practices,https://transparency.fb.com/policies/ad-standards/,Check language that implies guaranteed outcomes.
+MISLEADING_CONTENT,Misrepresentation,Unacceptable Business Practices,https://transparency.fb.com/policies/ad-standards/,Verify all claims are accurate and substantiated.
+PERSONAL_ATTRIBUTES,Targeting and Personalization,Personal Attributes,https://transparency.fb.com/policies/ad-standards/,Avoid wording that implies knowledge of personal traits.
+BEFORE_AFTER,Creative Format Restrictions,Before and After,https://transparency.fb.com/policies/ad-standards/,Do not use prohibited before/after framing when disallowed.
+LANDING_PAGE_MISMATCH,Destination Experience,Destination Functionality,https://transparency.fb.com/policies/ad-standards/,Ensure ad claim and landing page content align.
+RESTRICTED_CONTENT,Regulated Verticals,Restricted Content,https://transparency.fb.com/policies/ad-standards/,Confirm vertical-specific rules are met.
+DECEPTIVE_LINK_SPAM,Spam / Deceptive Practices,Spam,https://transparency.fb.com/policies/ad-standards/,Usually tied to deceptive links, redirects, cloaking, or mismatch between ad and destination.
+MISLEADING_JOB_OPPORTUNITY,Fraud Scams and Deceptive Practices,Fraud, Scams and Deceptive Practices,https://transparency.fb.com/policies/ad-standards/,Triggered by misleading job offers or opportunity framing.
+MISLEADING_BUSINESS_PRACTICES,Unacceptable Business Practices,Unacceptable Business Practices,https://transparency.fb.com/policies/ad-standards/,Covers misleading business models or deceptive commercial claims.
+DISCRIMINATORY_PRACTICES_FIN_SERVICES,Discriminatory Practices,Discriminatory Practices,https://transparency.fb.com/policies/ad-standards/,Often appears when financial services targeting or framing violates protected-category rules.
+HUMAN_EXPLOITATION,Sensitive Content,Human Exploitation,https://transparency.fb.com/policies/ad-standards/,High-severity policy area requiring strict creative and destination compliance.
+POLICY_NONCOMPLIANCE_GENERAL,General Policy Non-Compliance,General Advertising Policies,https://transparency.fb.com/policies/ad-standards/,Used when screenshot only shows generic non-compliance text without a specific policy subsection.
