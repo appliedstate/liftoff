@@ -15,6 +15,12 @@
 export const inputClass =
   "w-full rounded-lg bg-neutral-100 dark:bg-neutral-800 px-3.5 py-2.5 text-sm text-neutral-900 dark:text-neutral-50 outline-none transition placeholder:text-neutral-400 dark:placeholder:text-neutral-500 hover:bg-neutral-200/60 dark:hover:bg-neutral-700/60 focus:bg-white dark:focus:bg-neutral-900 focus:ring-2 focus:ring-[#0071e3]";
 
+// Same shape as inputClass but with the Apple-green 'publishes downstream'
+// palette (matches pillPublishClass). Use this for the trigger button of
+// dropdowns whose selected value will be sent to Strategis or Facebook.
+export const inputPublishClass =
+  "w-full rounded-lg bg-[#34c759]/[0.12] dark:bg-[#34c759]/[0.22] px-3.5 py-2.5 text-sm font-semibold text-[#1f8a3a] dark:text-[#5fd97e] outline-none transition hover:bg-[#34c759]/[0.18] dark:hover:bg-[#34c759]/[0.28] focus:ring-2 focus:ring-[#34c759]";
+
 export const selectClass = inputClass;
 
 export const cardClass =

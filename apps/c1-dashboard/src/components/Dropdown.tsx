@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { inputClass } from "@/lib/ui";
+import { inputClass, inputPublishClass } from "@/lib/ui";
 
 export type DropdownOption = { value: string; label: string };
 
@@ -13,6 +13,7 @@ export function Dropdown({
   className,
   openSignal,
   emptyLabel,
+  tone = "default",
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -21,11 +22,16 @@ export function Dropdown({
   className?: string;
   openSignal?: string | number | null;
   emptyLabel?: string;
+  // 'publish' renders the trigger button in the Apple-green publish palette
+  // when a value is selected — for dropdowns whose value goes downstream
+  // into the Strategis or Facebook payload.
+  tone?: "default" | "publish";
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const selected = options.find((o) => o.value === value);
   const lastOpenSignalRef = useRef<string>("");
+  const triggerClass = tone === "publish" && selected ? inputPublishClass : inputClass;
 
   useEffect(() => {
     if (!open) return;
@@ -60,7 +66,7 @@ export function Dropdown({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className={`${inputClass} flex w-full items-center justify-between text-left`}
+        className={`${triggerClass} flex w-full items-center justify-between text-left`}
       >
         <span className={`truncate ${selected ? "" : "text-neutral-400 dark:text-neutral-500"}`}>
           {selected?.label || placeholder || "Select…"}

@@ -2473,6 +2473,7 @@ export default function BenLaunchWorkbench() {
                           onChange={applySiteSelection}
                           options={siteDropdownOptions}
                           placeholder="Select site"
+                          tone="publish"
                         />
                         <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
                           Changing the site recommends the redirect, page, and ad account that {buyerLabel} has historically paired with it.
@@ -2491,6 +2492,7 @@ export default function BenLaunchWorkbench() {
                           onChange={(value) => setForm((c) => ({ ...c, redirectDomain: value }))}
                           options={redirectDropdownOptions}
                           placeholder="Select redirect domain"
+                          tone="publish"
                         />
                       </div>
 
@@ -2506,6 +2508,7 @@ export default function BenLaunchWorkbench() {
                           onChange={(value) => setForm((c) => ({ ...c, pageId: value }))}
                           options={pageDropdownOptions}
                           placeholder="Select page"
+                          tone="publish"
                         />
                       </div>
 
@@ -2521,6 +2524,7 @@ export default function BenLaunchWorkbench() {
                           onChange={(value) => setForm((c) => ({ ...c, adAccountId: value }))}
                           options={adAccountDropdownOptions}
                           placeholder="Select ad account"
+                          tone="publish"
                         />
                       </div>
 
@@ -2533,6 +2537,7 @@ export default function BenLaunchWorkbench() {
                             value: entry.key,
                             label: entry.option.label,
                           }))}
+                          tone="publish"
                         />
                       </div>
                     </div>
