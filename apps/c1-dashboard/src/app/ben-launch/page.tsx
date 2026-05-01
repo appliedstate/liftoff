@@ -2147,8 +2147,8 @@ export default function BenLaunchWorkbench() {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-white dark:bg-neutral-950 text-neutral-900 dark:text-neutral-50">
       {/* Dashboard pane */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[1180px] space-y-12 px-6 py-12">
+      <main className="min-w-0 flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-[1180px] space-y-12 px-4 py-8 sm:px-6 sm:py-12">
           {/* Header — flat text on page bg, mirrors the form/rail grid below */}
           <header className="grid grid-cols-1 items-end gap-x-8 gap-y-4 xl:grid-cols-[minmax(0,1fr)_320px]">
             <div>
@@ -3901,9 +3901,17 @@ export default function BenLaunchWorkbench() {
         </div>
       </main>
 
-      {/* Companion chat — ChatGPT-style with multi-thread sidebar */}
+      {/* Companion chat — ChatGPT-style with multi-thread sidebar.
+          On <lg viewports it's an overlay (slide-over), on lg+ it pushes content. */}
       {chatOpen ? (
-        <aside className="relative flex h-screen w-[560px] shrink-0 flex-col bg-white dark:bg-neutral-900 shadow-[-8px_0_24px_-12px_rgba(0,0,0,0.08)] ring-1 ring-black/5 dark:ring-white/10">
+        <>
+          <button
+            type="button"
+            onClick={() => setChatOpen(false)}
+            aria-label="Close assistant"
+            className="fixed inset-0 z-30 bg-black/40 lg:hidden"
+          />
+          <aside className="fixed inset-y-0 right-0 z-40 flex h-screen w-[min(560px,100vw)] flex-col bg-white dark:bg-neutral-900 shadow-[-8px_0_24px_-12px_rgba(0,0,0,0.08)] ring-1 ring-black/5 dark:ring-white/10 lg:relative lg:w-[560px] lg:shrink-0">
           <button
             type="button"
             onClick={() => setChatOpen(false)}
@@ -3934,6 +3942,7 @@ export default function BenLaunchWorkbench() {
             </CrayonThemeProvider>
           </div>
         </aside>
+        </>
       ) : null}
     </div>
   );
