@@ -29,7 +29,7 @@ export const fieldLabel =
   "mb-1.5 block text-[13px] font-semibold text-neutral-900 dark:text-neutral-100";
 
 export const pillClass =
-  "inline-flex items-center rounded-full bg-[#0071e3]/[0.06] dark:bg-[#0071e3]/[0.18] px-2.5 py-1 text-xs font-semibold text-[#0071e3] dark:text-[#4a9fff]";
+  "inline-flex min-w-0 max-w-full items-center rounded-full bg-[#0071e3]/[0.06] dark:bg-[#0071e3]/[0.18] px-2.5 py-1 text-xs font-semibold text-[#0071e3] dark:text-[#4a9fff] [overflow-wrap:anywhere]";
 
 export const buttonGhost =
   "rounded-lg bg-neutral-100 dark:bg-neutral-800 px-3 py-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-200 transition hover:bg-neutral-200 dark:hover:bg-neutral-700";
