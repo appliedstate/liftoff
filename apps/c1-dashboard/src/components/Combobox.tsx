@@ -144,7 +144,7 @@ export function Combobox({
                       : "text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800"
                   }`}
                 >
-                  <span className="truncate">{option.label}</span>
+                  <span className="min-w-0 flex-1 truncate">{option.label}</span>
                   {isSelected ? (
                     <svg
                       width="14"

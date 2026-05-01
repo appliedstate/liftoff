@@ -2147,7 +2147,7 @@ export default function BenLaunchWorkbench() {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-white dark:bg-neutral-950 text-neutral-900 dark:text-neutral-50">
+    <div className="flex h-screen w-full overflow-hidden bg-white dark:bg-neutral-950 text-neutral-900 dark:text-neutral-50">
       {/* Dashboard pane */}
       <main className="min-w-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[1180px] space-y-12 px-4 py-8 sm:px-6 sm:py-12">
