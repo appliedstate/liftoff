@@ -21,6 +21,7 @@ import {
   sectionLabel,
 } from "@/lib/ui";
 import { Dropdown } from "@/components/Dropdown";
+import { Combobox } from "@/components/Combobox";
 
 type SelectorTargeting = {
   ageMin: number | null;
@@ -2243,50 +2244,31 @@ export default function BenLaunchWorkbench() {
                       {launchMode !== "clone" ? (
                       <div className="space-y-2">
                         <label className={fieldLabel}>Category preset</label>
-                        <input
-                          value={query}
-                          onChange={(e) => setQuery(e.target.value)}
-                          placeholder="Search categories…"
-                          className={inputClass}
-                        />
-                        <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                          {query.trim()
-                            ? `${filteredProfiles.length} matching preset${filteredProfiles.length === 1 ? "" : "s"} shown below for “${query.trim()}”.`
-                            : `${catalog.profiles.length} category preset${catalog.profiles.length === 1 ? "" : "s"} available.`}
-                        </div>
-                        <Dropdown
+                        <Combobox
                           value={selectedProfile.profileId}
                           onChange={(v) => {
+                            if (!v) return;
                             setSelectedProfileId(v);
                             setSelectedCampaignId("");
                             setForm(emptyForm());
                           }}
-                          options={filteredProfiles.map((p) => ({
+                          options={catalog.profiles.map((p) => ({
                             value: p.profileId,
                             label: p.category,
                           }))}
-                          placeholder="Select preset…"
-                          openSignal={query}
-                          emptyLabel={`No category presets match “${query.trim()}”.`}
+                          placeholder="Search categories…"
+                          emptyLabel="No category presets match"
                         />
+                        <div className="text-xs text-neutral-500 dark:text-neutral-400">
+                          {catalog.profiles.length} category preset{catalog.profiles.length === 1 ? "" : "s"} available.
+                        </div>
                       </div>
                       ) : null}
 
                       {launchMode === "clone" ? (
                       <div className="space-y-2">
                         <label className={fieldLabel}>Clone existing campaign</label>
-                        <input
-                          value={campaignQuery}
-                          onChange={(e) => setCampaignQuery(e.target.value)}
-                          placeholder={`Search ${buyerLabel} campaigns…`}
-                          className={inputClass}
-                        />
-                        <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                          {campaignQuery.trim()
-                            ? `${filteredCampaigns.length} matching campaign${filteredCampaigns.length === 1 ? "" : "s"} shown below for “${campaignQuery.trim()}”.`
-                            : `${campaignItems.length} ${buyerLabel} campaign${campaignItems.length === 1 ? "" : "s"} available for cloning.`}
-                        </div>
-                        <Dropdown
+                        <Combobox
                           value={selectedCampaignId}
                           onChange={(v) => {
                             if (!v) {
@@ -2297,15 +2279,12 @@ export default function BenLaunchWorkbench() {
                             const nextCampaign = campaignItems.find((c) => c.campaignId === v);
                             if (nextCampaign) hydrateFromCampaign(nextCampaign);
                           }}
-                          options={[
-                            { value: "", label: "Start from preset only" },
-                            ...filteredCampaigns.map((c) => ({
-                              value: c.campaignId,
-                              label: c.campaignName,
-                            })),
-                          ]}
-                          openSignal={campaignQuery}
-                          emptyLabel={`No ${buyerLabel} campaigns match “${campaignQuery.trim()}”.`}
+                          options={campaignItems.map((c) => ({
+                            value: c.campaignId,
+                            label: c.campaignName,
+                          }))}
+                          placeholder={`Search ${buyerLabel} campaigns…`}
+                          emptyLabel={`No ${buyerLabel} campaigns match`}
                         />
                         <div className="text-xs text-neutral-500 dark:text-neutral-400">
                           {campaignItems.length > 0
@@ -2401,13 +2380,7 @@ export default function BenLaunchWorkbench() {
                           <div className="text-xs font-medium uppercase tracking-[0.14em] text-neutral-500 dark:text-neutral-400">
                             {hasCurrentArticle ? `Replace from ${buyerLabel}'s catalog` : `Pick from ${buyerLabel}'s catalog`}
                           </div>
-                          <input
-                            value={articleQuery}
-                            onChange={(e) => setArticleQuery(e.target.value)}
-                            placeholder={`Search ${buyerLabel}'s articles for this category…`}
-                            className={inputClass}
-                          />
-                          <Dropdown
+                          <Combobox
                             value={selectedArticle?.articleKey || ""}
                             onChange={(v) => {
                               setSelectedArticleKey(v);
@@ -2420,11 +2393,12 @@ export default function BenLaunchWorkbench() {
                                 headline: nextArticle?.headlineHints?.[0] || current.headline,
                               }));
                             }}
-                            options={filteredArticles.map((item) => ({
+                            options={(articleCatalog?.items || []).map((item) => ({
                               value: item.articleKey,
                               label: `${item.label} (${item.campaignCount})`,
                             }))}
-                            placeholder={hasCurrentArticle ? "Replace with…" : "Select an article…"}
+                            placeholder={hasCurrentArticle ? `Search ${buyerLabel}'s articles to replace…` : `Search ${buyerLabel}'s articles…`}
+                            emptyLabel={`No ${buyerLabel} articles match`}
                           />
                         </div>
                       </div>
