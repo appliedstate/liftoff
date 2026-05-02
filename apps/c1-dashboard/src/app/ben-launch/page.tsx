@@ -2378,11 +2378,12 @@ export default function BenLaunchWorkbench() {
       {/* Dashboard pane */}
       <main className="min-w-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[1180px] space-y-12 px-4 py-8 sm:px-6 sm:py-12">
-          {/* Top bar — Liftoff badge + (optional buyer switcher) on the left,
-              theme + log out + assistant on the right. Thin, single row. */}
+          {/* Top bar — Liftoff badge (with buyer name beneath) on the left,
+              theme toggle + log out + assistant icon on the right. All
+              right-side controls share a 32px height for visual alignment. */}
           <header className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex min-w-0 flex-wrap items-center gap-3">
-              <div className="inline-flex h-6 items-center rounded-md bg-[#0071e3]/12 dark:bg-[#0071e3]/[0.20] px-2 text-[11px] font-semibold uppercase tracking-wider text-[#0071e3] dark:text-[#4a9fff] ring-1 ring-inset ring-[#0071e3]/15 dark:ring-[#0071e3]/30">
+            <div className="flex min-w-0 flex-col gap-1">
+              <div className="inline-flex h-6 w-fit items-center rounded-md bg-[#0071e3]/12 dark:bg-[#0071e3]/[0.20] px-2 text-[11px] font-semibold uppercase tracking-wider text-[#0071e3] dark:text-[#4a9fff] ring-1 ring-inset ring-[#0071e3]/15 dark:ring-[#0071e3]/30">
                 Liftoff
               </div>
               {canSwitchBuyer ? (
@@ -2398,20 +2399,41 @@ export default function BenLaunchWorkbench() {
                     }))}
                   />
                 </div>
-              ) : null}
+              ) : (
+                <div className="text-sm font-medium text-neutral-700 dark:text-neutral-200">
+                  {sessionInfo?.displayName || buyerLabel}
+                </div>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <ThemeToggle />
-              <button type="button" onClick={() => void handleLogout()} className={buttonGhost}>
+              <button
+                type="button"
+                onClick={() => void handleLogout()}
+                className="inline-flex h-8 items-center rounded-lg bg-neutral-100 px-3 text-xs font-medium text-neutral-700 transition hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
+              >
                 Log out
               </button>
               <button
                 type="button"
                 onClick={() => setChatOpen((v) => !v)}
-                className={buttonGhost}
-                aria-label="Toggle assistant"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-neutral-100 text-neutral-700 transition hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
+                aria-label={chatOpen ? "Hide assistant" : "Show assistant"}
+                title={chatOpen ? "Hide assistant" : "Show assistant"}
               >
-                {chatOpen ? "Hide assistant" : "Show assistant"}
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                </svg>
               </button>
             </div>
           </header>
