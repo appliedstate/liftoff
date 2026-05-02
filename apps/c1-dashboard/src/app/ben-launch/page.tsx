@@ -24,6 +24,7 @@ import {
 } from "@/lib/ui";
 import { Dropdown } from "@/components/Dropdown";
 import { Combobox } from "@/components/Combobox";
+import { InfoTip } from "@/components/InfoTip";
 
 type SelectorTargeting = {
   ageMin: number | null;
@@ -2461,7 +2462,22 @@ export default function BenLaunchWorkbench() {
                 <div className="space-y-8">
                   {/* Start mode */}
                   <div className="space-y-3">
-                    <div className={sectionLabel}>Start mode</div>
+                    <div className="flex items-center gap-1.5">
+                      <div className={sectionLabel}>Start mode</div>
+                      <InfoTip>
+                        <div className="font-semibold text-neutral-900 dark:text-neutral-50">Start modes</div>
+                        <div className="mt-2 space-y-2">
+                          {LAUNCH_MODE_OPTIONS.map((option) => (
+                            <div key={option.value}>
+                              <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
+                                {option.label}
+                              </div>
+                              <div className="mt-0.5">{option.description}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </InfoTip>
+                    </div>
                     <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-full bg-neutral-100 p-1 dark:bg-neutral-800">
                       {LAUNCH_MODE_OPTIONS.map((option) => {
                         const active = launchMode === option.value;
@@ -2480,9 +2496,6 @@ export default function BenLaunchWorkbench() {
                           </button>
                         );
                       })}
-                    </div>
-                    <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                      {LAUNCH_MODE_OPTIONS.find((option) => option.value === launchMode)?.description}
                     </div>
                   </div>
 
@@ -2757,34 +2770,23 @@ export default function BenLaunchWorkbench() {
                       <details className="group space-y-4">
                         <summary className="flex cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden">
                           <div className={sectionLabel}>Forcekey selector</div>
-                          <details
-                            className="group/info relative"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <summary
-                              className="inline-flex h-3.5 w-3.5 translate-y-[1px] cursor-pointer list-none items-center justify-center rounded-full bg-neutral-200 text-[8px] font-bold leading-none text-neutral-600 transition hover:bg-neutral-300 dark:bg-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-600 [&::-webkit-details-marker]:hidden"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              i
-                            </summary>
-                            <div className="absolute left-0 top-7 z-30 w-[min(360px,calc(100vw-2rem))] rounded-xl border border-black/[0.08] bg-white p-3 text-sm text-neutral-700 shadow-[0_12px_32px_-8px_rgba(0,0,0,0.18)] dark:border-white/[0.10] dark:bg-neutral-900 dark:text-neutral-200">
-                              <div className="font-semibold text-neutral-900 dark:text-neutral-50">How to use this section</div>
-                              <div className="mt-2 space-y-2">
-                                <div>
-                                  <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Step 1</div>
-                                  <div className="mt-0.5">Click <code>Add</code> on ranked keywords or use <code>Autofill top 6/12</code>.</div>
-                                </div>
-                                <div>
-                                  <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Step 2</div>
-                                  <div className="mt-0.5">Use <code>Show all ranked keywords</code> to investigate beyond the default list.</div>
-                                </div>
-                                <div>
-                                  <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Step 3</div>
-                                  <div className="mt-0.5">Selected rows show slot badges and reorder controls directly in the table.</div>
-                                </div>
+                          <InfoTip>
+                            <div className="font-semibold text-neutral-900 dark:text-neutral-50">How to use this section</div>
+                            <div className="mt-2 space-y-2">
+                              <div>
+                                <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Step 1</div>
+                                <div className="mt-0.5">Click <code>Add</code> on ranked keywords or use <code>Autofill top 6/12</code>.</div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Step 2</div>
+                                <div className="mt-0.5">Use <code>Show all ranked keywords</code> to investigate beyond the default list.</div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Step 3</div>
+                                <div className="mt-0.5">Selected rows show slot badges and reorder controls directly in the table.</div>
                               </div>
                             </div>
-                          </details>
+                          </InfoTip>
                           <svg
                             width="14"
                             height="14"
