@@ -16,6 +16,7 @@ import {
   cardClass,
   fieldLabel,
   inputClass,
+  inputPublishClass,
   pickButtonActive,
   pillClass,
   pillPublishClass,
@@ -1301,12 +1302,12 @@ export default function BenLaunchWorkbench() {
     );
   }, [effectiveArticlePool, articleQuery]);
 
-  const selectedArticle =
+  const selectedArticleByKey =
     filteredArticles.find((item) => item.articleKey === selectedArticleKey) ||
-    filteredArticles[0] ||
     effectiveArticlePool.find((item) => item.articleKey === selectedArticleKey) ||
-    effectiveArticlePool[0] ||
     null;
+  const suggestedArticle = filteredArticles[0] || effectiveArticlePool[0] || null;
+  const selectedArticle = selectedArticleByKey || suggestedArticle;
 
   const currentArticleValue = form.article.trim();
   const articleLooksLikeUrl = /^https?:\/\//i.test(currentArticleValue);
@@ -1332,17 +1333,19 @@ export default function BenLaunchWorkbench() {
   const articleCatalogSiteHost = matchedCurrentArticle?.rsocSite
     ? normalizeSiteHost(matchedCurrentArticle.rsocSite)
     : null;
-  const currentArticleRecord = matchedCurrentArticle || selectedArticle;
+  const currentArticleRecord = matchedCurrentArticle || selectedArticleByKey || selectedArticle;
+  const currentArticleResolvedSiteHost =
+    articleSiteHost ||
+    articleCatalogSiteHost ||
+    (currentArticleRecord?.rsocSite ? normalizeSiteHost(currentArticleRecord.rsocSite) : null);
   const articleSiteMismatch = Boolean(
     selectedSiteHost &&
-      (
-        (articleSiteHost && articleSiteHost !== selectedSiteHost) ||
-        (articleCatalogSiteHost && articleCatalogSiteHost !== selectedSiteHost)
-      )
+      currentArticleResolvedSiteHost &&
+      currentArticleResolvedSiteHost !== selectedSiteHost
   );
   const articleSiteMismatchMessage = articleSiteMismatch
     ? `This article is tied to ${
-        articleSiteHost || articleCatalogSiteHost
+        currentArticleResolvedSiteHost
       }, but the selected site is ${selectedSiteHost}. Paste a new article URL/path for ${selectedSiteHost}, or replace it from the ${selectedSiteHost} article list below.`
     : null;
 
@@ -1388,13 +1391,13 @@ export default function BenLaunchWorkbench() {
 
   useEffect(() => {
     if (!selectedProfile) return;
-    const availableArticles = articleCatalog?.items || [];
+    const availableArticles = effectiveArticlePool;
     const currentStillValid = availableArticles.some((item) => item.articleKey === selectedArticleKey);
     if (!currentStillValid) {
-      setSelectedArticleKey(rankedArticles[0]?.articleKey || "");
+      setSelectedArticleKey(availableArticles[0]?.articleKey || "");
       setArticleQuery("");
     }
-  }, [selectedProfileId, selectedProfile, articleCatalog, rankedArticles, selectedArticleKey]);
+  }, [selectedProfileId, selectedProfile, effectiveArticlePool, selectedArticleKey]);
 
   const selectorOptions = useMemo(() => {
     if (!selectedProfile) return [];
@@ -1648,6 +1651,14 @@ export default function BenLaunchWorkbench() {
 
   function applySiteSelection(site: string) {
     const association = siteAssociationBySite.get(site) || null;
+    const normalizedNextSite = normalizeSiteHost(site);
+    const currentArticleHost =
+      articleHostFromValue(form.article) ||
+      (matchedCurrentArticle?.rsocSite ? normalizeSiteHost(matchedCurrentArticle.rsocSite) : null);
+    const shouldClearSelectedArticle =
+      Boolean(normalizedNextSite) &&
+      Boolean(currentArticleHost) &&
+      currentArticleHost !== normalizedNextSite;
     setForm((current) => ({
       ...current,
       rsocSite: site,
@@ -1656,6 +1667,10 @@ export default function BenLaunchWorkbench() {
       adAccountId: association?.adAccounts[0]?.value || current.adAccountId,
       networkAccountId: association?.networkAccounts[0]?.value || current.networkAccountId,
     }));
+    if (shouldClearSelectedArticle) {
+      setSelectedArticleKey("");
+      setArticleQuery("");
+    }
   }
 
   function openEntityPicker(kind: "redirect" | "page" | "adAccount") {
@@ -2670,10 +2685,10 @@ export default function BenLaunchWorkbench() {
                             {hasCurrentArticle ? `Replace from ${buyerLabel}'s catalog` : `Pick from ${buyerLabel}'s catalog`}
                           </div>
                           <Combobox
-                            value={selectedArticle?.articleKey || ""}
+                            value={selectedArticleByKey?.articleKey || ""}
                             onChange={(v) => {
                               setSelectedArticleKey(v);
-                              const nextArticle = (articleCatalog?.items || []).find(
+                              const nextArticle = (effectiveArticlePool.length > 0 ? effectiveArticlePool : articleCatalog?.items || []).find(
                                 (item) => item.articleKey === v
                               );
                               setForm((current) => ({
@@ -2717,73 +2732,94 @@ export default function BenLaunchWorkbench() {
                         />
                       </label>
 
-                      <div className="space-y-4">
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <div className={sectionLabel}>Forcekey selector</div>
-                              <details className="group relative">
-                                <summary className="inline-flex h-5 w-5 cursor-pointer list-none items-center justify-center rounded-full bg-neutral-200 text-[11px] font-bold text-neutral-600 transition hover:bg-neutral-300 dark:bg-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-600 [&::-webkit-details-marker]:hidden">
-                                  i
-                                </summary>
-                                <div className="absolute left-0 top-7 z-30 w-[min(360px,calc(100vw-2rem))] rounded-xl border border-black/[0.08] bg-white p-3 text-sm text-neutral-700 shadow-[0_12px_32px_-8px_rgba(0,0,0,0.18)] dark:border-white/[0.10] dark:bg-neutral-900 dark:text-neutral-200">
-                                  <div className="font-semibold text-neutral-900 dark:text-neutral-50">How to use this section</div>
-                                  <div className="mt-2 space-y-2">
-                                    <div>
-                                      <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Step 1</div>
-                                      <div className="mt-0.5">Click <code>Add</code> on ranked keywords or use <code>Autofill top 6/12</code>.</div>
-                                    </div>
-                                    <div>
-                                      <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Step 2</div>
-                                      <div className="mt-0.5">Use <code>Show all ranked keywords</code> to investigate beyond the default list.</div>
-                                    </div>
-                                    <div>
-                                      <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Step 3</div>
-                                      <div className="mt-0.5">Selected rows show slot badges and reorder controls directly in the table.</div>
-                                    </div>
-                                  </div>
+                      <details className="group space-y-4">
+                        <summary className="flex cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden">
+                          <div className={sectionLabel}>Forcekey selector</div>
+                          <details
+                            className="group/info relative"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <summary
+                              className="inline-flex h-3.5 w-3.5 translate-y-[1px] cursor-pointer list-none items-center justify-center rounded-full bg-neutral-200 text-[8px] font-bold leading-none text-neutral-600 transition hover:bg-neutral-300 dark:bg-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-600 [&::-webkit-details-marker]:hidden"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              i
+                            </summary>
+                            <div className="absolute left-0 top-7 z-30 w-[min(360px,calc(100vw-2rem))] rounded-xl border border-black/[0.08] bg-white p-3 text-sm text-neutral-700 shadow-[0_12px_32px_-8px_rgba(0,0,0,0.18)] dark:border-white/[0.10] dark:bg-neutral-900 dark:text-neutral-200">
+                              <div className="font-semibold text-neutral-900 dark:text-neutral-50">How to use this section</div>
+                              <div className="mt-2 space-y-2">
+                                <div>
+                                  <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Step 1</div>
+                                  <div className="mt-0.5">Click <code>Add</code> on ranked keywords or use <code>Autofill top 6/12</code>.</div>
                                 </div>
-                              </details>
+                                <div>
+                                  <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Step 2</div>
+                                  <div className="mt-0.5">Use <code>Show all ranked keywords</code> to investigate beyond the default list.</div>
+                                </div>
+                                <div>
+                                  <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Step 3</div>
+                                  <div className="mt-0.5">Selected rows show slot badges and reorder controls directly in the table.</div>
+                                </div>
+                              </div>
                             </div>
-                            <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-                              {forcekeySelector?.dateWindow.label ||
-                                `Trailing 14 complete days: ${forcekeyWindow.startDate} - ${forcekeyWindow.endDate}`}
-                            </div>
-                            <div className="mt-1 text-xs text-neutral-400 dark:text-neutral-500 dark:text-neutral-400">
-                              Excludes the current partial day.
-                            </div>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setForcekeyWindow(trailingCompleteDayWindow(14));
-                                setForcekeyRefreshNonce((value) => value + 1);
-                              }}
-                              className={buttonGhost}
-                            >
-                              Refresh stats
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => applyTopForcekeys(6)}
-                              disabled={!forcekeySelector?.options?.length}
-                              className={buttonGhost}
-                            >
-                              Autofill top 6
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => applyTopForcekeys(12)}
-                              disabled={!forcekeySelector?.options?.length}
-                              className={buttonGhost}
-                            >
-                              Autofill top 12
-                            </button>
-                          </div>
-                        </div>
+                          </details>
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="ml-1 text-neutral-500 transition-transform duration-150 group-open:rotate-180 dark:text-neutral-400"
+                          >
+                            <path d="M6 9l6 6 6-6" />
+                          </svg>
+                        </summary>
 
-                        <div className="flex flex-wrap gap-2 text-xs text-neutral-500 dark:text-neutral-400">
+                        <div className="mt-3 space-y-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <div className="text-xs text-neutral-500 dark:text-neutral-400">
+                                {forcekeySelector?.dateWindow.label ||
+                                  `Trailing 14 complete days: ${forcekeyWindow.startDate} - ${forcekeyWindow.endDate}`}
+                              </div>
+                              <div className="mt-1 text-xs text-neutral-400 dark:text-neutral-500">
+                                Excludes the current partial day.
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setForcekeyWindow(trailingCompleteDayWindow(14));
+                                  setForcekeyRefreshNonce((value) => value + 1);
+                                }}
+                                className={buttonGhost}
+                              >
+                                Refresh stats
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => applyTopForcekeys(6)}
+                                disabled={!forcekeySelector?.options?.length}
+                                className={buttonGhost}
+                              >
+                                Autofill top 6
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => applyTopForcekeys(12)}
+                                disabled={!forcekeySelector?.options?.length}
+                                className={buttonGhost}
+                              >
+                                Autofill top 12
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2 text-xs text-neutral-500 dark:text-neutral-400">
                           <span className={pillClass}>Category: {selectedProfile.category}</span>
                           {forcekeySelector ? (
                             <>
@@ -3001,7 +3037,8 @@ export default function BenLaunchWorkbench() {
                             ))}
                           </div>
                         ) : null}
-                      </div>
+                        </div>
+                      </details>
 
                       {(() => {
                         const lastFilledIndex = form.forcekeys.reduce(
@@ -3014,76 +3051,84 @@ export default function BenLaunchWorkbench() {
                         );
                         const visibleCount = showAllForcekeys ? 12 : naturalVisibleCount;
                         const canToggle = naturalVisibleCount < 12;
+                        const allowReorder = launchMode !== "clone";
                         return (
                           <div className="space-y-4">
                             <div>
                               <div className={fieldLabel}>Forcekeys</div>
-                              <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-                                Raw slot values remain editable below if you need to fine-tune the final injection.
-                              </div>
                               <div className="space-y-1">
-                                {form.forcekeys.slice(0, visibleCount).map((value, index) => (
-                                  <div
-                                    key={index}
-                                    draggable
-                                    onDragStart={() => setDragIndex(index)}
-                                    onDragOver={(e) => {
-                                      e.preventDefault();
-                                      setDragOverIndex(index);
-                                    }}
-                                    onDragEnd={() => {
-                                      if (
-                                        dragIndex !== null &&
-                                        dragOverIndex !== null &&
-                                        dragIndex !== dragOverIndex
-                                      ) {
-                                        setForm((current) => {
-                                          const next = [...current.forcekeys];
-                                          const [moved] = next.splice(dragIndex, 1);
-                                          next.splice(dragOverIndex, 0, moved);
-                                          return { ...current, forcekeys: next };
-                                        });
+                                {form.forcekeys.slice(0, visibleCount).map((value, index) => {
+                                  const filled = value.trim().length > 0;
+                                  const dragHandlers = allowReorder
+                                    ? {
+                                        draggable: true,
+                                        onDragStart: () => setDragIndex(index),
+                                        onDragOver: (e: React.DragEvent) => {
+                                          e.preventDefault();
+                                          setDragOverIndex(index);
+                                        },
+                                        onDragEnd: () => {
+                                          if (
+                                            dragIndex !== null &&
+                                            dragOverIndex !== null &&
+                                            dragIndex !== dragOverIndex
+                                          ) {
+                                            setForm((current) => {
+                                              const next = [...current.forcekeys];
+                                              const [moved] = next.splice(dragIndex, 1);
+                                              next.splice(dragOverIndex, 0, moved);
+                                              return { ...current, forcekeys: next };
+                                            });
+                                          }
+                                          setDragIndex(null);
+                                          setDragOverIndex(null);
+                                        },
                                       }
-                                      setDragIndex(null);
-                                      setDragOverIndex(null);
-                                    }}
-                                    className={`group flex items-center gap-2 rounded-lg transition ${
-                                      dragIndex === index
-                                        ? "opacity-40"
-                                        : dragOverIndex === index
-                                          ? "ring-2 ring-[#0071e3] rounded-lg"
-                                          : ""
-                                    }`}
-                                  >
-                                    <div className="flex shrink-0 cursor-grab items-center text-neutral-300 opacity-0 transition-opacity group-hover:opacity-100 dark:text-neutral-600 active:cursor-grabbing">
-                                      <svg
-                                        width="16"
-                                        height="16"
-                                        viewBox="0 0 16 16"
-                                        fill="currentColor"
-                                      >
-                                        <circle cx="6" cy="4" r="1.5" />
-                                        <circle cx="10" cy="4" r="1.5" />
-                                        <circle cx="6" cy="8" r="1.5" />
-                                        <circle cx="10" cy="8" r="1.5" />
-                                        <circle cx="6" cy="12" r="1.5" />
-                                        <circle cx="10" cy="12" r="1.5" />
-                                      </svg>
+                                    : {};
+                                  return (
+                                    <div
+                                      key={index}
+                                      {...dragHandlers}
+                                      className={`group flex items-center gap-2 rounded-lg transition ${
+                                        allowReorder && dragIndex === index
+                                          ? "opacity-40"
+                                          : allowReorder && dragOverIndex === index
+                                            ? "ring-2 ring-[#0071e3] rounded-lg"
+                                            : ""
+                                      }`}
+                                    >
+                                      {allowReorder ? (
+                                        <div className="flex shrink-0 cursor-grab items-center text-neutral-300 opacity-0 transition-opacity group-hover:opacity-100 dark:text-neutral-600 active:cursor-grabbing">
+                                          <svg
+                                            width="16"
+                                            height="16"
+                                            viewBox="0 0 16 16"
+                                            fill="currentColor"
+                                          >
+                                            <circle cx="6" cy="4" r="1.5" />
+                                            <circle cx="10" cy="4" r="1.5" />
+                                            <circle cx="6" cy="8" r="1.5" />
+                                            <circle cx="10" cy="8" r="1.5" />
+                                            <circle cx="6" cy="12" r="1.5" />
+                                            <circle cx="10" cy="12" r="1.5" />
+                                          </svg>
+                                        </div>
+                                      ) : null}
+                                      <input
+                                        value={value}
+                                        onChange={(e) =>
+                                          setForm((current) => {
+                                            const next = [...current.forcekeys];
+                                            next[index] = e.target.value;
+                                            return { ...current, forcekeys: next };
+                                          })
+                                        }
+                                        placeholder={`forcekey${String.fromCharCode(65 + index)}`}
+                                        className={filled ? inputPublishClass : inputClass}
+                                      />
                                     </div>
-                                    <input
-                                      value={value}
-                                      onChange={(e) =>
-                                        setForm((current) => {
-                                          const next = [...current.forcekeys];
-                                          next[index] = e.target.value;
-                                          return { ...current, forcekeys: next };
-                                        })
-                                      }
-                                      placeholder={`forcekey${String.fromCharCode(65 + index)}`}
-                                      className={inputClass}
-                                    />
-                                  </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                               <div className="mt-2 flex items-center justify-between text-xs">
                                 <span className="text-neutral-500 dark:text-neutral-400">
